@@ -6,7 +6,7 @@
 export function normalizeBase(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed === '') throw new Error('Base path must not be empty; use "/" for a root site.');
-  if (trimmed.includes(':') || trimmed.startsWith('.')) {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || trimmed.startsWith('//') || trimmed.startsWith('.')) {
     throw new Error(`Base path must be an absolute path such as "/agentscope/", got "${raw}".`);
   }
   const inner = trimmed.replace(/^\/+|\/+$/g, '');

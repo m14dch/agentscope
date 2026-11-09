@@ -35,5 +35,11 @@ describe('normalizeBase', () => {
   it('rejects relative and full-URL bases', () => {
     expect(() => normalizeBase('./')).toThrow(/absolute path/);
     expect(() => normalizeBase('https://cdn.example/x/')).toThrow(/absolute path/);
+    expect(() => normalizeBase('//cdn.example/x/')).toThrow(/absolute path/);
+  });
+
+  it('accepts unusual but valid path segments', () => {
+    expect(normalizeBase('/foo:bar/')).toBe('/foo:bar/');
+    expect(normalizeBase('/v1.0/')).toBe('/v1.0/');
   });
 });
