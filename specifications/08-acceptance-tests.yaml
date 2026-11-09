@@ -23,7 +23,8 @@ phases:
   name: Compare and combined
   exit:
   - Semantic-phase sync works
-  - Combined answer shows live value and document evidence
+  - Combined answer shows the simulated current balance and a conditional account
+    comparison with document citations
 - id: 5
   name: Security, errors and polish
   exit:
@@ -43,6 +44,10 @@ unit_tests:
 - Retrieval selection respects topK and threshold
 - Document citations resolve to source fixtures
 - No HTTP framing for in-process calls
+- All three primary questions match their specified strings
+- Expanded variants resolve scenario, participant, phase, event and pair references
+- HTTP 202 acknowledgement has no JSON-RPC ID or body
+- Identical JSON fixtures and parameters yield identical snapshots, rankings and citations
 e2e_tests:
 - id: mcp-walkthrough
   steps:
@@ -67,19 +72,35 @@ e2e_tests:
   - Verify deterministic snapshots
 - id: offline
   steps:
-  - Block all network
-  - Load built static app
-  - Complete MCP and RAG scenarios
+  - Load the production build under the Pages base path and wait for offline readiness.
+  - Disable network access and reload the same URL.
+  - Complete all three primary scenarios and inspect SVG, payloads and citations.
+- id: combined-walkthrough
+  steps:
+  - Verify the exact combined question.
+  - Trace initialized MCP tool use and RAG evidence separately.
+  - Verify CHF 12,500.75 and cited fee, interest and access trade-offs.
+  - Repeat with missing terms and verify the answer states the evidence gap.
+- id: pages
+  steps:
+  - Build and serve dist under a repository subpath.
+  - Verify shell, assets, hash navigation, service-worker scope and offline reload.
+  - Fail on external requests or runtime API traffic.
 quality_gates:
-  runtime_network_requests: 0
   min_supported_events: 100
   desktop_and_tablet: true
   keyboard_navigation: true
   reduced_motion: true
   scenario_schema_validation: true
+  runtime_api_requests: 0
+  external_requests: 0
+  offline_reload_after_precache: true
 definition_of_done:
 - Static build and source delivered
 - README includes run and extend instructions
 - All primary scenarios deterministic and executable
 - All protocol examples validated against pinned revision
 - No fictional model output represented as real inference
+- GitHub Pages workflow deploys the Vite dist artifact at the configured base path
+- Production build runs offline after precache with all fixtures and assets bundled
+- No runtime backend, API keys or external services required

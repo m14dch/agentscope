@@ -4,8 +4,8 @@ compare:
   id: compare-rag-mcp
   left_scenario: rag-query
   right_scenario: mcp-balance
-  left_question: How does the customer balance API work?
-  right_question: What is customer 123’s current balance?
+  left_question: What are the conditions for the different bank accounts you offer?
+  right_question: What is the current balance of my bank account?
   synchronization: By semantic phases, not equal step numbers
   phases:
   - user-request
@@ -21,7 +21,8 @@ compare:
   - Trust boundaries
 combined:
   id: combined-balance-explanation
-  question: What is customer 123’s current balance, and how does the documentation say it is calculated?
+  question: What is my current account balance, and would another account type offer
+    better conditions?
   participants:
   - user
   - agent
@@ -33,24 +34,37 @@ combined:
   - rest-api
   - database
   ordered_operations:
-  - User question
-  - Embed documentation query
-  - Retrieve documentation chunks
-  - Assemble retrieved evidence in agent state
-  - Submit question, evidence, and tools to model
-  - Model requests live balance tool
-  - Agent validates request
-  - MCP tools/call
-  - REST GET current balance
-  - MCP tool result
-  - Agent appends tool result
-  - Send updated context to LLM
-  - Return answer with live balance and documentation citations
+  - Reuse MCP initialization and tools/list discovery before tool invocation.
+  - Receive combined question and resolve authenticated fictional customer and current
+    account type from demo context.
+  - Embed an account-conditions query and retrieve terms for Everyday and Savings
+    using the RAG fixtures.
+  - Submit question, demo account context, retrieved evidence and tool definitions
+    to the simulated model.
+  - Simulated model requests balance tool. Agent validates tool and account authorization.
+  - Replay MCP tools/call, simulated REST GET and tool result using the MCP fixture.
+  - Store the tool result in agent state and submit it with retained context in a
+    subsequent model request.
+  - Return CHF 12,500.75 and cite Everyday and Savings terms. Explain the trade-off
+    between fees, interest and payment or withdrawal access. Qualify suitability based
+    on user needs and flag missing evidence.
   required_boundaries:
   - RAG retrieval does not invoke banking balance API
-  - MCP call provides live data
+  - MCP supplies the simulated current balance from the bank fixture. RAG supplies
+    published account terms.
   - Tool output and retrieved documents are lower-trust content
   - Final response combines both sources
+  composition:
+    reuse:
+    - mcp-balance
+    - rag-query
+    balance_source: MCP tool result
+    terms_source: Retrieved account terms chunks
+    model_visibility: Each source becomes visible when submitted to the model. Preserve
+      distinct tool and document provenance.
+  account_comparison: Everyday supports debit card payments. Savings offers lower
+    fees and interest with more limited withdrawals. Which is better depends on how
+    the customer uses the account.
 conceptual_rules:
 - MCP is a protocol; RAG is an architectural pattern
 - MCP can expose a RAG search tool

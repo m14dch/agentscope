@@ -9,32 +9,30 @@ principles:
 - 2D vector plot is a conceptual projection, not actual high-dimensional geometry
 fixtures:
   documents:
-  - id: balance-api.md
+  - id: everyday-account.md
     version: '1.2'
-    text: GET /customers/{customerId}/balance returns the current balance and currency in CHF. The endpoint returns
-      customerId, currency, and balance.
-  - id: authentication.md
-    version: '1.1'
-    text: The balance endpoint requires an OAuth 2.0 bearer token with balance:read scope.
-  - id: release-notes.md
+    text: The Everyday account costs CHF 5 per month, has no minimum balance and includes
+      a debit card and everyday payments. No interest is paid.
+  - id: savings-account.md
     version: '1.2'
-    text: Version 1.2 added the currency field to balance responses.
-  - id: openapi.yaml
-    version: '1.2'
-    text: GET /customers/{customerId}/balance. Successful response HTTP 200 with customerId, currency, balance.
+    text: The Savings account has no monthly fee and pays 0.50% annual interest. It
+      has no minimum balance, no debit card, and allows one free withdrawal per month.
   embedding_dimensions_demo: 4
-  vector_generation: Deterministic fixture vectors; score using cosine similarity on same vectors
+  vector_generation: Bundle nonzero deterministic demo vectors for each supported
+    chunking configuration and query. Score with cosine similarity. Calibrate fixtures
+    to retrieve both current terms by default and none in rag-no-match.
   example_chunk:
-    id: balance-api-001
-    documentId: balance-api.md
+    id: everyday-account-001
+    documentId: everyday-account.md
     version: '1.2'
-    text: GET /customers/{customerId}/balance returns the current balance and currency in CHF.
+    text: The Everyday account costs CHF 5 per month, has no minimum balance and includes
+      a debit card and everyday payments. No interest is paid.
     embedding:
     - 0.12
     - -0.43
     - 0.81
     - 0.07
-  query: According to our documentation, how does the customer balance API work?
+  query: What are the conditions for the different bank accounts you offer?
 scenarios:
 - id: rag-index
   title: Ingest and index documents
@@ -56,7 +54,7 @@ scenarios:
   events:
   - id: index-01
     sequence: 1
-    phase: indexing
+    phase: load
     sender: repository
     receiver: pipeline
     operation: Load source documents
@@ -64,19 +62,21 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Load source documents
+    scenario_id: rag-index
   - id: index-02
     sequence: 2
-    phase: indexing
+    phase: parse
     sender: pipeline
     receiver: parser
-    operation: Parse OpenAPI and Markdown
+    operation: Parse account terms Markdown
     protocol: RAG_INTERNAL
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
-    explanation: Parse OpenAPI and Markdown
+    explanation: Extract account terms text and document metadata.
+    scenario_id: rag-index
   - id: index-03
     sequence: 3
-    phase: indexing
+    phase: parse
     sender: parser
     receiver: pipeline
     operation: Return normalized text and metadata
@@ -84,9 +84,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Return normalized text and metadata
+    scenario_id: rag-index
   - id: index-04
     sequence: 4
-    phase: indexing
+    phase: chunk
     sender: pipeline
     receiver: chunker
     operation: Split documents into chunks
@@ -94,9 +95,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Split documents into chunks
+    scenario_id: rag-index
   - id: index-05
     sequence: 5
-    phase: indexing
+    phase: chunk
     sender: chunker
     receiver: pipeline
     operation: Return chunks and source references
@@ -104,9 +106,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Return chunks and source references
+    scenario_id: rag-index
   - id: index-06
     sequence: 6
-    phase: indexing
+    phase: embed
     sender: pipeline
     receiver: embedding-model
     operation: Request chunk embeddings
@@ -114,9 +117,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Request chunk embeddings
+    scenario_id: rag-index
   - id: index-07
     sequence: 7
-    phase: indexing
+    phase: embed
     sender: embedding-model
     receiver: pipeline
     operation: Return deterministic demo vectors
@@ -124,9 +128,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Return deterministic demo vectors
+    scenario_id: rag-index
   - id: index-08
     sequence: 8
-    phase: indexing
+    phase: store
     sender: pipeline
     receiver: vector-db
     operation: Upsert vectors, text and metadata
@@ -134,9 +139,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Upsert vectors, text and metadata
+    scenario_id: rag-index
   - id: index-09
     sequence: 9
-    phase: indexing
+    phase: store
     sender: vector-db
     receiver: pipeline
     operation: Confirm indexed records
@@ -144,9 +150,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Confirm indexed records
+    scenario_id: rag-index
   - id: index-10
     sequence: 10
-    phase: indexing
+    phase: store
     sender: pipeline
     receiver: repository
     operation: Report indexing completed
@@ -154,6 +161,7 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Report indexing completed
+    scenario_id: rag-index
   parameters:
     chunk_size_words:
     - 25
@@ -165,7 +173,7 @@ scenarios:
     - 20
   algorithm: Whitespace-delimited words for teaching; explicitly not production tokenizer
 - id: rag-query
-  title: Retrieve context and answer
+  title: Compare account conditions from bank documents
   participants:
   - user
   - orchestrator
@@ -185,17 +193,19 @@ scenarios:
   events:
   - id: retrieve-01
     sequence: 1
-    phase: retrieval
+    phase: question
     sender: user
     receiver: orchestrator
-    operation: Ask how balance API works
+    operation: Ask about account conditions
     protocol: UI
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
-    explanation: Ask how balance API works
+    explanation: Ask about the terms of the available accounts.
+    scenario_id: rag-query
+    payload: What are the conditions for the different bank accounts you offer?
   - id: retrieve-02
     sequence: 2
-    phase: retrieval
+    phase: embedding
     sender: orchestrator
     receiver: embedding-model
     operation: Embed query
@@ -203,9 +213,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Embed query
+    scenario_id: rag-query
   - id: retrieve-03
     sequence: 3
-    phase: retrieval
+    phase: embedding
     sender: embedding-model
     receiver: orchestrator
     operation: Return query vector
@@ -213,6 +224,7 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Return query vector
+    scenario_id: rag-query
   - id: retrieve-04
     sequence: 4
     phase: retrieval
@@ -223,6 +235,7 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Similarity search
+    scenario_id: rag-query
   - id: retrieve-05
     sequence: 5
     phase: retrieval
@@ -233,6 +246,7 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Return scored chunks
+    scenario_id: rag-query
   - id: retrieve-06
     sequence: 6
     phase: retrieval
@@ -243,6 +257,7 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Apply topK and threshold
+    scenario_id: rag-query
   - id: retrieve-07
     sequence: 7
     phase: retrieval
@@ -253,6 +268,7 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Fetch additional source passages (optional)
+    scenario_id: rag-query
   - id: retrieve-08
     sequence: 8
     phase: retrieval
@@ -263,9 +279,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Return source passages (optional)
+    scenario_id: rag-query
   - id: retrieve-09
     sequence: 9
-    phase: retrieval
+    phase: context
     sender: orchestrator
     receiver: orchestrator
     operation: Assemble prompt with citations
@@ -273,9 +290,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Assemble prompt with citations
+    scenario_id: rag-query
   - id: retrieve-10
     sequence: 10
-    phase: retrieval
+    phase: generation
     sender: orchestrator
     receiver: llm
     operation: Submit grounded prompt
@@ -283,9 +301,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Submit grounded prompt
+    scenario_id: rag-query
   - id: retrieve-11
     sequence: 11
-    phase: retrieval
+    phase: generation
     sender: llm
     receiver: orchestrator
     operation: Return simulated grounded answer
@@ -293,9 +312,10 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Return simulated grounded answer
+    scenario_id: rag-query
   - id: retrieve-12
     sequence: 12
-    phase: retrieval
+    phase: generation
     sender: orchestrator
     receiver: user
     operation: Display answer and source references
@@ -303,6 +323,7 @@ scenarios:
     execution_type: SIMULATED_INTERNAL
     message_type: ACTION
     explanation: Display answer and source references
+    scenario_id: rag-query
   parameters:
     top_k:
       min: 1
@@ -317,7 +338,11 @@ scenarios:
   - retrieve-07
   - retrieve-08
   context_rule: Retrieved text becomes model-visible only at retrieve-10
-  response_generation: Deterministic templates selected from available evidence; label as simulated
+  response_generation: Deterministic templates selected from available evidence; label
+    as simulated. Describe fees, interest and access only where supported by retained
+    chunks. Cite document ID, version and chunk ID. State when evidence is missing
+    or conflicting.
+  question: What are the conditions for the different bank accounts you offer?
 - id: rag-stale
   extends: rag-query
   title: Outdated indexed documentation

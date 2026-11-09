@@ -12,6 +12,8 @@ mcp:
   - resources/list and resources/read schema
   - JSON-RPC errors vs tool isError
   - HTTP/SSE behavior and session semantics where illustrated
+  - Streamable HTTP POST carries one message and accepts JSON and SSE. An accepted
+    initialized notification returns empty HTTP 202.
   do_not_assume:
   - Every MCP message is its own TCP connection
   - MCP automatically converts OpenAPI
@@ -49,3 +51,6 @@ demo_policy:
   redact_auth_headers: true
   no_external_network: true
   label_internal_calls_as_illustrative: true
+  runtime_api_keys: false
+  simulated_wire_messages_only: true
+  runtime_external_services: false

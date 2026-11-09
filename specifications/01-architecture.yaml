@@ -2,13 +2,21 @@ product: AgentScope
 spec_version: 2.0.0
 runtime:
   kind: static_single_page_application
-  preferred_language: TypeScript
-  frontend: Vanilla TypeScript or small component framework
-  rendering: SVG lifelines and arrows; HTML inspectors
-  build: May use development bundler; deliver fully offline static dist
-  network_requests_at_runtime: false
+  language: TypeScript
+  frontend: Vanilla TypeScript
+  bundler: Vite
+  rendering: DOM SVG sequence diagrams and HTML inspectors
+  routing: Single entry point with hash-based navigation
+  data: Statically imported JSON scenarios and fixtures bundled by Vite
+  runtime_backend: false
+  api_keys: false
+  external_services: false
+  static_asset_loading: Allow same-origin loading of the application shell and built
+    assets only.
+  runtime_api_requests: 0
 modules:
-  scenario_registry: Loads and validates scenario YAML/JSON data
+  scenario_registry: Validates bundled JSON and resolves scenario variants and composition
+    before playback
   playback_engine: Deterministically reduces ordered events into snapshots
   diagram_renderer: Displays lifelines, phases, arrows, request/response pairs
   inspector: Displays exact logical payload, transport framing, rationale and notes
@@ -22,42 +30,62 @@ boundaries:
   type: UI event
 - from: agent
   to: llm-provider
-  type: Provider-specific model API; simulated network
+  type: Simulated provider-neutral model messages
 - from: agent
   to: mcp-client
-  type: In-process method call
+  type: Simulated In-process method call
 - from: mcp-client
   to: mcp-server
-  type: MCP JSON-RPC over Streamable HTTP
+  type: Simulated MCP JSON-RPC over Streamable HTTP
 - from: mcp-server
   to: rest-api
-  type: REST over HTTPS
+  type: Simulated REST over HTTPS
 - from: rest-api
   to: database
-  type: Illustrative internal query
+  type: Simulated Illustrative internal query
 - from: orchestrator
   to: embedding-model
-  type: Illustrative model API
+  type: Simulated Illustrative model API
 - from: orchestrator
   to: vector-db
-  type: Illustrative query API
+  type: Simulated Illustrative query API
 source_of_truth:
   scenario: Event data and fixtures; no independent hardcoded payloads in UI
   state: Initial snapshot plus deterministic event reducer
   view: Derived from current snapshot and selected event
 repo_layout:
-- src/engine
-- src/diagram
-- src/inspectors
-- src/scenarios
-- src/fixtures
-- src/components
-- tests/unit
-- tests/e2e
-- dist
+- specifications/
+- index.html
+- vite.config.ts
+- package.json
+- package-lock.json
+- src/main.ts
+- src/engine/
+- src/diagram/
+- src/inspectors/
+- src/scenarios/
+- src/fixtures/
+- src/components/
+- public/sw.js
+- tests/unit/
+- tests/e2e/
+- ".github/workflows/pages.yml"
+- dist/
 delivery:
 - Source code
 - Static offline build
 - Scenario fixtures
 - Automated tests
 - README
+deployment:
+  build: Install locked dependencies with npm ci, validate, run tests, then run npm
+    run build (Vite).
+  github_pages: Use GitHub Actions as the Pages source. Upload dist as the Pages artifact
+    and deploy it with the official Pages actions.
+  base_path: Use /<repo>/ for a project site and / for a root site. Resolve asset,
+    navigation and service worker URLs within the configured base.
+  offline: Bundle all scenarios, documents, fonts and visuals locally. On HTTPS or
+    localhost, a base-scoped service worker precaches the complete versioned build
+    from a build-generated asset manifest. Report offline readiness after successful
+    caching and activation. Serve the cached shell and assets on reload and keep cache
+    cleanup scoped to this app. First hosted visit requires connectivity.

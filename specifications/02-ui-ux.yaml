@@ -30,6 +30,8 @@ diagram:
   pair_highlighting: true
   auto_scroll_to_current: true
   accessible_without_color: true
+  rendering: SVG lifelines, arrows and labels generated from ordered event data. Show
+    a simulation label on illustrated network exchanges.
 modes:
   architecture: Collapse event groups into expandable semantic phases
   protocol: Show all individual events with exact logical messages
@@ -66,14 +68,15 @@ inspector:
   - copy
   - expand/collapse JSON
   - correlated request/response
-  transport_tab: Only shows actual or clearly simulated transport envelopes; never invents transport for in-process
-    calls
+  transport_tab: Show simulated wire envelopes separately from logical payloads. In-process
+    calls have no transport envelope.
 context_panel:
   views:
   - Agent state
   - Model-visible context
   - Delta since previous event
-  rule: Tool result is not model-visible until a subsequent model request includes it
+  rule: Tool result is not model-visible until a subsequent model request includes
+    it
 rag_controls:
   top_k:
     min: 1

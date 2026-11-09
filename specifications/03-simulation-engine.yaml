@@ -21,14 +21,16 @@ event_schema:
     sender: Participant ID
     receiver: Participant ID
     operation: Method or internal action
-    protocol: MCP | HTTP | LLM_API | RAG_INTERNAL | UI | DB
+    protocol: MCP | HTTP | LLM_API | RAG_INTERNAL | UI | DB | INTERNAL
     transport: streamable_http | https | in_process | simulated | none
-    execution_type: NETWORK | IN_PROCESS | SIMULATED_INTERNAL
+    execution_type: NETWORK | IN_PROCESS | SIMULATED_INTERNAL (NETWORK denotes an
+      illustrated wire exchange only)
     message_type: REQUEST | RESPONSE | NOTIFICATION | ACTION | RESULT
     correlation_id: Optional request/response ID; absent for notifications
     pair_id: Optional matching event ID
     payload: Structured logical message or string
-    http: Optional HTTP envelope; never for in-process operations
+    http: Optional simulated HTTP envelope. body_ref points to the logical payload
+      on the same event. Omit for in-process operations.
     explanation: Plain-language reason and outcome
     technical_notes: List of explanatory notes
     security_boundaries: List of crossed boundaries
@@ -51,7 +53,8 @@ state_model:
   initial_state: Scenario-provided immutable fixture
   reducer: Replay state_changes from initial state through cursor
   random_access: Recompute from initial state or cached deterministic snapshots
-  parameter_change: Regenerate affected derived events and downstream snapshots
+  parameter_change: Regenerate derived events and downstream snapshots with pure functions.
+    Break score ties by stable chunk ID.
   backward: No imperative reverse side effects
 invariants:
 - Event IDs unique across registry
@@ -78,7 +81,11 @@ scenario_format:
   - phases
   - events
   - initial_state
-  validation: Schema validation at startup; fail with explicit scenario and event path
+  validation: Validate schema and cross-references at build and startup. Errors identify
+    scenario and event path.
+  encoding: Bundled JSON validated at build and startup. YAML is the design specification.
+  composition: Expand variants and reusable phases into complete scenarios before
+    validation. Namespace copied event IDs, remap references and resequence events.
 deterministic_model:
   behavior: Select prewritten response templates from evidence states
-  label: Simulated model output, not real inference
+  label: Simulated model output

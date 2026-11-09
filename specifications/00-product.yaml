@@ -1,7 +1,8 @@
 product: AgentScope
 spec_version: 2.0.0
 title: AgentScope — See how AI systems work, step by step
-description: Offline interactive protocol and context-flow simulator for MCP, RAG and agent workflows.
+description: Offline interactive protocol and context-flow simulator for MCP, RAG
+  and agent workflows.
 audience:
   primary: Experienced software engineers new to AI integration
   prerequisites:
@@ -35,6 +36,9 @@ constraints:
   deterministic: true
   desktop_first: true
   tablet_supported: true
+  no_external_services: true
+  no_api_keys: true
+  browser_only: true
 non_goals:
 - Production MCP server
 - Real vector database
@@ -49,11 +53,14 @@ shared_domain:
     balance:
       amount: 12500.75
       currency: CHF
+    account_type: Everyday
   documents:
   - openapi.yaml
   - authentication.md
   - balance-api.md
   - release-notes.md
+  - everyday-account.md
+  - savings-account.md
 implementation_priority:
 - simulation-engine
 - mcp-happy-path
