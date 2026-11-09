@@ -30,8 +30,15 @@ if (!pageUrl || !Number.isInteger(attempts) || attempts < 1) {
   process.exit(2);
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+const RETRY_DELAY_MS = 10_000;
+// Stays inside the CI job's 5-minute limit, so the final report always prints.
+const DEADLINE_MS = 4 * 60_000;
+const ATTEMPT_MAX_MS = 2 * REQUEST_TIMEOUT_MS; // the page, then all references in parallel
+
 const fetchWithTimeout = (url: string) =>
-  fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+  fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+const started = Date.now();
 
 let problems: string[] = [];
 for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -40,10 +47,10 @@ for (let attempt = 1; attempt <= attempts; attempt++) {
     console.log(`OK: ${pageUrl} and all referenced assets load.`);
     process.exit(0);
   }
-  if (attempt < attempts) {
-    console.log(`Attempt ${attempt}/${attempts}: ${problems.join('; ')}. Retrying in 10 s.`);
-    await new Promise((resolve) => setTimeout(resolve, 10_000));
-  }
+  const nextAttemptEnds = Date.now() - started + RETRY_DELAY_MS + ATTEMPT_MAX_MS;
+  if (attempt === attempts || nextAttemptEnds > DEADLINE_MS) break;
+  console.log(`Attempt ${attempt}/${attempts}: ${problems.join('; ')}. Retrying in 10 s.`);
+  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
 }
 console.error(problems.join('\n'));
 process.exit(1);

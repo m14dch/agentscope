@@ -38,10 +38,16 @@ fails the workflow if the live page or any asset it references does not load. Th
 source must be **GitHub Actions**. A deployment can also be started by hand from the Actions tab; only `main` deploys. Each build carries
 `<meta name="agentscope-version">` with its commit SHA, so the check also detects a stale deployment.
 
-To check a deployed or locally previewed site yourself:
+To check the live site yourself (add `--expect-version` with a commit SHA to require that exact build):
 
 ```bash
-node scripts/check-deployment.ts https://m14dch.github.io/agentscope/ --expect-version <commit-sha>
+node scripts/check-deployment.ts https://m14dch.github.io/agentscope/
+```
+
+A local build is stamped `dev`; with `npm run preview` running:
+
+```bash
+node scripts/check-deployment.ts http://localhost:4173/agentscope/ --expect-version dev
 ```
 
 ## Specifications

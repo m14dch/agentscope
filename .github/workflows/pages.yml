@@ -10,9 +10,10 @@ on:
 permissions:
   contents: read
 
-# One deployment at a time; a newer one waits instead of cancelling a running one.
+# One deployment of main at a time; a newer one waits instead of cancelling a running one.
+# Per-ref groups keep no-op manual runs from other branches out of main's queue.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:

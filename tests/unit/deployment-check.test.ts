@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { checkDeployment, pageVersion, referencedUrls } from '../../scripts/deployment-check';
+import {
+  checkDeployment,
+  describeError,
+  pageVersion,
+  referencedUrls,
+} from '../../scripts/deployment-check';
 
 const PAGE = 'https://m14dch.github.io/agentscope/';
 const HTML = `<!doctype html><html><head>
@@ -41,6 +46,21 @@ describe('pageVersion', () => {
     expect(pageVersion(HTML)).toBe('abc123');
     expect(pageVersion('<html></html>')).toBeUndefined();
   });
+
+  it('reads the stamp in any attribute order and quoting', () => {
+    expect(pageVersion("<meta content='abc123' name=agentscope-version>")).toBe('abc123');
+    expect(pageVersion('<meta name="description" content="x"><meta name="other">')).toBeUndefined();
+  });
+});
+
+describe('describeError', () => {
+  it('includes the underlying cause code', () => {
+    const cause = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    expect(describeError(new TypeError('fetch failed', { cause }))).toBe(
+      'fetch failed (ECONNREFUSED)',
+    );
+    expect(describeError(new Error('boom'))).toBe('boom');
+  });
 });
 
 describe('checkDeployment', () => {
@@ -76,7 +96,7 @@ describe('checkDeployment', () => {
       return { status: 200, text: async () => HTML };
     };
     expect(await checkDeployment(PAGE, assetFails)).toContain(
-      'https://m14dch.github.io/agentscope/favicon.svg returned connection reset',
+      'https://m14dch.github.io/agentscope/favicon.svg failed: connection reset',
     );
   });
 

@@ -10,8 +10,7 @@ export type Fetch = (url: string) => Promise<{ status: number; text(): Promise<s
 
 const REFERENCE =
   /<(?:script|link)\b[^>]*?\s(?:src|href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/gi;
-const VERSION =
-  /<meta\b[^>]*\bname\s*=\s*["']?agentscope-version["']?[^>]*\bcontent\s*=\s*["']?([^"'\s>]+)/i;
+const META = /<meta\b[^>]*>/gi;
 
 export function referencedUrls(html: string, pageUrl: string): string[] {
   const urls = new Set<string>();
@@ -22,15 +21,38 @@ export function referencedUrls(html: string, pageUrl: string): string[] {
   return [...urls];
 }
 
-export function pageVersion(html: string): string | undefined {
-  return VERSION.exec(html)?.[1];
+function attribute(tag: string, name: string): string | undefined {
+  const match = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i').exec(
+    tag,
+  );
+  return match ? (match[1] ?? match[2] ?? match[3]) : undefined;
 }
 
-async function status(fetchFn: Fetch, url: string): Promise<number | string> {
+/** The content of <meta name="agentscope-version">, in any attribute order. */
+export function pageVersion(html: string): string | undefined {
+  for (const [tag] of html.matchAll(META)) {
+    if (attribute(tag, 'name') === 'agentscope-version') return attribute(tag, 'content');
+  }
+  return undefined;
+}
+
+/** "fetch failed (ECONNREFUSED)": the message plus its underlying cause, if any. */
+export function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause;
+  const detail =
+    cause instanceof Error
+      ? ((cause as Error & { code?: string }).code ?? cause.message)
+      : undefined;
+  return detail ? `${error.message} (${detail})` : error.message;
+}
+
+async function problemWith(fetchFn: Fetch, url: string): Promise<string | undefined> {
   try {
-    return (await fetchFn(url)).status;
+    const { status } = await fetchFn(url);
+    return status === 200 ? undefined : `${url} returned ${status}`;
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return `${url} failed: ${describeError(error)}`;
   }
 }
 
@@ -48,7 +70,7 @@ export async function checkDeployment(
     if (response.status !== 200) return [`${page.href} returned ${response.status}`];
     html = await response.text();
   } catch (error) {
-    return [`${page.href} failed: ${error instanceof Error ? error.message : String(error)}`];
+    return [`${page.href} failed: ${describeError(error)}`];
   }
 
   const problems: string[] = [];
@@ -58,6 +80,7 @@ export async function checkDeployment(
       problems.push(`page version is ${version ?? 'missing'}, expected ${expectedVersion}`);
     }
   }
+  const toFetch: string[] = [];
   for (const url of referencedUrls(html, page.href)) {
     const target = new URL(url);
     if (target.protocol === 'data:') continue; // inline, no request
@@ -66,9 +89,10 @@ export async function checkDeployment(
     } else if (!target.pathname.startsWith(basePath)) {
       problems.push(`${url} is outside the base path ${basePath}`);
     } else {
-      const result = await status(fetchFn, url);
-      if (result !== 200) problems.push(`${url} returned ${result}`);
+      toFetch.push(url);
     }
   }
-  return problems;
+  // In parallel, so one attempt takes at most about two request timeouts.
+  const results = await Promise.all(toFetch.map((url) => problemWith(fetchFn, url)));
+  return [...problems, ...results.filter((problem): problem is string => problem !== undefined)];
 }
