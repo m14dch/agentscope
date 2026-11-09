@@ -138,6 +138,7 @@ repo_layout:
 - src/fixtures/
 - src/components/
 - public/sw.js
+- public/licenses/
 - tests/unit/
 - tests/e2e/
 - ".github/workflows/ci.yml"

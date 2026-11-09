@@ -54,6 +54,10 @@ design:
     answer a question.
   - The 2D projection is a plain scatter plot with points labelled directly and axes
     named by meaning.
+  - Charts fit the available width with text at its real size. Only sequence diagrams
+    keep a fixed scale and scroll horizontally on narrow screens.
+  - Figures expose their text to assistive technology; scrollable regions are named
+    and keyboard-focusable.
   motion: Motion only shows causality (an arrow draws from sender to receiver). Nothing
     else animates; with reduced motion nothing animates.
   writing:
@@ -88,13 +92,14 @@ diagram:
     principle: Protocol is shown by the arrow's text label and line style, not by hue.
     network: solid ink line, 1.5 px
     in_process: thin solid ink-muted line, 1 px
-    simulated_internal: dashed ink-muted line, 1 px
+    simulated_internal: dashed ink-muted line, 1 px (4 px dash, 3 px gap)
     request: filled arrowhead
     response: open arrowhead
-    current_and_pair: accent, 2 px
+    current_and_pair: accent line, 2 px, and the label in weight 600, so the current step
+      stays distinct in greyscale
     error: error red with a text marker naming the kind (tool, protocol, transport)
   visibility:
-    past: visible in ink-muted
+    past: line keeps its kind's style; label in ink-muted
     current: emphasized
     future: hidden in protocol mode
   pair_highlighting: true
