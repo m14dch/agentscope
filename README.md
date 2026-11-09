@@ -2,6 +2,8 @@
 
 AgentScope is an interactive learning tool that reveals what happens behind AI-powered applications. Explore MCP, RAG, and agent workflows through executable sequence diagrams, inspect every request and response, and follow how data and context flow between LLMs, tools, and external systems. From prompt to response, understand every interaction.
 
+**Live:** https://m14dch.github.io/agentscope/
+
 ## Development
 
 Requires Node.js 22.12 or later and Python 3 (for spec validation).
@@ -27,6 +29,19 @@ npm run dev
 Locally, `npm run test:e2e` builds first and then serves `dist/`. If a preview server is already running on port 4173, the tests reuse it, so stop it first if it serves an older build.
 
 The site is served under `/agentscope/` by default. Set `AGENTSCOPE_BASE=/` to build for a root site.
+
+## Deployment
+
+Every push to `main` runs `.github/workflows/pages.yml`: all CI checks, a build with the base path from
+the repository's Pages settings, deployment to GitHub Pages, then `scripts/check-deployment.ts`, which
+fails the workflow if the live page or any asset it references does not load. The repository's Pages
+source must be **GitHub Actions**. A deployment can also be started by hand from the Actions tab.
+
+To check a deployed or locally previewed site yourself:
+
+```bash
+node scripts/check-deployment.ts https://m14dch.github.io/agentscope/
+```
 
 ## Specifications
 
