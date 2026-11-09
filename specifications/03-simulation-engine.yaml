@@ -88,7 +88,8 @@ state_model:
     in order.'
   - 'retrieval_config maps each scenario parameter to its current value: the default,
     replaced by the variant''s parameter_overrides, then by the learner''s changes. Values
-    stay within the parameter''s min and max.'
+    are finite, stay within the parameter''s min and max, are whole numbers when the default
+    is one, and are one of the parameter''s options when it lists them.'
   random_access: Recompute from initial state or cached deterministic snapshots
   parameter_change: Regenerate derived events and downstream snapshots with pure functions.
     The state of snapshots before the first changed event stays valid and only their
