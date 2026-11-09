@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appUrl } from '../../src/base';
+import { appUrl, normalizeBase } from '../../src/base';
 
 describe('appUrl', () => {
   it('resolves paths under a project-site base', () => {
@@ -13,5 +13,22 @@ describe('appUrl', () => {
 
   it('works for a root site', () => {
     expect(appUrl('#/rag', '/')).toBe('/#/rag');
+  });
+});
+
+describe('normalizeBase', () => {
+  it('adds missing leading and trailing slashes', () => {
+    expect(normalizeBase('agentscope')).toBe('/agentscope/');
+    expect(normalizeBase('/agentscope')).toBe('/agentscope/');
+    expect(normalizeBase('/agentscope/')).toBe('/agentscope/');
+  });
+
+  it('keeps a root base', () => {
+    expect(normalizeBase('/')).toBe('/');
+  });
+
+  it('rejects an empty base', () => {
+    expect(() => normalizeBase('')).toThrow(/must not be empty/);
+    expect(() => normalizeBase('  ')).toThrow(/must not be empty/);
   });
 });

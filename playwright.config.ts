@@ -7,7 +7,7 @@ const ORIGIN = `http://localhost:${PORT}`;
 export default defineConfig({
   testDir: 'tests/e2e',
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   use: {
     baseURL: `${ORIGIN}${BASE_PATH}`,
@@ -15,7 +15,8 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'npm run build && npm run preview',
+    // CI builds in its own step; locally, build first so tests never see a stale dist/.
+    command: process.env.CI ? 'npm run preview' : 'npm run build && npm run preview',
     url: `${ORIGIN}${BASE_PATH}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

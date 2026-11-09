@@ -14,15 +14,17 @@ npm ci
 npm run dev
 ```
 
-| Command                  | What it does                                                                               |
-| ------------------------ | ------------------------------------------------------------------------------------------ |
-| `npm run dev`            | Start the development server                                                               |
-| `npm run build`          | Type-check and build the static site into `dist/`                                          |
-| `npm run preview`        | Serve `dist/` under the base path at http://localhost:4173/agentscope/                     |
-| `npm test`               | Unit tests (Vitest)                                                                        |
-| `npm run test:e2e`       | Browser tests (Playwright); fail on any request outside the app                            |
-| `npm run validate:specs` | Validate the specifications (needs `pip install -r specifications/tools/requirements.txt`) |
-| `npm run check`          | Everything CI runs except the build and browser tests                                      |
+| Command                  | What it does                                                           |
+| ------------------------ | ---------------------------------------------------------------------- |
+| `npm run dev`            | Start the development server                                           |
+| `npm run build`          | Type-check and build the static site into `dist/`                      |
+| `npm run preview`        | Serve `dist/` under the base path at http://localhost:4173/agentscope/ |
+| `npm test`               | Unit tests (Vitest)                                                    |
+| `npm run test:e2e`       | Browser tests (Playwright); fail on any request outside the app        |
+| `npm run validate:specs` | Validate the specifications (needs the Python requirements below)      |
+| `npm run check`          | Everything CI runs except the build and browser tests                  |
+
+Locally, `npm run test:e2e` builds first and then serves `dist/`. If a preview server is already running on port 4173, the tests reuse it, so stop it first if it serves an older build.
 
 The site is served under `/agentscope/` by default. Set `AGENTSCOPE_BASE=/` to build for a root site.
 
@@ -47,6 +49,14 @@ The design lives in [`specifications/`](specifications/) as YAML:
 The validator expands every variant and the Combined composition, checks all cross-references and invariants,
 validates every MCP payload against the official schema (vendored in `specifications/tools/`), and recomputes
 all RAG vectors, scores, selections and answers from the fixtures.
+
+```bash
+python3 -m venv .venv
+```
+
+```bash
+. .venv/bin/activate
+```
 
 ```bash
 pip install -r specifications/tools/requirements.txt
