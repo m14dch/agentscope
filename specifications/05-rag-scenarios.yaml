@@ -1490,6 +1490,7 @@ variants:
     - authentication.md
     - balance-api.md
     - release-notes.md
+    note: The outdated index was built from the version 1.0 Everyday and Savings documents only.
   lesson: Because the index predates version 1.2 and the opening guide, the answer cites the old fees
     and interest and states that it has no evidence about opening an account.
 - id: rag-no-match
