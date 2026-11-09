@@ -159,7 +159,8 @@ export interface SpecSources {
   product: { primary_questions: { mcp: string; rag: string; combined: string } } & JsonObject;
   architecture: { participants: { registry: { id: string }[] } } & JsonObject;
   engine: {
-    event_schema: { required: string[] };
+    event_schema: { required: string[]; fields: Record<string, string> };
+    scenario_format: { required: string[] };
     lineage: { tracked: string[] };
   } & JsonObject;
   mcp: { protocol: { revision: string }; scenarios: Scenario[]; variants: Variant[] } & JsonObject;

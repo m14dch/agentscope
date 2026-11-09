@@ -15,10 +15,16 @@ import type {
 
 type Node = Json | ScenarioEvent | undefined;
 
+/** An array index segment: decimal digits only, within bounds. */
+function arrayIndex(list: unknown[], part: string): number | undefined {
+  const i = /^(?:0|[1-9][0-9]*)$/.test(part) ? Number(part) : -1;
+  return i >= 0 && i < list.length ? i : undefined;
+}
+
 function child(node: Node, part: string): Node {
   if (Array.isArray(node)) {
-    const i = Number(part);
-    return Number.isInteger(i) && i >= 0 && i < node.length ? node[i] : undefined;
+    const i = arrayIndex(node, part);
+    return i === undefined ? undefined : node[i];
   }
   if (node !== null && typeof node === 'object' && Object.hasOwn(node, part)) {
     return (node as Record<string, Json>)[part];
@@ -42,11 +48,12 @@ export function setPath(obj: Node, path: string, value: Json): boolean {
   const last = parts.pop() as string;
   const parent = parts.length ? getPath(obj, parts.join('.')) : obj;
   if (Array.isArray(parent)) {
-    const i = Number(last);
-    if (!Number.isInteger(i) || i < 0 || i >= parent.length) return false;
+    const i = arrayIndex(parent, last);
+    if (i === undefined) return false;
     parent[i] = value;
     return true;
   }
+  if (last === '__proto__' || last === 'constructor' || last === 'prototype') return false;
   if (parent !== null && typeof parent === 'object') {
     (parent as Record<string, Json>)[last] = value;
     return true;
@@ -59,8 +66,9 @@ function finalize(scn: Scenario, id: string): Scenario {
   scn.events.forEach((e, i) => {
     e.scenario_id = id;
     e.sequence = i + 1;
-    e.id = `${id}:${e.id}`;
-    if (e.pair_id !== undefined) e.pair_id = `${id}:${e.pair_id}`;
+    // A missing or non-string ID stays as it is, so validation reports it.
+    if (typeof e.id === 'string') e.id = `${id}:${e.id}`;
+    if (typeof e.pair_id === 'string') e.pair_id = `${id}:${e.pair_id}`;
   });
   scn.id = id;
   return scn;
@@ -129,7 +137,7 @@ export function compose(comp: Composition, registry: Registry, problems: string[
     if ('copy' in step) {
       const c = step.copy;
       const src = registry[c.scenario]?.events;
-      if (!src) {
+      if (!Array.isArray(src)) {
         problems.push(`${comp.id}: copy names unknown scenario ${c.scenario}`);
         continue;
       }
@@ -140,8 +148,10 @@ export function compose(comp: Composition, registry: Registry, problems: string[
         continue;
       }
       for (const e of structuredClone(src.slice(from, to + 1))) {
-        e.phase = c.phase_map?.[e.phase] ?? e.phase;
-        for (const [path, value] of Object.entries(c.patch?.[e.id] ?? {})) {
+        if (c.phase_map && Object.hasOwn(c.phase_map, e.phase))
+          e.phase = c.phase_map[e.phase] as string;
+        const patch = c.patch && Object.hasOwn(c.patch, e.id) ? c.patch[e.id] : undefined;
+        for (const [path, value] of Object.entries(patch ?? {})) {
           if (!setPath(e, path, structuredClone(value))) {
             problems.push(`${comp.id}: patch path ${path} does not exist in ${e.id}`);
           }
@@ -164,9 +174,16 @@ export function compose(comp: Composition, registry: Registry, problems: string[
 export function buildRegistry(sources: SpecSources): { registry: Registry; problems: string[] } {
   const problems: string[] = [];
   const registry: Registry = {};
-  for (const scn of [...sources.mcp.scenarios, ...sources.rag.scenarios]) registry[scn.id] = scn;
+  for (const scn of [...sources.mcp.scenarios, ...sources.rag.scenarios]) {
+    if (!Array.isArray(scn.events)) {
+      problems.push(`${scn.id}: events must be a list`);
+      continue;
+    }
+    // A copy, so consumers of the registry cannot change the bundled sources.
+    registry[scn.id] = structuredClone(scn);
+  }
   for (const variant of [...sources.mcp.variants, ...sources.rag.variants]) {
-    const base = registry[variant.extends];
+    const base = Object.hasOwn(registry, variant.extends) ? registry[variant.extends] : undefined;
     if (!base) {
       problems.push(`${variant.id}: extends unknown scenario ${variant.extends}`);
       continue;

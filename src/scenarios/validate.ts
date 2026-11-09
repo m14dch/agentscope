@@ -12,8 +12,13 @@ export interface ValidationContext {
   semanticPhases: Set<string>;
   lineage: Set<string>;
   required: string[];
+  scenarioRequired: string[];
+  /** Allowed values of the enum event fields. */
+  enums: Record<string, string[]>;
   revision: string;
 }
+
+const ENUM_FIELDS = ['protocol', 'transport', 'execution_type', 'message_type'];
 
 const PROTOCOL_VERSION = 'io.modelcontextprotocol/protocolVersion';
 
@@ -24,6 +29,14 @@ export function contextFrom(sources: SpecSources): ValidationContext {
     semanticPhases: new Set(sources.comparison.semantic_phases.map((p) => p.id)),
     lineage: new Set(sources.engine.lineage.tracked),
     required: sources.engine.event_schema.required,
+    scenarioRequired: sources.engine.scenario_format.required,
+    // The spec writes enums as "A | B | C (note)".
+    enums: Object.fromEntries(
+      ENUM_FIELDS.map((f) => [
+        f,
+        text(sources.engine.event_schema.fields[f]).split(' (')[0]?.split(' | ') ?? [],
+      ]),
+    ),
     revision: sources.mcp.protocol.revision,
   };
 }
@@ -108,6 +121,7 @@ function checkScenario(
   err: (w: string, m: string) => void,
 ): void {
   const sid = scn.id;
+  for (const f of ctx.scenarioRequired) if (!Object.hasOwn(scn, f)) err(sid, `missing ${f}`);
   if (!text(scn.learning_question).trim()) err(sid, 'missing learning_question');
   if (!text(scn.headline).trim()) err(sid, 'missing headline');
   if (!text(scn.learning_question).trimEnd().endsWith('?'))
@@ -133,6 +147,18 @@ function checkScenario(
     if (missing.length) {
       err(where, `missing ${missing.join(', ')}`);
       return;
+    }
+    for (const [f, allowed] of Object.entries(ctx.enums)) {
+      const value = (e as unknown as Obj)[f];
+      if (!allowed.includes(text(value))) {
+        err(where, `${f} ${String(value)} is not one of ${allowed.join(' | ')}`);
+      }
+    }
+    if (
+      Object.hasOwn(e, 'correlation_id') &&
+      !(e.protocol === 'MCP' && (e.message_type === 'REQUEST' || e.message_type === 'RESPONSE'))
+    ) {
+      err(where, 'correlation_id outside an MCP request or response');
     }
     if (allIds.has(e.id)) err(where, 'duplicate event id');
     allIds.add(e.id);

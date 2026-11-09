@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { compose, expandVariant, getPath, setPath } from '../../src/scenarios/expand.ts';
+import {
+  buildRegistry,
+  compose,
+  expandVariant,
+  getPath,
+  setPath,
+} from '../../src/scenarios/expand.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
-import type { Composition, Scenario, ScenarioEvent } from '../../src/scenarios/types.ts';
-import { validateRegistry, type ValidationContext } from '../../src/scenarios/validate.ts';
+import type { Composition, Json, Scenario, ScenarioEvent } from '../../src/scenarios/types.ts';
+import {
+  contextFrom,
+  validateRegistry,
+  type ValidationContext,
+} from '../../src/scenarios/validate.ts';
+import sources from 'virtual:agentscope-specs';
+import type { SpecSources } from '../../src/scenarios/types.ts';
 
 function event(id: string, extra: Partial<ScenarioEvent> = {}): ScenarioEvent {
   return {
@@ -61,6 +73,22 @@ const ctx: ValidationContext = {
     'message_type',
     'explanation',
   ],
+  scenarioRequired: [
+    'id',
+    'title',
+    'learning_question',
+    'headline',
+    'participants',
+    'phases',
+    'events',
+    'initial_state',
+  ],
+  enums: {
+    protocol: ['MCP', 'HTTP', 'LLM_API', 'RAG_INTERNAL', 'UI', 'DB', 'INTERNAL'],
+    transport: ['streamable_http', 'https', 'in_process', 'simulated'],
+    execution_type: ['NETWORK', 'IN_PROCESS', 'SIMULATED_INTERNAL'],
+    message_type: ['REQUEST', 'RESPONSE', 'NOTIFICATION', 'ACTION', 'RESULT'],
+  },
   revision: '2026-07-28',
 };
 
@@ -255,6 +283,93 @@ describe('validation', () => {
       'base/r: Mcp-Name header does not match body',
       'base/r: correlation_id differs from JSON-RPC id',
     ]);
+  });
+});
+
+describe('more validation rules', () => {
+  function llm(id: string, message_type: 'REQUEST' | 'RESPONSE', payload: Json): ScenarioEvent {
+    return event(id, {
+      protocol: 'LLM_API',
+      transport: 'https',
+      execution_type: 'NETWORK',
+      message_type,
+      payload,
+    });
+  }
+
+  it('requires every LLM request to resend the assistant tool calls with their tool messages', () => {
+    const scn = base();
+    const call = { role: 'assistant', tool_calls: [{ id: 't1' }] };
+    scn.events = [
+      llm('a', 'RESPONSE', { message: call }),
+      llm('b', 'REQUEST', { messages: [{ role: 'user' }, call] }),
+      llm('c', 'REQUEST', { messages: [{ role: 'user' }] }),
+      llm('d', 'REQUEST', {
+        messages: [{ role: 'user' }, call, { role: 'tool', tool_call_id: 't1' }],
+      }),
+    ];
+    scn.events.forEach((e, i) => (e.sequence = i + 1));
+    expect(validateRegistry({ base: scn }, ctx)).toEqual([
+      'base/b: every assistant tool call needs its tool message',
+      'base/b: LLM request does not resend the full conversation',
+      'base/c: LLM request does not resend the full conversation',
+    ]);
+  });
+
+  it('lets only LLM requests change model-visible context', () => {
+    const scn = base();
+    (scn.events[2] as ScenarioEvent).context_changes = [
+      { target: 'model_visible_messages', action: 'append', description: 'Leak.' },
+    ];
+    expect(validateRegistry({ base: scn }, ctx)).toEqual([
+      'base/e3: only LLM requests may change model-visible context',
+    ]);
+  });
+
+  it('checks boundaries, enums, correlation IDs, prediction length and scenario fields', () => {
+    const scn = base();
+    delete (scn as Partial<Scenario>).initial_state;
+    const [e1, e2, e3] = scn.events as [ScenarioEvent, ScenarioEvent, ScenarioEvent];
+    e1.security_boundaries = ['b1', 'nowhere'];
+    (e2 as unknown as Record<string, unknown>)['protocol'] = 'MCPX';
+    e3.correlation_id = '1';
+    e3.prediction = { prompt: 'Short?' };
+    expect(validateRegistry({ base: scn }, ctx)).toEqual([
+      'base: missing initial_state',
+      'base/e1: unknown security boundary nowhere',
+      'base/e2: protocol MCPX is not one of MCP | HTTP | LLM_API | RAG_INTERNAL | UI | DB | INTERNAL',
+      'base/e3: correlation_id outside an MCP request or response',
+      "base/e3: prediction must be {prompt: <a question of at least 10 characters ending with '?'>}",
+    ]);
+  });
+
+  it('reports an event without an ID in an expanded variant', () => {
+    const b = base();
+    delete (b.events[2] as Partial<ScenarioEvent>).id;
+    const scn = expandVariant(b, { id: 'v', title: 'V', extends: 'base', lesson: 'L.' }, []);
+    expect(validateRegistry({ v: scn }, ctx)).toEqual(['v/events[2]: missing id']);
+  });
+
+  it('reports a base scenario without events instead of crashing', () => {
+    const specs = structuredClone(sources) as SpecSources;
+    delete (specs.mcp.scenarios[0] as Partial<Scenario>).events;
+    const { problems } = buildRegistry(specs);
+    expect(problems[0]).toBe('mcp-balance: events must be a list');
+    expect(problems).toContain('mcp-not-found: extends unknown scenario mcp-balance');
+  });
+
+  it('ignores inherited keys and non-decimal indexes in paths', () => {
+    expect(getPath({ a: [1, 2] }, 'a.1e0')).toBeUndefined();
+    expect(getPath({ a: [1, 2] }, 'a.')).toBeUndefined();
+    expect(getPath({}, 'toString')).toBeUndefined();
+    const obj = {};
+    expect(setPath(obj, '__proto__', { polluted: true })).toBe(false);
+    expect(Object.getPrototypeOf(obj)).toBe(Object.prototype);
+  });
+
+  it('reads the enum values from 03-simulation-engine.yaml', () => {
+    expect(contextFrom(sources).enums).toEqual(ctx.enums);
+    expect(contextFrom(sources).scenarioRequired).toEqual(ctx.scenarioRequired);
   });
 });
 

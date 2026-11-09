@@ -2,7 +2,8 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { parse, stringify } from 'yaml';
+import { stringify } from 'yaml';
+import { parseSpec } from '../../../scripts/spec-sources.ts';
 import { ScenarioBuildError, specsModule } from '../../../scripts/vite-scenarios.ts';
 
 const SPECS = join(import.meta.dirname, '../../../specifications');
@@ -16,9 +17,13 @@ function brokenCopy(
   dir = mkdtempSync(join(tmpdir(), 'agentscope-specs-'));
   cpSync(SPECS, dir, { recursive: true });
   const file = join(dir, '04-mcp-scenarios.yaml');
-  const mcp = parse(readFileSync(file, 'utf8'), { version: '1.1' }) as Parameters<typeof edit>[0];
+  const mcp = parseSpec(readFileSync(file, 'utf8')) as Parameters<typeof edit>[0];
   edit(mcp);
-  writeFileSync(file, stringify(mcp));
+  // Quote every string so dates such as 2026-07-28 stay strings.
+  writeFileSync(
+    file,
+    stringify(mcp, { defaultStringType: 'QUOTE_DOUBLE', defaultKeyType: 'PLAIN' }),
+  );
   return dir;
 }
 
