@@ -109,9 +109,15 @@ scenario_format:
   - parameters
   - derived_events
   - optional_steps
-  validation: Validate schema and cross-references at build and startup. Errors identify
-    scenario and event path.
-  encoding: Bundled JSON validated at build and startup. YAML is the design specification.
+  validation: Validate event structure and cross-references (the invariants above except
+    the schema.json check) at build and startup; a failure stops the build. Errors identify
+    scenario and event path. MCP schema.json validation and the RAG reference recomputation
+    run in specifications/tools/validate_specs.py.
+  encoding: YAML is the design specification. A Vite plugin parses it with YAML 1.1 rules
+    (as PyYAML does) into a bundled JSON module at build time; the JSON is generated and
+    never committed.
+  golden_test: The TypeScript registry (base scenarios, expanded variants and the composed
+    scenario) equals the registry of validate_specs.py --dump-registry.
 variant_format:
   description: A variant is a base scenario plus ordered edit operations. Expansion
     produces a complete scenario that passes the same validation.
@@ -136,6 +142,8 @@ variant_format:
   - Apply operations in order using local (unprefixed) event IDs
   - Set scenario_id to the variant ID and renumber sequence from 1
   - Prefix every event ID and pair_id with '<variant id>:'
+  - Take the scenario ID and title from the variant, the question if given, and the
+    headline from the variant's lesson; keep every other base field
   - Validate the expanded scenario
 composition_format:
   description: Used by the Combined scenario (06-comparison-scenarios.yaml).

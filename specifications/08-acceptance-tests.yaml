@@ -58,6 +58,8 @@ unit_tests:
   variant a lesson, and every prediction prompt ends with a question mark
 - Expanded variants and compositions resolve scenario, participant, phase, event and
   pair references
+- The TypeScript expanded registry equals the Python validator's registry (golden test)
+- A broken event fails the build with an error naming its scenario and event
 - Every participant ID exists in the 01-architecture.yaml registry
 - Every security_boundaries entry exists in 07-security-protocols.yaml
 - Identical JSON fixtures and parameters yield identical snapshots, rankings and citations
