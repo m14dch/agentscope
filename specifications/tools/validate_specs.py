@@ -7,6 +7,7 @@ schema.json, and recomputes all RAG reference results from the fixtures.
 
 Usage:
     python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json
+    python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json --dump-registry out.json
 
 Download schema.json from the URL in 04-mcp-scenarios.yaml protocol.schema.
 Requires PyYAML and jsonschema.
@@ -132,6 +133,9 @@ def check_scenario(scn, ctx):
     sid = scn["id"]
     events = scn["events"]
     by_id = {}
+    for field in ctx["scenario_required"]:
+        if field not in scn:
+            err(sid, f"missing {field}")
     phases = {p["id"] for p in scn["phases"]}
     for field in ("learning_question", "headline"):
         if not str(scn.get(field, "")).strip():
@@ -152,6 +156,11 @@ def check_scenario(scn, ctx):
         for f in ctx["required"]:
             if f not in e:
                 err(where, f"missing {f}")
+        for f, allowed in ctx["enums"].items():
+            if e.get(f) not in allowed:
+                err(where, f"{f} {e.get(f)} is not one of {' | '.join(allowed)}")
+        if "correlation_id" in e and not (e["protocol"] == "MCP" and e["message_type"] in ("REQUEST", "RESPONSE")):
+            err(where, "correlation_id outside an MCP request or response")
         if e["id"] in ctx["all_ids"]:
             err(where, "duplicate event id")
         ctx["all_ids"].add(e["id"])
@@ -571,6 +580,7 @@ def check_rag(rag, comp, registry, ui):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mcp-schema", required=True, help="schema.json of the pinned MCP revision")
+    ap.add_argument("--dump-registry", metavar="PATH", help="write the expanded registry as JSON (golden test)")
     args = ap.parse_args()
     product, arch, engine = load("00-product.yaml"), load("01-architecture.yaml"), load("03-simulation-engine.yaml")
     mcp, rag, cmp_ = load("04-mcp-scenarios.yaml"), load("05-rag-scenarios.yaml"), load("06-comparison-scenarios.yaml")
@@ -585,6 +595,9 @@ def main():
            "boundaries": {b["id"] for b in sec["trust_boundaries"]},
            "semantic_phases": {p["id"] for p in cmp_["semantic_phases"]},
            "lineage": set(engine["lineage"]["tracked"]), "required": engine["event_schema"]["required"],
+           "scenario_required": engine["scenario_format"]["required"],
+           "enums": {f: engine["event_schema"]["fields"][f].split(" (")[0].split(" | ")
+                     for f in ("protocol", "transport", "execution_type", "message_type")},
            "tools": next(e for e in mcp["scenarios"][0]["events"] if e["operation"] == "tools/list result")["payload"]["result"]["tools"],
            "all_ids": set()}
     if "DiscoverRequest" not in ctx["schema"].get("$defs", {}):
@@ -619,6 +632,8 @@ def main():
     check_rag(rag, comb, registry, load("02-ui-ux.yaml"))
 
     total = sum(len(s["events"]) for s in registry.values())
+    if args.dump_registry:
+        Path(args.dump_registry).write_text(json.dumps(registry, ensure_ascii=False, indent=1))
     if errors:
         print("\n".join(errors))
         print(f"\n{len(errors)} problem(s) in {len(registry)} expanded scenarios")
