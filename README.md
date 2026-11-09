@@ -6,7 +6,7 @@ AgentScope is an interactive learning tool that reveals what happens behind AI-p
 
 ## Development
 
-Requires Node.js 22.12 or later and Python 3 (for spec validation).
+Requires Node.js 22.18 or later and Python 3 (for spec validation).
 
 ```bash
 npm ci
@@ -35,12 +35,13 @@ The site is served under `/agentscope/` by default. Set `AGENTSCOPE_BASE=/` to b
 Every push to `main` runs `.github/workflows/pages.yml`: all CI checks, a build with the base path from
 the repository's Pages settings, deployment to GitHub Pages, then `scripts/check-deployment.ts`, which
 fails the workflow if the live page or any asset it references does not load. The repository's Pages
-source must be **GitHub Actions**. A deployment can also be started by hand from the Actions tab.
+source must be **GitHub Actions**. A deployment can also be started by hand from the Actions tab; only `main` deploys. Each build carries
+`<meta name="agentscope-version">` with its commit SHA, so the check also detects a stale deployment.
 
 To check a deployed or locally previewed site yourself:
 
 ```bash
-node scripts/check-deployment.ts https://m14dch.github.io/agentscope/
+node scripts/check-deployment.ts https://m14dch.github.io/agentscope/ --expect-version <commit-sha>
 ```
 
 ## Specifications
