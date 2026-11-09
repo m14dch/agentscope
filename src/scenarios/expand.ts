@@ -12,6 +12,7 @@ import type {
   SpecSources,
   Variant,
 } from './types.ts';
+import { parameterProblem } from './parameters.ts';
 
 type Node = Json | ScenarioEvent | undefined;
 
@@ -113,6 +114,15 @@ export function expandVariant(base: Scenario, variant: Variant, problems: string
       default:
         problems.push(`${variant.id}: unknown operation ${(op as { op: string }).op}`);
     }
+  }
+  for (const [name, value] of Object.entries(variant.parameter_overrides ?? {})) {
+    const parameter =
+      scn.parameters && Object.hasOwn(scn.parameters, name) ? scn.parameters[name] : undefined;
+    if (parameter) {
+      const problem = parameterProblem(name, parameter, value);
+      if (problem) problems.push(`${variant.id}: parameter_overrides ${problem}`);
+      parameter.default = structuredClone(value);
+    } else problems.push(`${variant.id}: parameter_overrides names unknown parameter ${name}`);
   }
   if (variant.question !== undefined) scn.question = variant.question;
   scn.title = variant.title;

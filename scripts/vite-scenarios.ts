@@ -12,10 +12,13 @@ export const SPECS_MODULE = 'virtual:agentscope-specs';
 const RESOLVED = `\0${SPECS_MODULE}`;
 
 export class ScenarioBuildError extends Error {
-  constructor(readonly problems: string[]) {
+  readonly problems: string[];
+
+  constructor(problems: string[]) {
     super(
       `Invalid scenario specifications (${problems.length} problem(s)):\n${problems.join('\n')}`,
     );
+    this.problems = problems;
     this.name = 'ScenarioBuildError';
   }
 }

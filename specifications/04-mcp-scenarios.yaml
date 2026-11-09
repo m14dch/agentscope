@@ -837,7 +837,7 @@ scenarios:
       balance: 12500.75
     context_changes:
     - target: agent_state
-      action: set
+      action: append
       value_ref: payload
       description: Tool result received; not yet visible to the model
   - id: mcp-25

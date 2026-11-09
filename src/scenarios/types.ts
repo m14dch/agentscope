@@ -81,6 +81,8 @@ export interface ParameterSpec {
   default: Json;
   min?: number;
   max?: number;
+  /** When present, the only allowed values. */
+  options?: Json[];
 }
 
 export interface OptionalStep {

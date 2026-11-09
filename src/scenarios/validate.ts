@@ -3,6 +3,7 @@
  * invariants, except schema.json validation and the RAG recomputation, which run in
  * specifications/tools/validate_specs.py). Every problem names its scenario and event.
  */
+import { applyEvent, EngineError, initialSnapshot } from '../engine/reducer.ts';
 import { buildRegistry, getPath } from './expand.ts';
 import type { Json, Registry, Scenario, ScenarioEvent, SpecSources } from './types.ts';
 
@@ -17,6 +18,12 @@ export interface ValidationContext {
   enums: Record<string, string[]>;
   revision: string;
 }
+
+/** agent_state is an append-only log; model_visible_messages is replaced by each LLM request. */
+const CONTEXT_ACTIONS: Record<string, string> = {
+  agent_state: 'append',
+  model_visible_messages: 'set',
+};
 
 const ENUM_FIELDS = ['protocol', 'transport', 'execution_type', 'message_type'];
 
@@ -192,6 +199,31 @@ function checkScenario(
     for (const k of Object.keys(obj(e.tracked_values))) {
       if (!ctx.lineage.has(k)) err(where, `untracked lineage key ${k}`);
     }
+    for (const ch of list(e.state_changes).map(obj)) {
+      if (
+        (ch['op'] !== 'set' && ch['op'] !== 'append') ||
+        Object.hasOwn(ch, 'value') === Object.hasOwn(ch, 'value_ref')
+      ) {
+        err(where, 'state_change needs op set or append and exactly one of value and value_ref');
+      }
+    }
+    for (const ch of list(e.context_changes).map(obj)) {
+      const target = text(ch['target']);
+      const rule = Object.hasOwn(CONTEXT_ACTIONS, target) ? CONTEXT_ACTIONS[target] : undefined;
+      if (rule === undefined)
+        err(where, `context_change has unknown target ${String(ch['target'])}`);
+      else if (ch['action'] !== rule) {
+        err(where, `context_change on ${String(ch['target'])} must use action ${rule}`);
+      }
+      if (
+        ch['target'] === 'model_visible_messages' &&
+        (!Object.hasOwn(ch, 'value_ref') ||
+          e.protocol !== 'LLM_API' ||
+          e.message_type !== 'REQUEST')
+      ) {
+        err(where, 'model_visible_messages changes only on LLM requests, with a value_ref');
+      }
+    }
     for (const ch of [...list(e.state_changes), ...list(e.context_changes)].map(obj)) {
       const ref = ch['value_ref'];
       if (ref !== undefined && getPath(e as unknown as Json, text(ref)) === undefined) {
@@ -253,5 +285,20 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
       err('compare.phase_mapping', `${sid} mapping differs from scenario phases`);
     }
   }
+  if (!problems.length) problems.push(...replayProblems(registry));
   return { registry, problems };
+}
+
+/** Replays every scenario through the reducer; only run on structurally valid data. */
+function replayProblems(registry: Registry): string[] {
+  const problems: string[] = [];
+  for (const scn of Object.values(registry)) {
+    try {
+      scn.events.reduce((snapshot, e) => applyEvent(snapshot, e, scn.id), initialSnapshot(scn));
+    } catch (error) {
+      if (!(error instanceof EngineError)) throw error;
+      problems.push(error.message);
+    }
+  }
+  return problems;
 }

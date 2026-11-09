@@ -319,11 +319,49 @@ describe('more validation rules', () => {
   it('lets only LLM requests change model-visible context', () => {
     const scn = base();
     (scn.events[2] as ScenarioEvent).context_changes = [
-      { target: 'model_visible_messages', action: 'append', description: 'Leak.' },
+      { target: 'model_visible_messages', action: 'set', description: 'Leak.', value_ref: 'id' },
     ];
     expect(validateRegistry({ base: scn }, ctx)).toEqual([
+      'base/e3: model_visible_messages changes only on LLM requests, with a value_ref',
       'base/e3: only LLM requests may change model-visible context',
     ]);
+  });
+
+  it('keeps agent_state append-only and requires well-formed state changes', () => {
+    const scn = base();
+    const e3 = scn.events[2] as ScenarioEvent;
+    e3.context_changes = [{ target: 'agent_state', action: 'set', description: 'Replace.' }];
+    e3.state_changes = [
+      { path: 'a', op: 'set' },
+      { path: 'a', op: 'set', value: 1, value_ref: 'id' },
+      { path: 'a', op: 'merge' as 'set', value: 1 },
+    ];
+    expect(validateRegistry({ base: scn }, ctx)).toEqual([
+      'base/e3: state_change needs op set or append and exactly one of value and value_ref',
+      'base/e3: state_change needs op set or append and exactly one of value and value_ref',
+      'base/e3: state_change needs op set or append and exactly one of value and value_ref',
+      'base/e3: context_change on agent_state must use action append',
+    ]);
+  });
+
+  it("applies a variant's parameter_overrides to the parameter defaults", () => {
+    const b = base();
+    b.parameters = { top_k: { default: 5, min: 1, max: 8 } };
+    const problems: string[] = [];
+    const scn = expandVariant(
+      b,
+      {
+        id: 'v',
+        title: 'V',
+        extends: 'base',
+        lesson: 'L.',
+        parameter_overrides: { top_k: 8, nope: 1 },
+      },
+      problems,
+    );
+    expect(scn.parameters?.['top_k']).toEqual({ default: 8, min: 1, max: 8 });
+    expect(b.parameters['top_k']?.default).toBe(5);
+    expect(problems).toEqual(['v: parameter_overrides names unknown parameter nope']);
   });
 
   it('checks boundaries, enums, correlation IDs, prediction length and scenario fields', () => {

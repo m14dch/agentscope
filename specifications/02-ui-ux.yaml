@@ -176,6 +176,17 @@ controls:
   - pause
   - reset
   - jump_to_step
+  action_rules:
+    start: Go to the first step; playback keeps its status
+    reset: Return to the initial state before any step and pause
+    previous: Recompute the previous snapshot; never undo side effects
+    play: Advance one step per interval until the last step, then pause
+    manual_navigation: Next, previous, start and jump keep playback running and restart
+      the interval
+    parameter_change: The cursor stays, clamped to the new number of steps
+  step_interval_ms: 1500
+  step_interval_rule: At speed s, one step every step_interval_ms / s milliseconds; reduced
+    motion keeps the interval and removes animated transitions
   speeds:
   - 0.5
   - 1

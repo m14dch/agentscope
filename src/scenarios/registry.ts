@@ -7,8 +7,11 @@ import type { Registry, SpecSources } from './types.ts';
 import { loadScenarios } from './validate.ts';
 
 export class ScenarioError extends Error {
-  constructor(readonly problems: string[]) {
+  readonly problems: string[];
+
+  constructor(problems: string[]) {
     super(`Invalid scenario data: ${problems.join('; ')}`);
+    this.problems = problems;
     this.name = 'ScenarioError';
   }
 }

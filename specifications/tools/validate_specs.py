@@ -65,6 +65,23 @@ def finalize(scn, sid, prefix):
     return scn
 
 
+def parameter_problem(name, spec, value):
+    """Parameter value rules (03 state_model.reducer_rules); mirrors src/scenarios/parameters.ts."""
+    kind = lambda v: "boolean" if isinstance(v, bool) else "number" if isinstance(v, (int, float)) else type(v).__name__
+    if kind(value) != kind(spec["default"]):
+        return f"{name} must be a {kind(spec['default'])}, not {json.dumps(value)}"
+    if "options" in spec and value not in spec["options"]:
+        return f"{name} {json.dumps(value)} is not one of {', '.join(json.dumps(o) for o in spec['options'])}"
+    if kind(value) == "number":
+        if not math.isfinite(value):
+            return f"{name} must be a finite number"
+        if float(spec["default"]).is_integer() and not float(value).is_integer():
+            return f"{name} must be a whole number"
+        if not spec.get("min", value) <= value <= spec.get("max", value):
+            return f"{name} {value} is outside {spec.get('min')}..{spec.get('max')}"
+    return None
+
+
 def expand_variant(base, var):
     scn = copy.deepcopy(base)
     events = scn["events"]
@@ -91,6 +108,15 @@ def expand_variant(base, var):
             events[i:i] = copy.deepcopy(op["events"])
         else:
             err(var["id"], f"unknown operation {kind}")
+    for name, value in var.get("parameter_overrides", {}).items():
+        if name not in scn.get("parameters", {}):
+            err(var["id"], f"parameter_overrides names unknown parameter {name}")
+        else:
+            spec = scn["parameters"][name]
+            problem = parameter_problem(name, spec, value)
+            if problem:
+                err(var["id"], f"parameter_overrides {problem}")
+            spec["default"] = copy.deepcopy(value)
     if "question" in var:
         scn["question"] = var["question"]
     scn["title"] = var["title"]
@@ -187,6 +213,18 @@ def check_scenario(scn, ctx):
         for k in e.get("tracked_values", {}):
             if k not in ctx["lineage"]:
                 err(where, f"untracked lineage key {k}")
+        for ch in e.get("state_changes", []):
+            if ch.get("op") not in ("set", "append") or ("value" in ch) == ("value_ref" in ch):
+                err(where, "state_change needs op set or append and exactly one of value and value_ref")
+        for ch in e.get("context_changes", []):
+            rule = {"agent_state": "append", "model_visible_messages": "set"}.get(ch.get("target"))
+            if rule is None:
+                err(where, f"context_change has unknown target {ch.get('target')}")
+            elif ch.get("action") != rule:
+                err(where, f"context_change on {ch.get('target')} must use action {rule}")
+            if ch.get("target") == "model_visible_messages" and (
+                    "value_ref" not in ch or e["protocol"] != "LLM_API" or e["message_type"] != "REQUEST"):
+                err(where, "model_visible_messages changes only on LLM requests, with a value_ref")
         for ch in e.get("state_changes", []) + e.get("context_changes", []):
             if "value_ref" in ch:
                 try:
