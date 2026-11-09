@@ -343,6 +343,10 @@ def rag_engine(rag):
     def join(items):
         return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
 
+    def alone(pred):
+        head, sep, tail = pred.rpartition(", ")
+        return f"{head} and {tail}" if sep else pred
+
     def vkey(v):
         return tuple(int(x) for x in v.split("."))
 
@@ -350,12 +354,11 @@ def rag_engine(rag):
         """Returns (answer text, cited chunks in citation order, supported fact ids)."""
         if not sel:
             return "I could not find sufficiently relevant information in the indexed documents to answer this question.", [], set()
-        cites = []
+        marked = {}
 
-        def cite(c):
-            if c["id"] not in [x["id"] for x in cites]:
-                cites.append(c)
-            return [x["id"] for x in cites].index(c["id"]) + 1
+        def cite(c):  # placeholder; numbered by first appearance in the final text
+            marked[c["id"]] = c
+            return f"\x00{c['id']}\x00"
 
         official = [c for c in sel if c["documentId"] in docs12]
         parts, supported, missing = ([intro] if intro else []), set(), []
@@ -380,7 +383,7 @@ def rag_engine(rag):
                         runs.append([f["subject"], [(pred, best)]])
                 else:
                     ordered = sorted(vals.items(), key=lambda kv: vkey(kv[1][0]["version"]))
-                    alts = "; ".join(f"version {cs[0]['version']}: {f['subject']} {pred} [{cite(cs[0])}]" for pred, cs in ordered)
+                    alts = "; ".join(f"version {cs[0]['version']}: {f['subject']} {alone(pred)} [{cite(cs[0])}]" for pred, cs in ordered)
                     conflicts.append(f"The indexed documents conflict on {f['aspect']} ({alts}); version "
                                      f"{ordered[-1][1][0]['version']} is the newest.")
             phrases = []
@@ -397,7 +400,14 @@ def rag_engine(rag):
             parts.append(f"The retrieved evidence does not cover {join(missing)}.")
         if any(injected in c["text"] for c in sel):
             parts.append("Note: a retrieved document contained instructions addressed to the assistant; they were treated as data and ignored.")
-        return " ".join(parts), cites, supported
+        cites = []
+
+        def number(m):
+            c = marked[m.group(1)]
+            if c not in cites:
+                cites.append(c)
+            return str(cites.index(c) + 1)
+        return re.sub("\x00([^\x00]+)\x00", number, " ".join(parts)), cites, supported
 
     def source_lines(cites):
         return [f"[{i + 1}] {c['documentId']} v{c['version']}, chunk {c['id']}" for i, c in enumerate(cites)]
@@ -438,6 +448,7 @@ def check_rag(rag, comp, registry, ui):
     if (rc["top_k"]["default"], rc["top_k"]["max"], rc["similarity_threshold"]["default"]) != \
             (p["top_k"]["default"], p["top_k"]["max"], p["similarity_threshold"]["default"]):
         err("02 rag_controls", "top_k or threshold defaults differ from 05 rag-query parameters")
+    base_docs = R["corpus"]()
     for vid in variants:
         if vid not in refs:
             err(f"reference_results.{vid}", "missing for variant")
@@ -446,7 +457,13 @@ def check_rag(rag, comp, registry, ui):
         if not variant and not name.startswith("rag-query"):
             err(f"reference_results.{name}", "neither a variant nor a rag-query case")
             continue
-        rp = ref["parameters"]
+        cited = [int(n) for n in re.findall(r"\[(\d+)\]", ref.get("answer", ""))]
+        if list(dict.fromkeys(cited)) != list(range(1, len(set(cited)) + 1)):
+            err(f"reference_results.{name}", "citations are not numbered by first appearance")
+        rp = ref.get("parameters")
+        if not isinstance(rp, dict):
+            err(f"reference_results.{name}", "missing parameters")
+            continue
         if variant:
             expected = {"chunk_size_words": 50, "overlap_words": 10, "top_k": R["default_k"],
                         "similarity_threshold": R["default_thr"]}
@@ -460,9 +477,11 @@ def check_rag(rag, comp, registry, ui):
             if rp != expected:
                 err(f"reference_results.{name}", f"parameters {rp} differ from defaults plus overrides {expected}")
         docs = R["corpus"](**corpus_kwargs(variant))
-        for absent in (variant or {}).get("fixture_overrides", {}).get("not_indexed", []):
-            if any(d[0] == absent for d in docs):
-                err(f"reference_results.{name}", f"{absent} should not be indexed")
+        fo = (variant or {}).get("fixture_overrides", {})
+        dropped = {d[0] for d in base_docs} - {d[0] for d in docs} - set(fo.get("exclude_documents", []))
+        if dropped != set(fo.get("not_indexed", [])):
+            err(f"reference_results.{name}", f"not_indexed {sorted(fo.get('not_indexed', []))} differs from the "
+                f"documents missing from the index {sorted(dropped)}")
         qv, ranked, sel = R["retrieve"](docs, size=rp["chunk_size_words"], ov=rp["overlap_words"], top_k=rp["top_k"],
                                         thr=rp["similarity_threshold"], rerank=rp.get("rerank", False))
         got = [c["id"] for c in sel]
@@ -518,7 +537,7 @@ def check_rag(rag, comp, registry, ui):
     for label, case, base in cases:
         if not str(case.get("lesson" if case is not base else "headline", "")).strip():
             err(label, "missing lesson" if case is not base else "missing headline")
-        _, _, sel = R["retrieve"](R["corpus"](**corpus_kwargs(case if case is not base else None)))
+        _, ranked, sel = R["retrieve"](R["corpus"](**corpus_kwargs(case if case is not base else None)))
         a, cites, sup = R["answer"](sel, intro=intro)
         if {"everyday-fee", "everyday-access", "savings-fee-interest", "savings-access"} <= sup:
             a += (" Whether the Savings account would be better depends on how you use your money: it would avoid the "
@@ -532,6 +551,10 @@ def check_rag(rag, comp, registry, ui):
             err(label, "expected_selected differs from recomputation")
         if case is base:
             ev = {e["id"].split(":", 1)[1]: e for e in registry[comp["id"]]["events"]}
+            for eid, e in ev.items():
+                tracked = (e.get("tracked_values") or {}).get("chunkId")
+                if tracked is not None and (tracked if isinstance(tracked, list) else [tracked])  not in ([c["id"] for c in sel], [c["id"] for c in ranked]):
+                    err(f"{label}/{eid}", "tracked chunkId values are neither the ranking nor the retrieved chunks")
             if ev["c-03"]["payload"]["document_blocks"] != [c["id"] for c in sel]:
                 err(label, "c-03 document blocks differ from the retrieved chunks")
             prompt = ev["c-04"]["payload"]["messages"][1]["content"]

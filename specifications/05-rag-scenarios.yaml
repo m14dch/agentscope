@@ -408,9 +408,11 @@ fixtures:
     facts.'
   - Write a citation '[n]' after a predicate only where the next predicate in the phrase is cited from
     a different chunk, or the phrase ends. When several chunks support the same predicate, cite the newest
-    version, then the lowest chunk ID. Number citations by first use.
+    version, then the lowest chunk ID. Number citations in order of first appearance in the final answer
+    text, so [1] comes first.
   - If one fact is supported by different versions with different predicates, write a conflict sentence
-    after its group that cites each version and names the newest.
+    after its group that cites each version and names the newest. In a conflict sentence each predicate
+    stands alone, so its last comma becomes ' and '.
   - 'End with one sentence naming every unsupported aspect: ''The retrieved evidence does not cover <aspects>.'''
   - 'With no retained chunks, answer exactly: ''I could not find sufficiently relevant information in
     the indexed documents to answer this question.'''
@@ -1485,6 +1487,9 @@ variants:
       savings-account.md: '1.2'
     not_indexed:
     - account-opening.md
+    - authentication.md
+    - balance-api.md
+    - release-notes.md
   lesson: Because the index predates version 1.2 and the opening guide, the answer cites the old fees
     and interest and states that it has no evidence about opening an account.
 - id: rag-no-match
@@ -1911,26 +1916,26 @@ reference_results:
     answer: 'Opening an account: anyone aged 18 or over who lives in Switzerland can open an account online
       [1]; you need a valid passport or identity card and a Swiss address [1]; the Everyday account needs
       no initial deposit [1]; the Savings account needs an initial deposit of at least CHF 100 [2]. Keeping
-      an account: the Everyday account has no minimum balance, pays no interest [4] and can be closed
-      at any time without a fee [7]; the Savings account has no minimum balance [6]; accounts without
+      an account: the Everyday account has no minimum balance, pays no interest [3] and can be closed
+      at any time without a fee [4]; the Savings account has no minimum balance [5]; accounts without
       any activity for 24 months are closed after a written notice [2]. The indexed documents conflict
       on the Everyday account''s monthly fee (version 1.0: the Everyday account costs CHF 7 per month
-      [3]; version 1.2: the Everyday account costs CHF 5 per month [4]); version 1.2 is the newest. The
+      [6]; version 1.2: the Everyday account costs CHF 5 per month [3]); version 1.2 is the newest. The
       indexed documents conflict on the Savings account''s fee and interest (version 1.0: the Savings
-      account has no monthly fee, pays 0.25% annual interest [5]; version 1.2: the Savings account has
-      no monthly fee, pays 0.50% annual interest [6]); version 1.2 is the newest. Using the accounts:
-      the Everyday account includes a debit card for payments and cash withdrawals [4] and has free domestic
-      transfers [7]; the Savings account has no debit card and cannot be used for card payments [6]. The
+      account has no monthly fee and pays 0.25% annual interest [7]; version 1.2: the Savings account
+      has no monthly fee and pays 0.50% annual interest [5]); version 1.2 is the newest. Using the accounts:
+      the Everyday account includes a debit card for payments and cash withdrawals [3] and has free domestic
+      transfers [4]; the Savings account has no debit card and cannot be used for card payments [5]. The
       retrieved evidence does not cover the Savings account''s withdrawal rules and transfers between
       the accounts.'
     sources:
     - '[1] account-opening.md v1.2, chunk account-opening@1.2-c50o10-001'
     - '[2] account-opening.md v1.2, chunk account-opening@1.2-c50o10-002'
-    - '[3] everyday-account.md v1.0, chunk everyday-account@1.0-c50o10-001'
-    - '[4] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-001'
-    - '[5] savings-account.md v1.0, chunk savings-account@1.0-c50o10-001'
-    - '[6] savings-account.md v1.2, chunk savings-account@1.2-c50o10-001'
-    - '[7] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-002'
+    - '[3] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-001'
+    - '[4] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-002'
+    - '[5] savings-account.md v1.2, chunk savings-account@1.2-c50o10-001'
+    - '[6] everyday-account.md v1.0, chunk everyday-account@1.0-c50o10-001'
+    - '[7] savings-account.md v1.0, chunk savings-account@1.0-c50o10-001'
   rag-hybrid:
     parameters:
       chunk_size_words: 50
