@@ -3,6 +3,7 @@
  * computed forward from the initial state and cached, never by reversing side effects.
  */
 import type { Json, Scenario, ScenarioEvent } from '../scenarios/types.ts';
+import { parameterProblem } from '../scenarios/parameters.ts';
 import { applyEvent, type CoreSnapshot, deepFreeze, initialSnapshot } from './reducer.ts';
 
 export type RetrievalConfig = Readonly<Record<string, Json>>;
@@ -41,10 +42,10 @@ export class Playback {
   private views = new Map<number, Snapshot>();
   private readonly derive: DeriveEvents;
 
-  constructor(
-    readonly scenario: Scenario,
-    options: PlaybackOptions = {},
-  ) {
+  readonly scenario: Scenario;
+
+  constructor(scenario: Scenario, options: PlaybackOptions = {}) {
+    this.scenario = scenario;
     this.derive = options.deriveEvents ?? ((s) => s.events);
     this.config = deepFreeze(structuredClone(defaults(scenario)));
     this.events = this.frozenEvents(this.config);
@@ -93,7 +94,7 @@ export class Playback {
   }
 
   /**
-   * Changes parameter values (each within its type, min and max), regenerates the derived
+   * Changes parameter values (each must satisfy parameterProblem), regenerates the derived
    * events and drops the snapshots from the first changed event on. Returns that event's
    * cursor (length + 1 if none). When a Player owns this playback, call
    * Player.setParameters instead, which also clamps the player's cursor.
@@ -103,18 +104,8 @@ export class Playback {
     for (const [name, value] of Object.entries(values)) {
       const spec = Object.hasOwn(known, name) ? known[name] : undefined;
       if (!spec) throw new RangeError(`${this.scenario.id} has no parameter ${name}`);
-      if (typeof value !== typeof spec.default) {
-        throw new TypeError(
-          `${name} must be a ${typeof spec.default}, not ${JSON.stringify(value)}`,
-        );
-      }
-      const { min, max } = spec;
-      if (
-        typeof value === 'number' &&
-        ((min !== undefined && value < min) || (max !== undefined && value > max))
-      ) {
-        throw new RangeError(`${name} ${value} is outside ${String(min)}..${String(max)}`);
-      }
+      const problem = parameterProblem(name, spec, value);
+      if (problem) throw new RangeError(problem);
     }
     const config = deepFreeze({ ...this.config, ...structuredClone(values) });
     const events = this.frozenEvents(config);

@@ -31,10 +31,13 @@ export class Player {
   private disposed = false;
   private readonly listeners = new Set<(player: Player) => void>();
 
-  constructor(
-    readonly playback: Playback,
-    private readonly clock: Clock = browserClock,
-  ) {}
+  readonly playback: Playback;
+  private readonly clock: Clock;
+
+  constructor(playback: Playback, clock: Clock = browserClock) {
+    this.playback = playback;
+    this.clock = clock;
+  }
 
   get cursor(): number {
     return this.position;

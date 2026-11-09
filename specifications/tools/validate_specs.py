@@ -65,6 +65,23 @@ def finalize(scn, sid, prefix):
     return scn
 
 
+def parameter_problem(name, spec, value):
+    """Parameter value rules (03 state_model.reducer_rules); mirrors src/scenarios/parameters.ts."""
+    kind = lambda v: "boolean" if isinstance(v, bool) else "number" if isinstance(v, (int, float)) else type(v).__name__
+    if kind(value) != kind(spec["default"]):
+        return f"{name} must be a {kind(spec['default'])}, not {json.dumps(value)}"
+    if "options" in spec and value not in spec["options"]:
+        return f"{name} {json.dumps(value)} is not one of {', '.join(json.dumps(o) for o in spec['options'])}"
+    if kind(value) == "number":
+        if not math.isfinite(value):
+            return f"{name} must be a finite number"
+        if float(spec["default"]).is_integer() and not float(value).is_integer():
+            return f"{name} must be a whole number"
+        if not spec.get("min", value) <= value <= spec.get("max", value):
+            return f"{name} {value} is outside {spec.get('min')}..{spec.get('max')}"
+    return None
+
+
 def expand_variant(base, var):
     scn = copy.deepcopy(base)
     events = scn["events"]
@@ -96,9 +113,9 @@ def expand_variant(base, var):
             err(var["id"], f"parameter_overrides names unknown parameter {name}")
         else:
             spec = scn["parameters"][name]
-            if isinstance(value, (int, float)) and not isinstance(value, bool) and not (
-                    spec.get("min", value) <= value <= spec.get("max", value)):
-                err(var["id"], f"parameter_overrides {name} {value} is outside {spec.get('min')}..{spec.get('max')}")
+            problem = parameter_problem(name, spec, value)
+            if problem:
+                err(var["id"], f"parameter_overrides {problem}")
             spec["default"] = copy.deepcopy(value)
     if "question" in var:
         scn["question"] = var["question"]

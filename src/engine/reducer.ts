@@ -28,11 +28,11 @@ export interface CoreSnapshot {
 }
 
 export class EngineError extends Error {
-  constructor(
-    readonly where: string,
-    message: string,
-  ) {
+  readonly where: string;
+
+  constructor(where: string, message: string) {
     super(`${where}: ${message}`);
+    this.where = where;
     this.name = 'EngineError';
   }
 }

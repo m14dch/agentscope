@@ -191,7 +191,14 @@ describe('parameter changes', () => {
     expect(() => p.setParameters({ nope: 1 })).toThrow(/has no parameter nope/);
     expect(() => p.setParameters({ top_k: 99 })).toThrow(/top_k 99 is outside 1..8/);
     expect(() => p.setParameters({ rerank: 'yes' })).toThrow(/rerank must be a boolean/);
+    expect(() => p.setParameters({ top_k: Number.NaN })).toThrow(/top_k must be a finite number/);
+    expect(() => p.setParameters({ top_k: 2.5 })).toThrow(/top_k must be a whole number/);
     expect(p.retrievalConfig['top_k']).toBe(4);
+    const index = new Playback(scenario('rag-index'));
+    expect(() => index.setParameters({ chunk_size_words: 37 })).toThrow(
+      /chunk_size_words 37 is not one of 25, 50, 100/,
+    );
+    expect(index.setParameters({ chunk_size_words: 100 })).toBeGreaterThan(0);
   });
 
   it("start from a variant's parameter_overrides", () => {
