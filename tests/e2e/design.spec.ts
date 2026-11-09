@@ -48,7 +48,7 @@ test('figures expose their text to assistive technology', async ({ page }) => {
   await expect(page.getByRole('region', { name: /Arrow examples/ })).toBeVisible();
   await expect(page.getByText('MCP · tools/call result')).toBeVisible();
   await expect(page.getByRole('list', { name: /Retrieval scores/ })).toContainText(
-    /savings-account · 001\s+0\.90, retained/,
+    /account-opening · 001\s+0\.98, retained/,
   );
 });
 
@@ -80,5 +80,5 @@ test('the score axis lines up with the plotted values', async ({ page }) => {
   expect(Math.abs((await centre('.scale:not(.scale--top) span:last-child')) - at(1))).toBeLessThan(
     2,
   );
-  expect(Math.abs((await centre('.retained .dot')) - at(0.9041))).toBeLessThan(2);
+  expect(Math.abs((await centre('.retained .dot')) - at(0.9761))).toBeLessThan(2);
 });
