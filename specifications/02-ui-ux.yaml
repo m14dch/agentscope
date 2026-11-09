@@ -1,5 +1,5 @@
 product: AgentScope
-spec_version: 2.0.0
+spec_version: 3.0.0
 navigation:
   tabs:
   - MCP
@@ -15,7 +15,8 @@ layout:
   tablet: Stack inspector below horizontally scrollable diagram
   minimum_lifeline_width_px: 110
 diagram:
-  participants: Scenario-defined and ordered
+  participants: Scenario-defined and ordered; labels from the participant registry
+    (01-architecture.yaml)
   arrows: One per actual logical message or explicitly labeled internal operation
   styles:
     model_api: violet
@@ -32,8 +33,12 @@ diagram:
   accessible_without_color: true
   rendering: SVG lifelines, arrows and labels generated from ordered event data. Show
     a simulation label on illustrated network exchanges.
+  error_events: An event is an error when its HTTP status is 4xx/5xx, its payload has
+    a JSON-RPC error object, or its MCP result has isError true. Each kind gets its
+    own label (07-security-protocols.yaml error_taxonomy).
 modes:
-  architecture: Collapse event groups into expandable semantic phases
+  architecture: Collapse each scenario phase into one expandable group labelled with
+    the phase label
   protocol: Show all individual events with exact logical messages
   switch_preserves_position: true
 controls:
@@ -68,15 +73,18 @@ inspector:
   - copy
   - expand/collapse JSON
   - correlated request/response
-  transport_tab: Show simulated wire envelopes separately from logical payloads. In-process
-    calls have no transport envelope.
+  transport_tab: Show simulated wire envelopes separately from logical payloads, including
+    the MCP headers mirrored from the body (MCP-Protocol-Version, Mcp-Method, Mcp-Name).
+    In-process calls have no transport envelope.
+  security_tab: Lists the event's security_boundaries with risk and mitigation from
+    07-security-protocols.yaml.
 context_panel:
   views:
   - Agent state
   - Model-visible context
   - Delta since previous event
-  rule: Tool result is not model-visible until a subsequent model request includes
-    it
+  rule: Tool results and retrieved text are not model-visible until a subsequent model
+    request includes them
 rag_controls:
   top_k:
     min: 1
@@ -85,8 +93,13 @@ rag_controls:
   similarity_threshold:
     min: 0
     max: 1
+    step: 0.01
     default: 0.7
   reranking:
+    default: false
+  keyword_retrieval:
+    default: false
+  fetch_full_documents:
     default: false
   chunk_size_words:
     options:
@@ -100,6 +113,8 @@ rag_controls:
     - 10
     - 20
     default: 10
+  version_panel: In rag-stale and rag-conflict, show source and indexed document versions
+    side by side.
 accessibility:
 - Keyboard operable controls
 - Visible focus

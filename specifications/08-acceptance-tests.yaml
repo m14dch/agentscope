@@ -1,5 +1,5 @@
 product: AgentScope
-spec_version: 2.0.0
+spec_version: 3.0.0
 phases:
 - id: 1
   name: Engine and diagram
@@ -7,18 +7,19 @@ phases:
   - Step navigation and random access correct
   - Event inspector displays payload
   - Architecture/protocol modes preserve cursor
+  - Variant and composition expansion validated
 - id: 2
   name: MCP primary
   exit:
-  - Initialization, discovery, tool invocation, REST and response fully traced
-  - JSON-RPC IDs correlated
+  - Discovery, tool listing, tool invocation, REST and response fully traced
+  - JSON-RPC IDs correlated and MCP headers mirror the body
   - Context visibility correctly delayed
 - id: 3
   name: RAG ingestion and retrieval
   exit:
   - Chunking and embedding inspection works
-  - Computed vector scores agree with vectors
-  - topK and threshold recompute context
+  - Computed vectors and scores match reference_results
+  - topK and threshold recompute context and answer
 - id: 4
   name: Compare and combined
   exit:
@@ -34,35 +35,50 @@ phases:
 unit_tests:
 - Event IDs unique; sequence monotonic
 - All pair_id references reciprocal
-- MCP notifications lack id
-- JSON-RPC request/response ids match
+- JSON-RPC request/response ids match and equal correlation_id
+- Every MCP payload validates against the pinned schema.json
+- MCP-Protocol-Version header equals params._meta protocolVersion; Mcp-Method equals
+  method; Mcp-Name equals params.name or params.uri where required
 - Previous/jump/reset reconstruct same state
 - Parameter changes invalidate downstream snapshots
-- No model-visible tool result before next LLM request
+- No model-visible tool result or retrieved text before the LLM request that submits
+  it
+- Every LLM request after a tool call contains the full conversation including the
+  assistant tool-call message
 - Tracked customerId and balance remain consistent
+- Chunk IDs, vectors, scores and selections reproduce 05-rag-scenarios.yaml reference_results
 - Cosine similarity computed correctly
 - Retrieval selection respects topK and threshold
+- Simulated answers reproduce the reference answers and citations for every RAG reference
+  and both Combined cases
 - Document citations resolve to source fixtures
-- No HTTP framing for in-process calls
-- All three primary questions match their specified strings
-- Expanded variants resolve scenario, participant, phase, event and pair references
-- HTTP 202 acknowledgement has no JSON-RPC ID or body
+- No HTTP framing for in-process or simulated calls
+- All three primary questions match 00-product.yaml primary_questions
+- Expanded variants and compositions resolve scenario, participant, phase, event and
+  pair references
+- Every participant ID exists in the 01-architecture.yaml registry
+- Every security_boundaries entry exists in 07-security-protocols.yaml
 - Identical JSON fixtures and parameters yield identical snapshots, rankings and citations
 e2e_tests:
 - id: mcp-walkthrough
   steps:
   - Open MCP primary
   - Play through all events
-  - Inspect tools/list and tools/call
+  - Inspect server/discover, tools/list and tools/call with their HTTP headers
   - Verify REST GET and response
   - Verify final CHF 12,500.75
+- id: mcp-errors
+  steps:
+  - Run mcp-not-found and mcp-unauthorized and verify isError results labelled as tool
+    execution errors
+  - Run mcp-jsonrpc-error and verify the JSON-RPC error labelled as a protocol error
 - id: rag-walkthrough
   steps:
   - Run ingestion
   - Inspect chunks and vectors
   - Run retrieval
-  - Change topK
-  - Inspect changed LLM prompt and citations
+  - Change topK to 4
+  - Inspect changed LLM prompt, answer and citations against reference_results
 - id: navigation
   steps:
   - Jump to last step
@@ -78,9 +94,9 @@ e2e_tests:
 - id: combined-walkthrough
   steps:
   - Verify the exact combined question.
-  - Trace initialized MCP tool use and RAG evidence separately.
+  - Trace MCP tool use and RAG evidence separately.
   - Verify CHF 12,500.75 and cited fee, interest and access trade-offs.
-  - Repeat with missing terms and verify the answer states the evidence gap.
+  - Run combined-missing-terms and verify the answer states the evidence gap.
 - id: pages
   steps:
   - Build and serve dist under a repository subpath.
@@ -99,7 +115,7 @@ definition_of_done:
 - Static build and source delivered
 - README includes run and extend instructions
 - All primary scenarios deterministic and executable
-- All protocol examples validated against pinned revision
+- All protocol examples validated against the pinned revision
 - No fictional model output represented as real inference
 - GitHub Pages workflow deploys the Vite dist artifact at the configured base path
 - Production build runs offline after precache with all fixtures and assets bundled

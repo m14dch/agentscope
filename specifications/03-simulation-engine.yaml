@@ -1,5 +1,5 @@
 product: AgentScope
-spec_version: 2.0.0
+spec_version: 3.0.0
 event_schema:
   required:
   - id
@@ -10,34 +10,43 @@ event_schema:
   - receiver
   - operation
   - protocol
+  - transport
   - execution_type
   - message_type
   - explanation
   fields:
-    id: Unique string
+    id: Unique string across the expanded registry
     scenario_id: Scenario registry ID
-    phase: Semantic phase ID
-    sequence: Integer, strictly increasing
-    sender: Participant ID
-    receiver: Participant ID
+    phase: ID of one of the scenario's phases
+    sequence: Integer, strictly increasing from 1 within a scenario
+    sender: Participant ID from the registry and listed in the scenario
+    receiver: Participant ID from the registry and listed in the scenario
     operation: Method or internal action
     protocol: MCP | HTTP | LLM_API | RAG_INTERNAL | UI | DB | INTERNAL
-    transport: streamable_http | https | in_process | simulated | none
+    transport: streamable_http | https | in_process | simulated
     execution_type: NETWORK | IN_PROCESS | SIMULATED_INTERNAL (NETWORK denotes an
       illustrated wire exchange only)
     message_type: REQUEST | RESPONSE | NOTIFICATION | ACTION | RESULT
-    correlation_id: Optional request/response ID; absent for notifications
-    pair_id: Optional matching event ID
+    correlation_id: JSON-RPC id as a string on MCP requests and responses; absent elsewhere
+    pair_id: Optional matching event ID; pairs are reciprocal
     payload: Structured logical message or string
     http: Optional simulated HTTP envelope. body_ref points to the logical payload
-      on the same event. Omit for in-process operations.
+      on the same event. Omit for in-process and simulated operations.
     explanation: Plain-language reason and outcome
     technical_notes: List of explanatory notes
-    security_boundaries: List of crossed boundaries
-    tracked_values: Value paths and provenance
-    state_changes: Declarative patches applied by reducer
-    context_changes: Changes to agent or model-visible context
-    parent_phase_id: Optional architecture grouping
+    security_boundaries: List of boundary IDs from 07-security-protocols.yaml trust_boundaries
+    tracked_values: Map of lineage keys (see lineage.tracked) to values or lists of
+      values present in or produced by this event
+    state_changes: 'List of {path, op: set | append, value | value_ref}. value_ref is
+      a dotted path into this event (for example payload.result.tools).'
+    context_changes: 'List of {target: agent_state | model_visible_messages, action:
+      set | append, description, value_ref?}'
+phase_schema:
+  fields:
+    id: Unique within the scenario
+    label: Shown in architecture mode
+    semantic_phase: One of 06-comparison-scenarios.yaml semantic_phases; drives Compare
+      synchronization
 state_model:
   fields:
   - cursor
@@ -48,21 +57,26 @@ state_model:
   - model_visible_messages
   - mcp_state
   - rag_index
+  - retrieval
   - retrieval_config
   - lineage
   initial_state: Scenario-provided immutable fixture
-  reducer: Replay state_changes from initial state through cursor
+  reducer: Replay state_changes and context_changes from initial state through cursor
   random_access: Recompute from initial state or cached deterministic snapshots
   parameter_change: Regenerate derived events and downstream snapshots with pure functions.
     Break score ties by stable chunk ID.
   backward: No imperative reverse side effects
 invariants:
-- Event IDs unique across registry
+- Event IDs unique across the expanded registry
 - Sequence strictly increasing within scenario
-- Each pair_id resolves to exactly one matching event
-- JSON-RPC request IDs match responses; notifications have no ID
-- Tool result does not appear in model-visible context before model submission
-- No HTTP envelope on in-process events
+- Each pair_id resolves to exactly one event whose pair_id points back
+- JSON-RPC request IDs match their responses; correlation_id equals the JSON-RPC id
+- Every MCP payload validates against the pinned revision's schema.json
+- MCP HTTP headers mirror the body (MCP-Protocol-Version, Mcp-Method, Mcp-Name)
+- A tool result or retrieved chunk appears in model-visible context only from the next
+  LLM request that submits it
+- No HTTP envelope on in-process or simulated events
+- Every participant and phase referenced by an event is declared by its scenario
 - All tracked values resolve to fixture or event-derived data
 - Same scenario and parameters yield identical results
 lineage:
@@ -81,11 +95,53 @@ scenario_format:
   - phases
   - events
   - initial_state
+  optional:
+  - question
+  - parameters
+  - derived_events
+  - optional_steps
   validation: Validate schema and cross-references at build and startup. Errors identify
     scenario and event path.
   encoding: Bundled JSON validated at build and startup. YAML is the design specification.
-  composition: Expand variants and reusable phases into complete scenarios before
-    validation. Namespace copied event IDs, remap references and resequence events.
+variant_format:
+  description: A variant is a base scenario plus ordered edit operations. Expansion
+    produces a complete scenario that passes the same validation.
+  fields:
+    id: Variant scenario ID
+    title: Display title
+    extends: Base scenario ID
+    question: Optional replacement question
+    fixture_overrides: Optional fixture changes interpreted by the relevant engine
+    parameter_overrides: Optional parameter values
+    operations: Optional ordered list of edit operations
+    lesson: What the variant teaches
+  operations:
+    patch: '{op: patch, event, set: {dotted.path: value}}. Replaces the value at each
+      path; numeric path segments index arrays.'
+    replace: '{op: replace, event, with: event}. Replaces the whole event.'
+    remove: '{op: remove, events: [ids]}. Removes events; pairs must stay reciprocal.'
+    insert_after: '{op: insert_after, event, events: [events]}. Inserts new events
+      after the named event.'
+  expansion:
+  - Deep-copy the base scenario
+  - Apply operations in order using local (unprefixed) event IDs
+  - Set scenario_id to the variant ID and renumber sequence from 1
+  - Prefix every event ID and pair_id with '<variant id>:'
+  - Validate the expanded scenario
+composition_format:
+  description: Used by the Combined scenario (06-comparison-scenarios.yaml).
+  steps:
+    copy: '{scenario, from, to, phase_map?, patch?}. Copies the inclusive event range
+      of an already expanded scenario. phase_map renames phases; patch applies field
+      replacements keyed by source event ID.'
+    insert: '{insert: [events]}. Adds new events written for the composed scenario.'
+  expansion:
+  - Process steps in order
+  - Prefix every event ID and pair_id with '<composed id>:'
+  - Set scenario_id and renumber sequence from 1
+  - Copied ranges must contain complete request/response pairs
+  - Validate the composed scenario
 deterministic_model:
-  behavior: Select prewritten response templates from evidence states
+  behavior: Select prewritten response templates from evidence states. RAG answers
+    follow 05-rag-scenarios.yaml answer_rules.
   label: Simulated model output

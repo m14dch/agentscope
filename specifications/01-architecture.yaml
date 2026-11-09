@@ -1,5 +1,5 @@
 product: AgentScope
-spec_version: 2.0.0
+spec_version: 3.0.0
 runtime:
   kind: static_single_page_application
   language: TypeScript
@@ -15,46 +15,108 @@ runtime:
     assets only.
   runtime_api_requests: 0
 modules:
-  scenario_registry: Validates bundled JSON and resolves scenario variants and composition
-    before playback
+  scenario_registry: Validates bundled JSON and expands variants and compositions before
+    playback
   playback_engine: Deterministically reduces ordered events into snapshots
   diagram_renderer: Displays lifelines, phases, arrows, request/response pairs
   inspector: Displays exact logical payload, transport framing, rationale and notes
   context_inspector: Separately displays agent working state and model-visible messages
   lineage_view: Highlights value origin, transformations and destinations
+  rag_engine: Pure functions for chunking, demo embeddings, scoring, filtering, reranking
+    and evidence-based answer composition (05-rag-scenarios.yaml)
   rag_visualizer: Chunking and simplified 2D embedding projection
   comparison_view: Synchronizes two simulations by semantic phase
+participants:
+  description: Single registry. Scenarios reference these IDs only.
+  registry:
+  - id: user
+    label: User
+    kind: person
+  - id: agent
+    label: Agent (host application / RAG orchestrator)
+    kind: application
+    note: The same participant runs MCP tool calls and RAG retrieval.
+  - id: llm
+    label: LLM provider
+    kind: external_service
+  - id: mcp-client
+    label: MCP client
+    kind: library
+    note: Runs inside the agent process in these scenarios.
+  - id: mcp-server
+    label: Example Bank MCP server
+    kind: service
+  - id: rest-api
+    label: Example Bank REST API
+    kind: service
+  - id: database
+    label: Core ledger
+    kind: datastore
+  - id: embedding-model
+    label: Embedding model
+    kind: external_service
+  - id: vector-db
+    label: Vector database
+    kind: datastore
+  - id: document-store
+    label: Document store
+    kind: datastore
+  - id: repository
+    label: Document repository
+    kind: datastore
+  - id: pipeline
+    label: Ingestion pipeline
+    kind: application
+  - id: parser
+    label: Parser
+    kind: library
+  - id: chunker
+    label: Chunker
+    kind: library
 boundaries:
-- from: end-user
+- from: user
   to: agent
   type: UI event
 - from: agent
-  to: llm-provider
-  type: Simulated provider-neutral model messages
+  to: llm
+  type: Simulated provider-neutral model API over HTTPS
 - from: agent
   to: mcp-client
-  type: Simulated In-process method call
+  type: In-process method call
 - from: mcp-client
   to: mcp-server
-  type: Simulated MCP JSON-RPC over Streamable HTTP
+  type: Simulated MCP JSON-RPC over Streamable HTTP (revision 2026-07-28)
 - from: mcp-server
   to: rest-api
   type: Simulated REST over HTTPS
 - from: rest-api
   to: database
-  type: Simulated Illustrative internal query
-- from: orchestrator
+  type: Illustrative internal query
+- from: agent
   to: embedding-model
-  type: Simulated Illustrative model API
-- from: orchestrator
+  type: Illustrative model API
+- from: agent
   to: vector-db
-  type: Simulated Illustrative query API
+  type: Illustrative query API
+- from: agent
+  to: document-store
+  type: Illustrative query API (optional step)
+- from: pipeline
+  to: embedding-model
+  type: Illustrative model API
+- from: pipeline
+  to: vector-db
+  type: Illustrative upsert API
 source_of_truth:
   scenario: Event data and fixtures; no independent hardcoded payloads in UI
   state: Initial snapshot plus deterministic event reducer
   view: Derived from current snapshot and selected event
+  derived_payloads: RAG events listed in a scenario's derived_events are recomputed
+    by rag_engine from fixtures and parameters. The YAML shows their default-parameter
+    values.
 repo_layout:
 - specifications/
+- specifications/tools/validate_specs.py
 - index.html
 - vite.config.ts
 - package.json
