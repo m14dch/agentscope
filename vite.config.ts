@@ -1,5 +1,7 @@
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
 import { normalizeBase } from './src/base.ts';
+import { scenariosPlugin } from './scripts/vite-scenarios.ts';
 
 /**
  * Public base path of the deployed site. GitHub Pages serves this project
@@ -14,6 +16,8 @@ const VERSION = process.env.AGENTSCOPE_VERSION ?? 'dev';
 export default defineConfig({
   base: BASE_PATH,
   plugins: [
+    // Bundles the YAML specifications as JSON and fails the build if they are invalid.
+    scenariosPlugin(fileURLToPath(new URL('./specifications', import.meta.url))),
     {
       name: 'agentscope-version',
       transformIndexHtml: () => [

@@ -94,3 +94,8 @@ pre {
     transition: none !important;
   }
 }
+
+/* Errors only, always with × and a labelled kind. */
+.error {
+  color: var(--color-error);
+}

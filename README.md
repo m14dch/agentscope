@@ -107,3 +107,14 @@ pip install -r specifications/tools/requirements.txt
 ```bash
 npm run validate:specs
 ```
+
+### How the app uses the specifications
+
+The YAML is the single source of scenario data. At build time, a Vite plugin
+([`scripts/vite-scenarios.ts`](scripts/vite-scenarios.ts)) parses it into a bundled JSON module; nothing generated
+is committed. The app expands the variants and the Combined composition and validates every event at startup
+([`src/scenarios/`](src/scenarios/)). Any invalid event fails the build with an error naming its scenario and event,
+for example `mcp-balance/mcp-11: participant nobody not declared`.
+
+A golden test checks that the TypeScript registry equals the Python validator's (`--dump-registry`), so the unit
+tests also need the Python requirements.

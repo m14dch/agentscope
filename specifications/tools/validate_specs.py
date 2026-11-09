@@ -7,6 +7,7 @@ schema.json, and recomputes all RAG reference results from the fixtures.
 
 Usage:
     python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json
+    python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json --dump-registry out.json
 
 Download schema.json from the URL in 04-mcp-scenarios.yaml protocol.schema.
 Requires PyYAML and jsonschema.
@@ -571,6 +572,7 @@ def check_rag(rag, comp, registry, ui):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mcp-schema", required=True, help="schema.json of the pinned MCP revision")
+    ap.add_argument("--dump-registry", metavar="PATH", help="write the expanded registry as JSON (golden test)")
     args = ap.parse_args()
     product, arch, engine = load("00-product.yaml"), load("01-architecture.yaml"), load("03-simulation-engine.yaml")
     mcp, rag, cmp_ = load("04-mcp-scenarios.yaml"), load("05-rag-scenarios.yaml"), load("06-comparison-scenarios.yaml")
@@ -619,6 +621,8 @@ def main():
     check_rag(rag, comb, registry, load("02-ui-ux.yaml"))
 
     total = sum(len(s["events"]) for s in registry.values())
+    if args.dump_registry:
+        Path(args.dump_registry).write_text(json.dumps(registry, ensure_ascii=False, indent=1))
     if errors:
         print("\n".join(errors))
         print(f"\n{len(errors)} problem(s) in {len(registry)} expanded scenarios")
