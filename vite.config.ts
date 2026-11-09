@@ -8,8 +8,19 @@ import { normalizeBase } from './src/base.ts';
  */
 export const BASE_PATH = normalizeBase(process.env.AGENTSCOPE_BASE ?? '/agentscope/');
 
+/** Commit the build comes from; checked after deployment to detect a stale site. */
+const VERSION = process.env.AGENTSCOPE_VERSION ?? 'dev';
+
 export default defineConfig({
   base: BASE_PATH,
+  plugins: [
+    {
+      name: 'agentscope-version',
+      transformIndexHtml: () => [
+        { tag: 'meta', attrs: { name: 'agentscope-version', content: VERSION }, injectTo: 'head' },
+      ],
+    },
+  ],
   build: {
     target: 'es2023',
     // No source maps in the deployed site: they would be published and precached.

@@ -1,0 +1,97 @@
+name: Pages
+
+# Deploys main to GitHub Pages: run all CI checks, build with the base path
+# from the repository's Pages settings, deploy, then check the live site.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # only deploys when started from main
+
+permissions:
+  contents: read
+
+# One deployment of main at a time; a newer one waits instead of cancelling a running one.
+# Per-ref groups keep no-op manual runs from other branches out of main's queue.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Fails if Pages is not enabled.
+      - id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Require GitHub Actions as the Pages source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .build_type)
+          if [ "$source" != workflow ]; then
+            echo "::error::Pages source is '$source'. Set Settings > Pages > Source to 'GitHub Actions'."
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # '/agentscope' for this project site, '' for a root site or custom domain.
+          AGENTSCOPE_BASE: ${{ steps.pages.outputs.base_path || '/' }}
+          AGENTSCOPE_VERSION: ${{ github.sha }}
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Longer than deploy-pages' own 10-minute timeout, so its error is reported.
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Check the live site
+        run: node scripts/check-deployment.ts "$PAGE_URL" --expect-version "$GITHUB_SHA"
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
