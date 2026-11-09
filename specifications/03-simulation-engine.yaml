@@ -123,7 +123,8 @@ scenario_format:
     are typed as PyYAML safe_load types them: booleans yes, no, on, off, true and false
     in any of their three spellings; null as ~, null or empty; integers in decimal,
     binary, octal and hexadecimal; floats need a dot. Scalars JSON cannot carry
-    (timestamps, .inf, .nan, sexagesimal numbers) and duplicate keys are build errors.'
+    (timestamps, .inf, .nan, sexagesimal numbers), duplicate keys, keys that are not
+    strings, anchors, aliases, explicit tags and merge keys are build errors.'
   golden_test: Every bundled file equals PyYAML safe_load of the same file, and the
     TypeScript registry (base scenarios, expanded variants and the composed scenario)
     equals the registry of validate_specs.py --dump-registry.
