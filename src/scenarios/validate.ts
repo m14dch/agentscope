@@ -3,6 +3,7 @@
  * invariants, except schema.json validation and the RAG recomputation, which run in
  * specifications/tools/validate_specs.py). Every problem names its scenario and event.
  */
+import { applyEvent, EngineError, initialSnapshot } from '../engine/reducer.ts';
 import { buildRegistry, getPath } from './expand.ts';
 import type { Json, Registry, Scenario, ScenarioEvent, SpecSources } from './types.ts';
 
@@ -280,5 +281,20 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
       err('compare.phase_mapping', `${sid} mapping differs from scenario phases`);
     }
   }
+  if (!problems.length) problems.push(...replayProblems(registry));
   return { registry, problems };
+}
+
+/** Replays every scenario through the reducer; only run on structurally valid data. */
+function replayProblems(registry: Registry): string[] {
+  const problems: string[] = [];
+  for (const scn of Object.values(registry)) {
+    try {
+      scn.events.reduce((snapshot, e) => applyEvent(snapshot, e, scn.id), initialSnapshot(scn));
+    } catch (error) {
+      if (!(error instanceof EngineError)) throw error;
+      problems.push(error.message);
+    }
+  }
+  return problems;
 }

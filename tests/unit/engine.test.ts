@@ -1,0 +1,265 @@
+import { describe, expect, it } from 'vitest';
+import { Playback, type Snapshot } from '../../src/engine/playback.ts';
+import { type Clock, Player, SPEEDS, STEP_INTERVAL_MS } from '../../src/engine/player.ts';
+import { applyEvent, EngineError, initialSnapshot } from '../../src/engine/reducer.ts';
+import { loadRegistry } from '../../src/scenarios/registry.ts';
+import type { Scenario, ScenarioEvent } from '../../src/scenarios/types.ts';
+
+const registry = loadRegistry();
+const scenarios = Object.values(registry);
+
+const all = (p: Playback): Snapshot[] =>
+  Array.from({ length: p.length + 1 }, (_, k) => p.snapshot(k));
+const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
+
+function scenario(id: string): Scenario {
+  const scn = registry[id];
+  if (!scn) throw new Error(`no scenario ${id}`);
+  return scn;
+}
+
+function cursorOf(p: Playback, eventId: string): number {
+  for (let k = 1; k <= p.length; k += 1) if (p.event(k)?.id === eventId) return k;
+  throw new Error(`no event ${eventId}`);
+}
+
+describe('snapshots', () => {
+  it('start from the initial state at cursor 0', () => {
+    const p = new Playback(scenario('mcp-balance'));
+    const s = p.snapshot(0);
+    expect(s.cursor).toBe(0);
+    expect(s.selected_event_id).toBeUndefined();
+    expect(s.state).toEqual(scenario('mcp-balance').initial_state);
+    expect(s.lineage).toEqual({});
+  });
+
+  it('are identical whatever the order of access, and across instances', () => {
+    for (const scn of scenarios) {
+      const forward = plain(all(new Playback(scn)));
+      const p = new Playback(scn);
+      const order = Array.from({ length: p.length + 1 }, (_, k) => (k * 7919) % (p.length + 1));
+      const shuffled: unknown[] = [];
+      for (const k of order) shuffled[k] = plain(p.snapshot(k));
+      expect(shuffled, scn.id).toEqual(forward);
+    }
+  });
+
+  it('are deeply frozen and never share state with the scenario', () => {
+    const scn = scenario('mcp-balance');
+    const p = new Playback(scn);
+    const s = p.snapshot(p.length);
+    expect(Object.isFrozen(s)).toBe(true);
+    expect(Object.isFrozen(s.state['mcp_state'])).toBe(true);
+    expect(() => (s.state['agent_state'] as unknown[]).push(1)).toThrow(TypeError);
+    expect(Object.isFrozen(scn.initial_state)).toBe(false);
+  });
+
+  it('fill the MCP state, agent working memory and model-visible context', () => {
+    const p = new Playback(scenario('mcp-balance'));
+    const s = p.snapshot(p.length);
+    const mcp = s.state['mcp_state'] as {
+      server: { supportedVersions: string[] };
+      discovered_tools: unknown[];
+    };
+    expect(mcp.server.supportedVersions).toEqual(['2026-07-28']);
+    expect(mcp.discovered_tools.length).toBeGreaterThan(0);
+    const memory = s.state['agent_state'] as { event: string; description: string }[];
+    expect(memory[0]).toEqual({ event: 'mcp-09', description: 'User question received' });
+    expect(memory.map((m) => m.event)).toEqual(expect.arrayContaining(['mcp-24', 'mcp-25']));
+    expect(s.lineage['balance']?.map((l) => l.value)).toContain(12500.75);
+  });
+
+  it('show a tool result to the model only from the LLM request that submits it', () => {
+    const p = new Playback(scenario('mcp-balance'));
+    const visible = (id: string): string =>
+      JSON.stringify(p.snapshot(cursorOf(p, id)).state['model_visible_messages']);
+    const memory = (id: string): string =>
+      JSON.stringify(p.snapshot(cursorOf(p, id)).state['agent_state']);
+    expect(memory('mcp-25')).toContain('12500.75');
+    expect(visible('mcp-25')).not.toContain('12500.75');
+    expect(visible('mcp-26')).toContain('12500.75');
+  });
+
+  it('show retrieved text to the model only from the LLM request that submits it', () => {
+    const p = new Playback(scenario('rag-query'));
+    const retained = p.snapshot(cursorOf(p, 'retrieve-06')).state['retrieval'] as {
+      retained: string[];
+    };
+    expect(retained.retained).toHaveLength(5);
+    const prompt = JSON.stringify(p.snapshot(cursorOf(p, 'retrieve-09')).state['agent_state']);
+    // The assembled prompt names the retrieved chunks; their text reaches the model at retrieve-10.
+    expect(prompt).toContain('account-opening@1.2-c50o10-001');
+    const text = 'Anyone aged 18 or over';
+    expect(
+      JSON.stringify(p.snapshot(cursorOf(p, 'retrieve-09')).state['model_visible_messages']),
+    ).not.toContain(text);
+    expect(
+      JSON.stringify(p.snapshot(cursorOf(p, 'retrieve-10')).state['model_visible_messages']),
+    ).toContain(text);
+  });
+
+  it('never show the model text before an LLM request has carried it (all scenarios)', () => {
+    for (const scn of scenarios) {
+      const p = new Playback(scn);
+      const requests: string[] = [];
+      for (let k = 1; k <= p.length; k += 1) {
+        const e = p.event(k) as ScenarioEvent;
+        if (e.protocol === 'LLM_API' && e.message_type === 'REQUEST')
+          requests.push(JSON.stringify(e.payload));
+        const visible = p.snapshot(k).state['model_visible_messages'];
+        if (visible === undefined) continue;
+        const shown = JSON.stringify(visible);
+        expect(shown === '[]' || requests.includes(shown), `${scn.id} at ${k}`).toBe(true);
+      }
+    }
+  });
+});
+
+describe('reducer errors', () => {
+  const base = scenario('mcp-balance');
+  const first = base.events[0] as ScenarioEvent;
+
+  it('names the scenario and event of a change it cannot apply', () => {
+    const bad = {
+      ...first,
+      id: 'x',
+      state_changes: [{ path: 'nowhere.deep', op: 'set' as const, value: 1 }],
+    };
+    expect(() => applyEvent(initialSnapshot(base), bad, 'mcp-balance')).toThrow(
+      new EngineError(
+        'mcp-balance/x',
+        'state_change path nowhere.deep has no parent in the snapshot',
+      ),
+    );
+    const append = {
+      ...first,
+      id: 'y',
+      state_changes: [{ path: 'mcp_state.server', op: 'append' as const, value: 1 }],
+    };
+    expect(() => applyEvent(initialSnapshot(base), append, 'mcp-balance')).toThrow(
+      /mcp-balance\/y: .*not a list/,
+    );
+  });
+});
+
+describe('parameter changes', () => {
+  it('keep snapshots before the first changed event and recompute the rest', () => {
+    const scn = scenario('rag-query');
+    const derive = (s: Scenario, config: Readonly<Record<string, unknown>>): ScenarioEvent[] =>
+      s.events.map((e) =>
+        e.id === 'retrieve-06' ? { ...e, explanation: `top_k ${String(config['top_k'])}` } : e,
+      );
+    const p = new Playback(scn, { deriveEvents: derive });
+    const before = all(p);
+    expect(before[0]?.retrieval_config['top_k']).toBe(5);
+    const changed = p.setParameters({ top_k: 4 });
+    expect(changed).toBe(cursorOf(p, 'retrieve-06'));
+    const after = all(p);
+    expect(after[changed - 1]?.state).toBe(before[changed - 1]?.state);
+    expect(after[changed - 1]?.retrieval_config['top_k']).toBe(4);
+    expect(p.event(changed)?.explanation).toBe('top_k 4');
+    expect(p.setParameters({ top_k: 4 })).toBe(p.length + 1);
+    expect(() => p.setParameters({ nope: 1 })).toThrow(/has no parameter nope/);
+  });
+
+  it("start from a variant's parameter_overrides", () => {
+    expect(new Playback(scenario('rag-conflict')).snapshot(0).retrieval_config['top_k']).toBe(8);
+    expect(new Playback(scenario('rag-hybrid')).snapshot(0).retrieval_config['rerank']).toBe(true);
+  });
+});
+
+class FakeClock implements Clock {
+  pending: { callback: () => void; ms: number } | undefined;
+  setTimeout(callback: () => void, ms: number): unknown {
+    this.pending = { callback, ms };
+    return this.pending;
+  }
+  clearTimeout(handle: unknown): void {
+    if (handle === this.pending) this.pending = undefined;
+  }
+  fire(): void {
+    const p = this.pending;
+    this.pending = undefined;
+    p?.callback();
+  }
+}
+
+describe('player', () => {
+  const make = (): [Player, FakeClock] => {
+    const clock = new FakeClock();
+    return [new Player(new Playback(scenario('mcp-balance')), clock), clock];
+  };
+
+  it('starts, steps, jumps and resets within bounds', () => {
+    const [player] = make();
+    const n = player.playback.length;
+    player.previous();
+    expect(player.cursor).toBe(0);
+    player.start();
+    expect(player.cursor).toBe(1);
+    player.next();
+    player.next();
+    expect(player.snapshot.selected_event_id).toBe('mcp-03');
+    player.jump(n + 10);
+    expect(player.cursor).toBe(n);
+    player.next();
+    expect(player.cursor).toBe(n);
+    player.reset();
+    expect(player.cursor).toBe(0);
+    expect(player.status).toBe('paused');
+  });
+
+  it('reconstructs the same snapshot after previous, jump and reset', () => {
+    const [player] = make();
+    player.jump(12);
+    const at12 = plain(player.snapshot);
+    player.next();
+    player.previous();
+    expect(plain(player.snapshot)).toEqual(at12);
+    player.reset();
+    player.jump(12);
+    expect(plain(player.snapshot)).toEqual(at12);
+  });
+
+  it('plays one step per interval at each speed and pauses at the end', () => {
+    const [player, clock] = make();
+    player.play();
+    expect(player.status).toBe('playing');
+    expect(clock.pending?.ms).toBe(STEP_INTERVAL_MS);
+    clock.fire();
+    expect(player.cursor).toBe(1);
+    player.setSpeed(4);
+    expect(clock.pending?.ms).toBe(STEP_INTERVAL_MS / 4);
+    while (clock.pending) clock.fire();
+    expect(player.cursor).toBe(player.playback.length);
+    expect(player.status).toBe('paused');
+    player.play();
+    expect(player.status).toBe('paused');
+  });
+
+  it('pauses, toggles and notifies listeners', () => {
+    const [player, clock] = make();
+    const seen: string[] = [];
+    const stop = player.subscribe((p) => seen.push(`${p.status}@${p.cursor}`));
+    player.toggle();
+    player.toggle();
+    expect(clock.pending).toBeUndefined();
+    player.next();
+    stop();
+    player.next();
+    expect(seen).toEqual(['playing@0', 'paused@0', 'paused@1']);
+    expect(() => player.setSpeed(3 as 1)).toThrow(RangeError);
+    expect(SPEEDS).toEqual([0.5, 1, 2, 4]);
+  });
+});
+
+describe('performance', () => {
+  it('computes every snapshot of every scenario quickly', () => {
+    const t0 = performance.now();
+    let steps = 0;
+    for (const scn of scenarios) steps += all(new Playback(scn)).length;
+    const perStep = (performance.now() - t0) / steps;
+    // A step must render well within one frame (16 ms); the reducer gets a small share.
+    expect(perStep).toBeLessThan(2);
+  });
+});
