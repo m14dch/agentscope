@@ -153,21 +153,27 @@ deployment:
     validate the specifications against the vendored MCP schema, lint, run unit tests,
     run npm run build (type check, then Vite), then run the browser tests against the
     built site served under the base path.
-  tooling: TypeScript 6.0 (typescript-eslint does not yet support 7.x), Vite 8, Vitest,
+  tooling: Node.js 22.18 or later (runs TypeScript scripts directly).
+    TypeScript 6.0 (typescript-eslint does not yet support 7.x), Vite 8, Vitest,
     Playwright, ESLint, Prettier. Exact versions are pinned in package.json.
   workflows: ci.yml runs on every pull request and is reusable. pages.yml runs on every
-    push to main and on manual dispatch, calls ci.yml first, then builds and deploys,
-    then checks the live site. Only one deployment runs at a time; a newer one waits
-    rather than cancelling a deployment in progress.
+    push to main and on manual dispatch from main (other branches never deploy), calls
+    ci.yml first, verifies that the repository's Pages source is GitHub Actions, then
+    builds, deploys and checks the live site. Only one deployment runs at a time; a newer
+    one waits rather than cancelling a deployment in progress.
   github_pages: Use GitHub Actions as the Pages source. Upload dist as the Pages artifact
     and deploy it with the official Pages actions.
   base_path: Use /<repo>/ for a project site and / for a root site or custom domain.
     The deploy build takes the base path from the repository's Pages configuration,
     so a custom domain needs no code change. Resolve asset, navigation and service
     worker URLs within the configured base.
-  post_deploy_check: After each deployment, fetch the live page and every same-origin
-    script, stylesheet and icon it references; fail the workflow on any non-200 response
-    or any reference outside the base path.
+  version_stamp: The built page carries <meta name="agentscope-version"> with the commit
+    SHA it was built from ("dev" for local builds).
+  post_deploy_check: After each deployment, fetch the live page and every script and link
+    it references. Fail the workflow when the page or any reference does not return 200,
+    when any reference points outside the base path (including other origins), or when
+    the page's version stamp differs from the deployed commit (a stale deployment).
+    Network errors and stale responses are retried for about a minute first.
   offline: Bundle all scenarios, documents, fonts and visuals locally. On HTTPS or
     localhost, a base-scoped service worker precaches the complete versioned build
     from a build-generated asset manifest. Report offline readiness after successful
