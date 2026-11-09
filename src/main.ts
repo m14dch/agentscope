@@ -8,7 +8,8 @@ async function render(): Promise<void> {
   if (!app) return;
   if (location.hash === '#/design') {
     const { renderSpecimen } = await import('./design/specimen');
-    renderSpecimen(app);
+    // The hash may have changed while the specimen was loading.
+    if (location.hash === '#/design') renderSpecimen(app);
     return;
   }
   app.className = 'page';

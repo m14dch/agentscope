@@ -60,3 +60,13 @@
   stroke: context-stroke;
   stroke-width: var(--line-hair);
 }
+
+/* Current step and its pair: accent line plus a bold label (survives greyscale). */
+.arrow-label--current {
+  font-weight: var(--weight-strong);
+}
+
+/* Past steps keep their line style; only the label recedes. */
+.arrow-label--past {
+  fill: var(--color-ink-muted);
+}

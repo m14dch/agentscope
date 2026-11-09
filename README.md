@@ -38,8 +38,10 @@ is removed. The full rules (grid, type, colour tokens, charts, motion, writing) 
 and Swiss Style. The live specimen at
 [`#/design`](https://m14dch.github.io/agentscope/#/design) shows them in use.
 
-- Colours exist only as tokens in `src/styles/tokens.css`; a unit test fails on any colour value
-  elsewhere in `src/`, and on tokens that differ from the spec or miss its contrast rules.
+- Colours exist only as tokens in `src/styles/tokens.css`. A unit test fails on hex values,
+  colour functions and named or system colours in styles anywhere in `src/`, `public/` or
+  `index.html`, and on tokens that differ from the spec or miss its contrast rules.
+- Font licences ship with the site in `public/licenses/fonts.txt`.
 - Grey carries structure, one accent marks what to look at now, red means an error and is always
   labelled.
 - Label data directly; no legends, shadows, gradients, rounded cards or decorative icons.

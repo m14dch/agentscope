@@ -7,7 +7,7 @@ const TOKENS = ['paper', 'ink', 'ink-muted', 'rule', 'accent', 'error'] as const
 const USE: Record<(typeof TOKENS)[number], string> = {
   paper: 'Background',
   ink: 'Text and data',
-  'ink-muted': 'Secondary text, past steps, in-process arrows',
+  'ink-muted': 'Secondary text, past-step labels, in-process arrows',
   rule: 'Lifelines, axes, separators (never meaning)',
   accent: 'What to look at now: current step, its pair, tracked values',
   error: 'Errors only, always with a text label',
@@ -33,8 +33,7 @@ function token(name: string): string {
 function swatches(): string {
   const paper = token('paper');
   return TOKENS.map((name) => {
-    const value = token(name);
-    const ratio = name === 'paper' ? '' : `${contrast(value, paper).toFixed(2)} : 1`;
+    const ratio = name === 'paper' ? '' : `${contrast(token(name), paper).toFixed(2)} : 1`;
     return `
       <span class="swatch" style="background: var(--color-${name})"></span>
       <code>${name}</code>
@@ -48,17 +47,18 @@ interface Arrow {
   label: string;
   kind: ArrowKind;
   response?: boolean;
-  current?: boolean;
+  state?: 'past' | 'current';
   error?: boolean;
 }
 
 const ARROWS: Arrow[] = [
+  { label: 'MCP · tools/list', kind: 'network', state: 'past' },
   { label: 'MCP · tools/call', kind: 'network' },
   { label: 'MCP · tools/call result', kind: 'network', response: true },
   { label: 'Invoke selected tool', kind: 'in-process' },
   { label: 'Similarity search', kind: 'simulated' },
-  { label: 'LLM · submit conversation (current step)', kind: 'network', current: true },
-  { label: 'LLM · answer (its pair)', kind: 'network', response: true, current: true },
+  { label: 'LLM · submit conversation', kind: 'network', state: 'current' },
+  { label: 'LLM · answer', kind: 'network', response: true, state: 'current' },
   {
     label: 'MCP · tool execution error (isError: true)',
     kind: 'network',
@@ -76,19 +76,23 @@ function arrows(): string {
   const rows = ARROWS.map((a, i) => {
     const y = top + i * rowHeight + 32;
     const [x1, x2] = a.response ? [right, left] : [left, right];
-    const classes = ['arrow', `arrow--${a.kind}`];
-    if (a.current) classes.push('arrow--current');
-    if (a.error) classes.push('arrow--error');
+    const line = ['arrow', `arrow--${a.kind}`];
+    const label = ['arrow-label'];
+    if (a.state === 'current') line.push('arrow--current');
+    if (a.state) label.push(`arrow-label--${a.state}`);
+    if (a.error) {
+      line.push('arrow--error');
+      label.push('arrow-label--error');
+    }
     const head = a.response ? 'url(#head-response)' : 'url(#head-request)';
     const labelX = a.response ? right - 8 : left + 8;
     const anchor = a.response ? 'end' : 'start';
-    const labelClass = a.error ? 'arrow-label arrow-label--error' : 'arrow-label';
     return `
-      <line class="${classes.join(' ')}" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" marker-end="${head}" />
-      <text class="${labelClass}" x="${labelX}" y="${y - 8}" text-anchor="${anchor}">${a.label}</text>`;
+      <line class="${line.join(' ')}" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" marker-end="${head}" />
+      <text class="${label.join(' ')}" x="${labelX}" y="${y - 8}" text-anchor="${anchor}">${a.label}</text>`;
   }).join('');
   return `
-    <svg viewBox="0 0 640 ${height}" role="img" aria-label="Arrow encoding: one arrow of each kind">
+    <svg viewBox="0 0 640 ${height}" role="group" aria-label="Arrow examples between a client and a server">
       <defs>
         <marker id="head-request" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
           <path class="head--request" d="M0,1 L10,5 L0,9 z" />
@@ -105,34 +109,47 @@ function arrows(): string {
     </svg>`;
 }
 
-function scorePlot(): string {
-  const labelWidth = 200;
-  const plotLeft = labelWidth + 16;
-  const plotWidth = 360;
-  const rowHeight = 24;
-  const top = 8;
-  const axisY = top + SCORES.length * rowHeight + 8;
-  const x = (score: number) => plotLeft + score * plotWidth;
-  const ranked = SCORES.filter(([, s]) => s >= THRESHOLD).slice(0, TOP_K);
-  const rows = SCORES.map(([name, score], i) => {
-    const y = top + i * rowHeight + 12;
-    const retained = ranked.some(([n]) => n === name);
+function dotPlot(): string {
+  const retained = new Set(
+    SCORES.filter(([, s]) => s >= THRESHOLD)
+      .slice(0, TOP_K)
+      .map(([name]) => name),
+  );
+  const rows = SCORES.map(([name, score]) => {
+    const kept = retained.has(name);
     return `
-      <text class="plot-label${retained ? '' : ' plot-label--muted'}" x="${labelWidth}" y="${y + 4}" text-anchor="end">${name}</text>
-      <circle class="dot${retained ? ' dot--retained' : ''}" cx="${x(score)}" cy="${y}" r="4" />
-      <text class="plot-label plot-label--muted" x="${x(score) + 10}" y="${y + 4}">${score.toFixed(2)}</text>`;
+      <li class="${kept ? 'retained' : ''}" style="--x: ${score}">
+        <span class="name">${name}</span>
+        <span class="track">
+          <span class="dot"></span>
+          <span class="value">${score.toFixed(2)}${kept ? '<span class="visually-hidden">, retained</span>' : ''}</span>
+        </span>
+      </li>`;
   }).join('');
   return `
-    <svg viewBox="0 0 640 ${axisY + 40}" role="img" aria-label="Retrieval scores as dots on a 0 to 1 scale">
+    <ol class="dotplot" style="--threshold: ${THRESHOLD}" aria-label="Retrieval scores, cosine similarity from 0 to 1">
+      <li aria-hidden="true">
+        <span></span>
+        <span class="scale scale--top"><span style="left: ${THRESHOLD * 100}%">threshold ${THRESHOLD}</span></span>
+      </li>
       ${rows}
-      <line class="axis" x1="${plotLeft}" y1="${axisY}" x2="${x(1)}" y2="${axisY}" />
-      <line class="threshold" x1="${x(THRESHOLD)}" y1="${top}" x2="${x(THRESHOLD)}" y2="${axisY}" />
-      <text class="plot-label plot-label--muted" x="${plotLeft}" y="${axisY + 20}" text-anchor="middle">0</text>
-      <text class="plot-label plot-label--muted" x="${x(THRESHOLD)}" y="${axisY + 20}" text-anchor="middle">threshold 0.7</text>
-      <text class="plot-label plot-label--muted" x="${x(1)}" y="${axisY + 20}" text-anchor="middle">1</text>
-      <text class="plot-label" x="${plotLeft}" y="${axisY + 36}">cosine similarity to the question · top 3 retained</text>
-    </svg>`;
+      <li aria-hidden="true">
+        <span></span>
+        <span class="scale">
+          <span style="left: 0">0</span>
+          <span style="left: 100%">1</span>
+        </span>
+      </li>
+      <li><span></span><span class="caption">Cosine similarity to the question; the top ${TOP_K} above the threshold are retained.</span></li>
+    </ol>`;
 }
+
+const META_FOLDED = '{ … protocol version, client info, capabilities }';
+const META_FULL = `{
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": { "name": "agentscope-demo", "version": "1.0.0" },
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }`;
 
 const PAYLOAD = `{
   "jsonrpc": "2.0",
@@ -141,11 +158,7 @@ const PAYLOAD = `{
   "params": {
     "name": "get_customer_balance",
     "arguments": { "customerId": <span class="tracked">"123"</span> },
-    <button class="fold" type="button" aria-label="Show _meta">"_meta": { … protocol version, client info, capabilities }</button><span class="fold-body" hidden>"_meta": {
-      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-      "io.modelcontextprotocol/clientInfo": { "name": "agentscope-demo", "version": "1.0.0" },
-      "io.modelcontextprotocol/clientCapabilities": {}
-    }</span>
+    <button class="fold" type="button" aria-expanded="false" aria-controls="meta-value">"_meta"</button>: <span id="meta-value" class="folded">${META_FOLDED}</span>
   }
 }`;
 
@@ -173,28 +186,32 @@ export function renderSpecimen(root: HTMLElement): void {
 
     <section aria-labelledby="arrows">
       <h2 id="arrows">Arrows</h2>
-      <p class="small muted">Solid: network. Thin grey: in-process. Dashed: simulated internal step.
-        Filled head: request. Open head: response.</p>
-      <div class="figure">${arrows()}</div>
+      <p class="small muted note">Solid: network. Thin grey: in-process. Dashed: simulated internal step.
+        Filled head: request. Open head: response. Accent line and bold label: the current step and
+        its pair. Grey label: a past step.</p>
+      <div class="scroller" tabindex="0" role="region" aria-label="Arrow examples, scrolls horizontally">${arrows()}</div>
     </section>
 
     <section aria-labelledby="payload">
       <h2 id="payload">Payload</h2>
-      <p class="small muted">Boilerplate folds to one line and expands on click; tracked values are underlined.</p>
+      <p class="small muted note">Boilerplate folds to one line; select its key to expand or fold it.
+        Tracked values are underlined.</p>
       <pre class="payload">${PAYLOAD}</pre>
     </section>
 
     <section aria-labelledby="scores">
       <h2 id="scores">Scores</h2>
-      <div class="figure">${scorePlot()}</div>
+      ${dotPlot()}
     </section>
   `;
   for (const button of root.querySelectorAll<HTMLButtonElement>('.fold')) {
-    const body = button.nextElementSibling as HTMLElement | null;
+    const value = root.querySelector<HTMLElement>(`#${button.getAttribute('aria-controls') ?? ''}`);
     button.addEventListener('click', () => {
-      if (!body) return;
-      button.hidden = true;
-      body.hidden = false;
+      if (!value) return;
+      const expand = button.getAttribute('aria-expanded') !== 'true';
+      button.setAttribute('aria-expanded', String(expand));
+      value.textContent = expand ? META_FULL : META_FOLDED;
+      value.classList.toggle('folded', !expand);
     });
   }
 }
