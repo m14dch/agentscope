@@ -54,6 +54,8 @@ unit_tests:
 - Document citations resolve to source fixtures
 - No HTTP framing for in-process or simulated calls
 - All three primary questions match 00-product.yaml primary_questions
+- Every scenario has a learning question and headline, every phase a takeaway, every
+  variant a lesson, and every prediction prompt ends with a question mark
 - Expanded variants and compositions resolve scenario, participant, phase, event and
   pair references
 - Every participant ID exists in the 01-architecture.yaml registry

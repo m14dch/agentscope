@@ -30,15 +30,15 @@ const USE: Record<Token, string> = {
 
 /** Default retrieval scores from 05-rag-scenarios.yaml → reference_results.rag-query. */
 const SCORES: ReadonlyArray<readonly [string, number]> = [
-  ['savings-account · 001', 0.9041],
-  ['everyday-account · 001', 0.8824],
-  ['everyday-account · 002', 0.8745],
-  ['savings-account · 002', 0.8143],
-  ['release-notes · 001', 0.648],
-  ['release-notes · 002', 0.3505],
-  ['balance-api · 001', 0.1321],
+  ['account-opening · 001', 0.9761],
+  ['everyday-account · 002', 0.9565],
+  ['everyday-account · 001', 0.9495],
+  ['account-opening · 002', 0.9232],
+  ['savings-account · 001', 0.9078],
+  ['savings-account · 002', 0.8938],
+  ['release-notes · 001', 0.3723],
 ];
-const TOP_K = 3;
+const TOP_K = 5;
 const THRESHOLD = 0.7;
 
 function token(name: string): string {

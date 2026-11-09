@@ -11,8 +11,8 @@ protocol:
     and multi round-trip requests are outside this trace.
   earlier_revisions: Revisions up to 2025-11-25 started with an initialize request, a notifications/initialized
     notification (answered with an empty HTTP 202) and an optional Mcp-Session-Id. Revision 2026-07-28
-    removed the handshake and protocol-level sessions. The inspector for mcp-02 may show the legacy
-    handshake for comparison, clearly labelled as an earlier revision.
+    removed the handshake and protocol-level sessions. The inspector for mcp-02 may show the legacy handshake
+    for comparison, clearly labelled as an earlier revision.
 endpoints:
   mcp_server: https://mcp.example-bank.test/mcp
   rest_api: https://api.example-bank.test
@@ -53,6 +53,9 @@ scenarios:
 - id: mcp-balance
   title: Check my current account balance
   question: What is the current balance of my bank account?
+  learning_question: How does an AI assistant obtain your live account balance?
+  headline: MCP lets the model obtain live account information through a tool on the bank's MCP server,
+    which the agent invokes through its MCP client.
   initial_state:
     mcp_state:
       server: null
@@ -72,30 +75,41 @@ scenarios:
   - id: setup
     label: Client setup and optional discovery
     semantic_phase: preparation
+    takeaway: The agent's MCP client can ask the bank's MCP server what it supports before using it.
   - id: discovery
     label: Tool discovery
     semantic_phase: preparation
+    takeaway: The client learns which tools the server offers; the agent converts them for the model.
   - id: question
     label: User question
     semantic_phase: user-request
+    takeaway: The question reaches the agent, not the model or the MCP server.
   - id: planning
     label: Model chooses a tool; agent validates
     semantic_phase: information-acquisition
+    takeaway: The model only asks for a tool; the agent decides whether that request is allowed.
   - id: tool
     label: MCP tool call
     semantic_phase: information-acquisition
+    takeaway: The MCP client calls the tool on the MCP server; MCP carries the request, it holds no bank
+      data.
   - id: backend
     label: REST backend
     semantic_phase: information-acquisition
+    takeaway: The MCP server reads the balance from the bank's REST API with its own credentials.
   - id: context
     label: Add tool result to conversation
     semantic_phase: context-assembly
+    takeaway: The agent adds the tool result to its stored conversation; the model still has not seen
+      it.
   - id: generation
     label: Final model request
     semantic_phase: model-generation
+    takeaway: The agent sends the whole conversation, now including the balance, back to the model.
   - id: answer
     label: Answer
     semantic_phase: answer
+    takeaway: The simulated answer reports exactly the balance the tool returned.
   events:
   - id: mcp-01
     scenario_id: mcp-balance
@@ -500,6 +514,8 @@ scenarios:
       stop_reason: tool_use
     explanation: The model does not call anything itself. It answers with a request that the agent run
       get_customer_balance.
+    prediction:
+      prompt: 'The model has the question and a list of tools. What will it return: an answer or a request?'
     tracked_values:
       customerId: '123'
     context_changes:
@@ -586,6 +602,8 @@ scenarios:
         Authorization: Bearer <REDACTED_MCP_ACCESS_TOKEN>
       body_ref: payload
     explanation: Call the balance tool over Streamable HTTP.
+    prediction:
+      prompt: 'Who sends the tool call to the MCP server: the model or the MCP client?'
     technical_notes:
     - Mcp-Method and Mcp-Name mirror the body so gateways can route without parsing JSON; the server rejects
       mismatches with HTTP 400 and error -32020.
@@ -900,6 +918,8 @@ scenarios:
           additionalProperties: false
     explanation: Model APIs are stateless, so the agent resends the whole conversation (system prompt,
       question, assistant tool call and tool result) together with the tool definitions.
+    prediction:
+      prompt: The model already saw the question. Why does the agent send it again?
     security_boundaries:
     - agent-to-llm
     - tool-to-llm
@@ -951,6 +971,8 @@ scenarios:
 variants:
 - id: mcp-resources
   title: Read the OpenAPI document as an MCP resource
+  lesson: Resources let the agent read documents from the MCP server; they reach the model only if the
+    agent sends them.
   extends: mcp-balance
   question: What is the current balance of my bank account?
   operations:
@@ -1148,6 +1170,8 @@ variants:
         description: OpenAPI resource stored; not model-visible
 - id: mcp-not-found
   title: Backend 404 becomes a tool execution error
+  lesson: A backend failure comes back as a tool result with isError true, so the model can explain it
+    to the user.
   extends: mcp-balance
   question: What is the current balance of my bank account?
   fixture_overrides:
@@ -1267,6 +1291,8 @@ variants:
         customerId: '123'
 - id: mcp-unauthorized
   title: Backend authentication failure
+  lesson: When the MCP server's own backend credential fails, the tool reports an error without exposing
+    the credential.
   extends: mcp-balance
   question: What is the current balance of my bank account?
   fixture_overrides:
@@ -1390,6 +1416,7 @@ variants:
         customerId: '123'
 - id: mcp-jsonrpc-error
   title: Unknown tool from a stale tool cache (JSON-RPC protocol error)
+  lesson: An unknown tool is a protocol error, not a failing tool; a stale tool cache can cause it.
   extends: mcp-balance
   question: What is the current balance of my bank account?
   fixture_overrides:
@@ -1609,6 +1636,8 @@ variants:
         customerId: '123'
 - id: mcp-multiple-tools
   title: Customer profile followed by balance
+  lesson: The model can ask for several tools in turn; every result returns through the agent before the
+    model sees it.
   extends: mcp-balance
   question: Which account type do I have, and what is its current balance?
   operations:
