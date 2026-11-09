@@ -5,7 +5,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse, type ScalarTag } from 'yaml';
+import { isScalar, LineCounter, parseDocument, visit, type Node, type ScalarTag } from 'yaml';
 import type { SpecSources } from '../src/scenarios/types.ts';
 
 export const SPEC_FILES: Record<keyof SpecSources, string> = {
@@ -67,20 +67,59 @@ const PYYAML_TAGS: ScalarTag[] = [
   },
 ];
 
+const TYPED_PLAIN = [BOOL, NULL, INT, FLOAT, UNSUPPORTED, /^(?:<<|=)$/];
+
+/**
+ * YAML features where PyYAML and the bundled JSON could disagree: anchors and aliases
+ * (shared at build time, copies after JSON), explicit tags, merge keys and keys that are
+ * not strings. The specifications use none of them.
+ */
+function unsupportedFeature(node: Node, isKey: boolean): string | undefined {
+  if (node.anchor) return `anchor &${node.anchor}`;
+  if (node.tag) return `explicit tag ${node.tag}`;
+  if (isKey) {
+    if (!isScalar(node)) return 'a key that is not a string';
+    const plain = node.type === 'PLAIN' ? (node.source ?? '') : null;
+    if (plain !== null && TYPED_PLAIN.some((re) => re.test(plain))) {
+      return `key ${plain} that is not a string`;
+    }
+  }
+  return undefined;
+}
+
 /** Parses one specification file with PyYAML's typing of plain scalars. */
 export function parseSpec(text: string, file = 'specification'): unknown {
-  try {
-    return parse(text, {
-      schema: 'failsafe',
-      customTags: PYYAML_TAGS,
-      merge: false,
-      uniqueKeys: true,
-    });
-  } catch (error) {
-    throw new Error(`${file}: ${error instanceof Error ? error.message : String(error)}`, {
-      cause: error,
-    });
+  const lines = new LineCounter();
+  const doc = parseDocument(text, {
+    schema: 'failsafe',
+    customTags: PYYAML_TAGS,
+    merge: false,
+    uniqueKeys: true,
+    lineCounter: lines,
+  });
+  const problems = doc.errors.map((e) => e.message);
+  const at = (node: Node): string => {
+    const { line, col } = lines.linePos(node.range?.[0] ?? 0);
+    return `line ${line}, column ${col}`;
+  };
+  visit(doc, {
+    Alias: (_key, node) => void problems.push(`alias *${node.source} at ${at(node)}`),
+    Pair: (_key, pair) => {
+      const key = pair.key as Node | null;
+      const reason = key ? unsupportedFeature(key, true) : 'an empty key';
+      if (reason) problems.push(`${reason}${key ? ` at ${at(key)}` : ''}`);
+    },
+    Node: (key, node) => {
+      if (key === 'key') return;
+      const reason = unsupportedFeature(node, false);
+      if (reason) problems.push(`${reason} at ${at(node)}`);
+    },
+  });
+  if (problems.length) {
+    const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : '';
+    throw new Error(`${file}: ${problems[0]}${more}`);
   }
+  return doc.toJS({ maxAliasCount: 0 });
 }
 
 export function readSpecSources(specDir: string): SpecSources {

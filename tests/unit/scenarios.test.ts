@@ -343,6 +343,17 @@ describe('more validation rules', () => {
     ]);
   });
 
+  it('reports duplicate event IDs across the registry', () => {
+    const other = base();
+    other.id = 'other';
+    other.events.forEach((e) => (e.scenario_id = 'other'));
+    expect(validateRegistry({ base: base(), other }, ctx)).toEqual([
+      'other/e1: duplicate event id',
+      'other/e2: duplicate event id',
+      'other/e3: duplicate event id',
+    ]);
+  });
+
   it('reports an event without an ID in an expanded variant', () => {
     const b = base();
     delete (b.events[2] as Partial<ScenarioEvent>).id;
@@ -355,7 +366,7 @@ describe('more validation rules', () => {
     delete (specs.mcp.scenarios[0] as Partial<Scenario>).events;
     const { problems } = buildRegistry(specs);
     expect(problems[0]).toBe('mcp-balance: events must be a list');
-    expect(problems).toContain('mcp-not-found: extends unknown scenario mcp-balance');
+    expect(problems).toContain('mcp-not-found: extends invalid scenario mcp-balance');
   });
 
   it('ignores inherited keys and non-decimal indexes in paths', () => {

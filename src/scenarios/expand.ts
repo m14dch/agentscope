@@ -174,9 +174,11 @@ export function compose(comp: Composition, registry: Registry, problems: string[
 export function buildRegistry(sources: SpecSources): { registry: Registry; problems: string[] } {
   const problems: string[] = [];
   const registry: Registry = {};
+  const invalid = new Set<string>();
   for (const scn of [...sources.mcp.scenarios, ...sources.rag.scenarios]) {
     if (!Array.isArray(scn.events)) {
       problems.push(`${scn.id}: events must be a list`);
+      invalid.add(scn.id);
       continue;
     }
     // A copy, so consumers of the registry cannot change the bundled sources.
@@ -185,7 +187,8 @@ export function buildRegistry(sources: SpecSources): { registry: Registry; probl
   for (const variant of [...sources.mcp.variants, ...sources.rag.variants]) {
     const base = Object.hasOwn(registry, variant.extends) ? registry[variant.extends] : undefined;
     if (!base) {
-      problems.push(`${variant.id}: extends unknown scenario ${variant.extends}`);
+      const why = invalid.has(variant.extends) ? 'invalid' : 'unknown';
+      problems.push(`${variant.id}: extends ${why} scenario ${variant.extends}`);
       continue;
     }
     registry[variant.id] = expandVariant(base, variant, problems);

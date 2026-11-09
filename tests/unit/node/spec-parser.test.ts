@@ -58,6 +58,23 @@ describe('specification parser', () => {
     expect(() => parseSpec(text, 'f.yaml')).toThrow(/^f\.yaml: .*JSON cannot carry; quote it/);
   });
 
+  it.each([
+    ['a: &x {k: 1}\nb: *x', /anchor &x/],
+    ['a: !!float 1', /explicit tag tag:yaml.org,2002:float/],
+    ['a: !!set {k: null}', /explicit tag/],
+    ['<<: {m: 1}', /key << that is not a string/],
+    ['1.0: z', /key 1.0 that is not a string/],
+    ['~: z', /key ~ that is not a string/],
+    ['yes: z', /key yes that is not a string/],
+    ['? [a]\n: z', /a key that is not a string/],
+  ])('rejects %j, where the bundle and PyYAML could disagree', (text, message) => {
+    expect(() => parseSpec(text, 'f.yaml')).toThrow(message);
+  });
+
+  it('accepts quoted keys that look typed', () => {
+    expect(parseSpec('"yes": 1\n"1.0": 2')).toStrictEqual({ yes: 1, '1.0': 2 });
+  });
+
   it('rejects duplicate keys', () => {
     expect(() => parseSpec('a: 1\na: 2', 'f.yaml')).toThrow(/^f\.yaml: Map keys must be unique/);
   });
