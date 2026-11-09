@@ -82,16 +82,17 @@ state_model:
     does not exist, or an append to a value that is not a list, is a scenario error.'
   - 'agent_state is the agent''s working memory in order: each agent_state change appends
     {event, description, value?}, where value is the resolved value_ref.'
-  - 'model_visible_messages is everything the model has seen: each LLM request replaces
-    it with its resolved value_ref, the request payload (messages and tool definitions).'
+  - 'model_visible_messages is what the model sees in its latest request: each LLM request
+    replaces it with its resolved value_ref, the request payload (messages and tool definitions).'
   - 'lineage maps each tracked key to its occurrences {event, value} in events 1 to cursor,
     in order.'
   - 'retrieval_config maps each scenario parameter to its current value: the default,
-    replaced by the variant''s parameter_overrides, then by the learner''s changes.'
+    replaced by the variant''s parameter_overrides, then by the learner''s changes. Values
+    stay within the parameter''s min and max.'
   random_access: Recompute from initial state or cached deterministic snapshots
   parameter_change: Regenerate derived events and downstream snapshots with pure functions.
-    Snapshots before the first changed event stay valid. Break score ties by stable chunk
-    ID.
+    The state of snapshots before the first changed event stays valid and only their
+    retrieval_config is updated. Break score ties by stable chunk ID.
   backward: No imperative reverse side effects
 invariants:
 - Event IDs unique across the expanded registry

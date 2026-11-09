@@ -95,7 +95,11 @@ def expand_variant(base, var):
         if name not in scn.get("parameters", {}):
             err(var["id"], f"parameter_overrides names unknown parameter {name}")
         else:
-            scn["parameters"][name]["default"] = copy.deepcopy(value)
+            spec = scn["parameters"][name]
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and not (
+                    spec.get("min", value) <= value <= spec.get("max", value)):
+                err(var["id"], f"parameter_overrides {name} {value} is outside {spec.get('min')}..{spec.get('max')}")
+            spec["default"] = copy.deepcopy(value)
     if "question" in var:
         scn["question"] = var["question"]
     scn["title"] = var["title"]
@@ -197,7 +201,9 @@ def check_scenario(scn, ctx):
                 err(where, "state_change needs op set or append and exactly one of value and value_ref")
         for ch in e.get("context_changes", []):
             rule = {"agent_state": "append", "model_visible_messages": "set"}.get(ch.get("target"))
-            if ch.get("action") != rule:
+            if rule is None:
+                err(where, f"context_change has unknown target {ch.get('target')}")
+            elif ch.get("action") != rule:
                 err(where, f"context_change on {ch.get('target')} must use action {rule}")
             if ch.get("target") == "model_visible_messages" and (
                     "value_ref" not in ch or e["protocol"] != "LLM_API" or e["message_type"] != "REQUEST"):
