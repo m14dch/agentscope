@@ -99,11 +99,13 @@ combined:
   - id: context
     label: Assemble prompt
     semantic_phase: context-assembly
-    takeaway: The model receives the question, the retrieved evidence and the tool definitions together.
+    takeaway: The agent assembles the question, evidence and tool definitions; the model has not seen
+      them yet.
   - id: planning
     label: Model requests balance tool
     semantic_phase: information-acquisition
-    takeaway: The evidence cannot contain a live balance, so the model asks for the balance tool.
+    takeaway: The evidence cannot contain a live balance, so the simulated model requests the balance
+      tool.
   - id: tool
     label: MCP tool call
     semantic_phase: information-acquisition
@@ -414,13 +416,14 @@ combined:
         message:
           role: assistant
           content: |-
-            Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have an Everyday account. Opening an account: anyone aged 18 or over who lives in Switzerland can open an account online [1], you need a valid passport or identity card and a Swiss address [1], the Everyday account needs no initial deposit [1] and the Savings account needs an initial deposit of at least CHF 100 [2]. Keeping an account: the Everyday account costs CHF 5 per month [3], the Everyday account has no minimum balance [3], the Everyday account pays no interest [3], the Savings account has no monthly fee and pays 0.50% annual interest [4], the Savings account has no minimum balance [4] and accounts without any activity for 24 months are closed after a written notice [2]. Using the accounts: the Everyday account includes a debit card for payments and cash withdrawals [3] and the Savings account has no debit card and cannot be used for card payments [4]. The retrieved evidence does not cover the Savings account's withdrawal rules. Whether the Savings account would be better depends on how you use your money: it would avoid the CHF 5 monthly fee and earn 0.50% annual interest, but it has no debit card, so it suits money you rarely need rather than everyday card payments. Opening one needs an initial deposit of at least CHF 100.
+            Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have an Everyday account. Opening an account: anyone aged 18 or over who lives in Switzerland can open an account online [1]; you need a valid passport or identity card and a Swiss address [1]; the Everyday account needs no initial deposit [1]; the Savings account needs an initial deposit of at least CHF 100 [2]. Keeping an account: the Everyday account costs CHF 5 per month, has no minimum balance, pays no interest [3] and can be closed at any time without a fee [4]; the Savings account has no monthly fee, pays 0.50% annual interest and has no minimum balance [5]; accounts without any activity for 24 months are closed after a written notice [2]. Using the accounts: the Everyday account includes a debit card for payments and cash withdrawals [3] and has free domestic transfers [4]; the Savings account has no debit card and cannot be used for card payments [5]. The retrieved evidence does not cover the Savings account's withdrawal rules and transfers between the accounts. Whether the Savings account would be better depends on how you use your money: it would avoid the CHF 5 monthly fee and earn 0.50% annual interest, but it has no debit card, so it suits money you rarely need rather than everyday card payments.
 
             Sources:
             [1] account-opening.md v1.2, chunk account-opening@1.2-c50o10-001
             [2] account-opening.md v1.2, chunk account-opening@1.2-c50o10-002
             [3] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-001
-            [4] savings-account.md v1.2, chunk savings-account@1.2-c50o10-001
+            [4] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-002
+            [5] savings-account.md v1.2, chunk savings-account@1.2-c50o10-001
         stop_reason: end_turn
       explanation: 'Simulated model output: balance from the tool, terms from cited chunks, and a qualified
         comparison.'
@@ -445,34 +448,38 @@ combined:
       payload:
         answer: 'Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have an
           Everyday account. Opening an account: anyone aged 18 or over who lives in Switzerland can open
-          an account online [1], you need a valid passport or identity card and a Swiss address [1], the
-          Everyday account needs no initial deposit [1] and the Savings account needs an initial deposit
-          of at least CHF 100 [2]. Keeping an account: the Everyday account costs CHF 5 per month [3],
-          the Everyday account has no minimum balance [3], the Everyday account pays no interest [3],
-          the Savings account has no monthly fee and pays 0.50% annual interest [4], the Savings account
-          has no minimum balance [4] and accounts without any activity for 24 months are closed after
-          a written notice [2]. Using the accounts: the Everyday account includes a debit card for payments
-          and cash withdrawals [3] and the Savings account has no debit card and cannot be used for card
-          payments [4]. The retrieved evidence does not cover the Savings account''s withdrawal rules.
-          Whether the Savings account would be better depends on how you use your money: it would avoid
-          the CHF 5 monthly fee and earn 0.50% annual interest, but it has no debit card, so it suits
-          money you rarely need rather than everyday card payments. Opening one needs an initial deposit
-          of at least CHF 100.'
+          an account online [1]; you need a valid passport or identity card and a Swiss address [1]; the
+          Everyday account needs no initial deposit [1]; the Savings account needs an initial deposit
+          of at least CHF 100 [2]. Keeping an account: the Everyday account costs CHF 5 per month, has
+          no minimum balance, pays no interest [3] and can be closed at any time without a fee [4]; the
+          Savings account has no monthly fee, pays 0.50% annual interest and has no minimum balance [5];
+          accounts without any activity for 24 months are closed after a written notice [2]. Using the
+          accounts: the Everyday account includes a debit card for payments and cash withdrawals [3] and
+          has free domestic transfers [4]; the Savings account has no debit card and cannot be used for
+          card payments [5]. The retrieved evidence does not cover the Savings account''s withdrawal rules
+          and transfers between the accounts. Whether the Savings account would be better depends on how
+          you use your money: it would avoid the CHF 5 monthly fee and earn 0.50% annual interest, but
+          it has no debit card, so it suits money you rarely need rather than everyday card payments.'
         balance_source: mcp-balance tool result
         sources:
-        - chunkId: account-opening@1.2-c50o10-001
+        - citation: 1
+          chunkId: account-opening@1.2-c50o10-001
           documentId: account-opening.md
           version: '1.2'
-        - chunkId: everyday-account@1.2-c50o10-002
-          documentId: everyday-account.md
-          version: '1.2'
-        - chunkId: everyday-account@1.2-c50o10-001
-          documentId: everyday-account.md
-          version: '1.2'
-        - chunkId: account-opening@1.2-c50o10-002
+        - citation: 2
+          chunkId: account-opening@1.2-c50o10-002
           documentId: account-opening.md
           version: '1.2'
-        - chunkId: savings-account@1.2-c50o10-001
+        - citation: 3
+          chunkId: everyday-account@1.2-c50o10-001
+          documentId: everyday-account.md
+          version: '1.2'
+        - citation: 4
+          chunkId: everyday-account@1.2-c50o10-002
+          documentId: everyday-account.md
+          version: '1.2'
+        - citation: 5
+          chunkId: savings-account@1.2-c50o10-001
           documentId: savings-account.md
           version: '1.2'
       explanation: Show the answer. The balance links to the tool result; each citation opens its chunk.
@@ -493,23 +500,24 @@ combined:
   - The final response combines both sources and keeps their provenance distinct
   expected_answer: 'Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have
     an Everyday account. Opening an account: anyone aged 18 or over who lives in Switzerland can open
-    an account online [1], you need a valid passport or identity card and a Swiss address [1], the Everyday
-    account needs no initial deposit [1] and the Savings account needs an initial deposit of at least
-    CHF 100 [2]. Keeping an account: the Everyday account costs CHF 5 per month [3], the Everyday account
-    has no minimum balance [3], the Everyday account pays no interest [3], the Savings account has no
-    monthly fee and pays 0.50% annual interest [4], the Savings account has no minimum balance [4] and
-    accounts without any activity for 24 months are closed after a written notice [2]. Using the accounts:
-    the Everyday account includes a debit card for payments and cash withdrawals [3] and the Savings account
-    has no debit card and cannot be used for card payments [4]. The retrieved evidence does not cover
-    the Savings account''s withdrawal rules. Whether the Savings account would be better depends on how
-    you use your money: it would avoid the CHF 5 monthly fee and earn 0.50% annual interest, but it has
-    no debit card, so it suits money you rarely need rather than everyday card payments. Opening one needs
-    an initial deposit of at least CHF 100.'
+    an account online [1]; you need a valid passport or identity card and a Swiss address [1]; the Everyday
+    account needs no initial deposit [1]; the Savings account needs an initial deposit of at least CHF
+    100 [2]. Keeping an account: the Everyday account costs CHF 5 per month, has no minimum balance, pays
+    no interest [3] and can be closed at any time without a fee [4]; the Savings account has no monthly
+    fee, pays 0.50% annual interest and has no minimum balance [5]; accounts without any activity for
+    24 months are closed after a written notice [2]. Using the accounts: the Everyday account includes
+    a debit card for payments and cash withdrawals [3] and has free domestic transfers [4]; the Savings
+    account has no debit card and cannot be used for card payments [5]. The retrieved evidence does not
+    cover the Savings account''s withdrawal rules and transfers between the accounts. Whether the Savings
+    account would be better depends on how you use your money: it would avoid the CHF 5 monthly fee and
+    earn 0.50% annual interest, but it has no debit card, so it suits money you rarely need rather than
+    everyday card payments.'
   expected_sources:
   - '[1] account-opening.md v1.2, chunk account-opening@1.2-c50o10-001'
   - '[2] account-opening.md v1.2, chunk account-opening@1.2-c50o10-002'
   - '[3] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-001'
-  - '[4] savings-account.md v1.2, chunk savings-account@1.2-c50o10-001'
+  - '[4] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-002'
+  - '[5] savings-account.md v1.2, chunk savings-account@1.2-c50o10-001'
   variants:
   - id: combined-missing-terms
     title: Savings terms missing from the index
@@ -517,8 +525,9 @@ combined:
     fixture_overrides:
       exclude_documents:
       - savings-account.md
-    lesson: Retrieval finds no Savings terms, so the answer gives the balance and Everyday terms and states
-      the evidence gap instead of guessing.
+    lesson: With the Savings document missing from the index, the answer still gives the balance and the
+      Savings deposit from the opening guide but states that the Savings terms are not covered instead
+      of comparing the accounts.
     expected_selected:
     - account-opening@1.2-c50o10-001
     - everyday-account@1.2-c50o10-002
@@ -526,19 +535,21 @@ combined:
     - account-opening@1.2-c50o10-002
     expected_answer: 'Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have
       an Everyday account. Opening an account: anyone aged 18 or over who lives in Switzerland can open
-      an account online [1], you need a valid passport or identity card and a Swiss address [1], the Everyday
-      account needs no initial deposit [1] and the Savings account needs an initial deposit of at least
-      CHF 100 [2]. Keeping an account: the Everyday account costs CHF 5 per month [3], the Everyday account
-      has no minimum balance [3], the Everyday account pays no interest [3] and accounts without any activity
+      an account online [1]; you need a valid passport or identity card and a Swiss address [1]; the Everyday
+      account needs no initial deposit [1]; the Savings account needs an initial deposit of at least CHF
+      100 [2]. Keeping an account: the Everyday account costs CHF 5 per month, has no minimum balance,
+      pays no interest [3] and can be closed at any time without a fee [4]; accounts without any activity
       for 24 months are closed after a written notice [2]. Using the accounts: the Everyday account includes
-      a debit card for payments and cash withdrawals [3]. The retrieved evidence does not cover the Savings
-      account''s fee and interest, the Savings account''s minimum balance, the Savings account''s card
-      access and the Savings account''s withdrawal rules. Without the Savings account terms I can''t say
-      whether another account type would offer better conditions.'
+      a debit card for payments and cash withdrawals [3] and has free domestic transfers [4]. The retrieved
+      evidence does not cover the Savings account''s fee and interest, the Savings account''s minimum
+      balance, the Savings account''s card access, the Savings account''s withdrawal rules and transfers
+      between the accounts. Without the Savings account terms I can''t say whether another account type
+      would offer better conditions.'
     expected_sources:
     - '[1] account-opening.md v1.2, chunk account-opening@1.2-c50o10-001'
     - '[2] account-opening.md v1.2, chunk account-opening@1.2-c50o10-002'
     - '[3] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-001'
+    - '[4] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-002'
 conceptual_rules:
 - MCP is a protocol; RAG is an architectural pattern
 - MCP can expose a RAG search tool

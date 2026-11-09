@@ -163,8 +163,11 @@ def check_scenario(scn, ctx):
         for p in (e["sender"], e["receiver"]):
             if p not in scn["participants"]:
                 err(where, f"participant {p} not declared")
-        if "prediction" in e and not str(e["prediction"].get("prompt", "")).rstrip().endswith("?"):
-            err(where, "prediction prompt must end with '?'")
+        if "prediction" in e:
+            pred = e["prediction"]
+            prompt = pred.get("prompt", "") if isinstance(pred, dict) else ""
+            if not isinstance(prompt, str) or len(prompt.strip()) < 10 or not prompt.rstrip().endswith("?"):
+                err(where, "prediction must be {prompt: <a question of at least 10 characters ending with '?'>}")
         if e["execution_type"] != "NETWORK" and "http" in e:
             err(where, "HTTP envelope on non-network event")
         if e["execution_type"] == "IN_PROCESS" and e["transport"] != "in_process":
@@ -340,73 +343,144 @@ def rag_engine(rag):
     def join(items):
         return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
 
+    def vkey(v):
+        return tuple(int(x) for x in v.split("."))
+
     def answer(sel, intro=None):
+        """Returns (answer text, cited chunks in citation order, supported fact ids)."""
         if not sel:
             return "I could not find sufficiently relevant information in the indexed documents to answer this question.", [], set()
         cites = []
 
         def cite(c):
-            if c["id"] not in cites:
-                cites.append(c["id"])
-            return cites.index(c["id"]) + 1
+            if c["id"] not in [x["id"] for x in cites]:
+                cites.append(c)
+            return [x["id"] for x in cites].index(c["id"]) + 1
 
         official = [c for c in sel if c["documentId"] in docs12]
         parts, supported, missing = ([intro] if intro else []), set(), []
-        by_id = {c["id"]: c for c in sel}
         for group in groups:
-            clauses, conflicts = [], []
+            runs, conflicts = [], []
             for f in [f for f in facts if f["group"] == group["id"]]:
                 vals = {}
                 for c in official:
                     ev = f["evidence"].get(c["version"], f["evidence"].get("*"))
                     if c["documentId"] == f["documentId"] and ev["span"] in c["text"]:
-                        vals.setdefault(ev["statement"], []).append(c)
+                        vals.setdefault(ev["predicate"], []).append(c)
                 if not vals:
                     missing.append(f["aspect"])
                     continue
                 supported.add(f["id"])
                 if len(vals) == 1:
-                    st, cs = next(iter(vals.items()))
-                    clauses.append(f"{st} [{cite(sorted(cs, key=lambda c: c['id'])[0])}]")
+                    pred, cs = next(iter(vals.items()))
+                    best = sorted(cs, key=lambda c: (tuple(-x for x in vkey(c["version"])), c["id"]))[0]
+                    if runs and runs[-1][0] == f["subject"]:
+                        runs[-1][1].append((pred, best))
+                    else:
+                        runs.append([f["subject"], [(pred, best)]])
                 else:
-                    ordered = sorted(vals.items(), key=lambda kv: kv[1][0]["version"])
-                    alts = "; ".join(f"version {cs[0]['version']}: {st} [{cite(cs[0])}]" for st, cs in ordered)
+                    ordered = sorted(vals.items(), key=lambda kv: vkey(kv[1][0]["version"]))
+                    alts = "; ".join(f"version {cs[0]['version']}: {f['subject']} {pred} [{cite(cs[0])}]" for pred, cs in ordered)
                     conflicts.append(f"The indexed documents conflict on {f['aspect']} ({alts}); version "
                                      f"{ordered[-1][1][0]['version']} is the newest.")
-            if clauses:
-                parts.append(f"{group['label']}: {join(clauses)}.")
+            phrases = []
+            for subject, preds in runs:
+                items = []
+                for i, (pred, c) in enumerate(preds):
+                    last = i == len(preds) - 1 or preds[i + 1][1]["id"] != c["id"]
+                    items.append(f"{pred} [{cite(c)}]" if last else pred)
+                phrases.append(f"{subject} {join(items)}")
+            if phrases:
+                parts.append(f"{group['label']}: {'; '.join(phrases)}.")
             parts += conflicts
         if missing:
             parts.append(f"The retrieved evidence does not cover {join(missing)}.")
         if any(injected in c["text"] for c in sel):
             parts.append("Note: a retrieved document contained instructions addressed to the assistant; they were treated as data and ignored.")
-        srcs = [f"[{i + 1}] {by_id[c]['documentId']} v{by_id[c]['version']}, chunk {c}" for i, c in enumerate(cites)]
-        return " ".join(parts), srcs, supported
+        return " ".join(parts), cites, supported
 
-    return {"corpus": corpus, "retrieve": retrieve, "answer": answer, "chunks": chunks}
+    def source_lines(cites):
+        return [f"[{i + 1}] {c['documentId']} v{c['version']}, chunk {c['id']}" for i, c in enumerate(cites)]
+
+    def source_objects(cites):
+        return [{"citation": i + 1, "chunkId": c["id"], "documentId": c["documentId"], "version": c["version"]}
+                for i, c in enumerate(cites)]
+
+    return {"corpus": corpus, "retrieve": retrieve, "answer": answer, "chunks": chunks,
+            "source_lines": source_lines, "source_objects": source_objects, "default_k": default_k,
+            "default_thr": default_thr, "params": params}
 
 
-def check_rag(rag, comp, registry):
+def corpus_kwargs(variant):
+    """Translate a RAG variant's fixture_overrides into corpus() arguments."""
+    fo = variant.get("fixture_overrides", {}) if variant else {}
+    kw = {}
+    versions = fo.get("indexed_versions")
+    if versions:
+        found = set()
+        for v in versions.values():
+            found.update(v if isinstance(v, list) else [v])
+        kw["versions"] = tuple(sorted(found))
+    if fo.get("add_documents"):
+        kw["extra"] = tuple(fo["add_documents"])
+    if fo.get("exclude_documents"):
+        kw["exclude"] = tuple(fo["exclude_documents"])
+    return kw
+
+
+def check_rag(rag, comp, registry, ui):
     R = rag_engine(rag)
-    refs = rag["reference_results"]
-    cases = {
-        "rag-query": ({}, {}), "rag-query-top-k-1": ({}, {"top_k": 1}), "rag-query-top-k-4": ({}, {"top_k": 4}),
-        "rag-query-top-k-8": ({}, {"top_k": 8}), "rag-query-threshold-0.95": ({}, {"thr": 0.95}),
-        "rag-no-match": ({}, {"top_k": 1, "thr": 0.99}), "rag-stale": ({"versions": ("1.0",)}, {}),
-        "rag-conflict": ({"versions": ("1.0", "1.2")}, {"top_k": 8}), "rag-hybrid": ({}, {"rerank": True}),
-        "rag-prompt-injection": ({"extra": ("community-faq.md",)}, {}),
-    }
-    for name, (ckw, rkw) in cases.items():
-        qv, ranked, sel = R["retrieve"](R["corpus"](**ckw), **rkw)
-        ref = refs[name]
+    refs = {k: v for k, v in rag["reference_results"].items() if k != "note"}
+    variants = {v["id"]: v for v in rag["variants"]}
+    p = R["params"]
+    # UI controls (02) and scenario parameters (05) must agree.
+    rc = ui["rag_controls"]
+    if (rc["top_k"]["default"], rc["top_k"]["max"], rc["similarity_threshold"]["default"]) != \
+            (p["top_k"]["default"], p["top_k"]["max"], p["similarity_threshold"]["default"]):
+        err("02 rag_controls", "top_k or threshold defaults differ from 05 rag-query parameters")
+    for vid in variants:
+        if vid not in refs:
+            err(f"reference_results.{vid}", "missing for variant")
+    for name, ref in refs.items():
+        variant = variants.get(name)
+        if not variant and not name.startswith("rag-query"):
+            err(f"reference_results.{name}", "neither a variant nor a rag-query case")
+            continue
+        rp = ref["parameters"]
+        if variant:
+            expected = {"chunk_size_words": 50, "overlap_words": 10, "top_k": R["default_k"],
+                        "similarity_threshold": R["default_thr"]}
+            po = variant.get("parameter_overrides", {})
+            if "top_k" in po:
+                expected["top_k"] = po["top_k"]
+            if "similarity_threshold" in po:
+                expected["similarity_threshold"] = po["similarity_threshold"]
+            if po.get("rerank"):
+                expected["rerank"] = True
+            if rp != expected:
+                err(f"reference_results.{name}", f"parameters {rp} differ from defaults plus overrides {expected}")
+        docs = R["corpus"](**corpus_kwargs(variant))
+        for absent in (variant or {}).get("fixture_overrides", {}).get("not_indexed", []):
+            if any(d[0] == absent for d in docs):
+                err(f"reference_results.{name}", f"{absent} should not be indexed")
+        qv, ranked, sel = R["retrieve"](docs, size=rp["chunk_size_words"], ov=rp["overlap_words"], top_k=rp["top_k"],
+                                        thr=rp["similarity_threshold"], rerank=rp.get("rerank", False))
         got = [c["id"] for c in sel]
-        if got != [s["chunkId"] for s in ref["selected"]]:
-            err(f"reference_results.{name}", f"selection {got} differs")
-        if [c["score"] for c in sel] != [s["score"] for s in ref["selected"]]:
-            err(f"reference_results.{name}", "scores differ")
-        a, s, _ = R["answer"](sel)
-        if a != ref["answer"] or s != ref["sources"]:
+        want = [(s["chunkId"], s["score"], s.get("rerankScore")) for s in ref["selected"]]
+        if [(c["id"], c["score"], c["rerank"] if rp.get("rerank") else None) for c in sel] != want:
+            err(f"reference_results.{name}", f"selection or scores differ: {got}")
+        a, cites, _ = R["answer"](sel)
+        if a != ref["answer"] or R["source_lines"](cites) != ref["sources"]:
             err(f"reference_results.{name}", "answer or sources differ")
+        if name == "rag-hybrid":
+            terms = sorted(set(re.findall(r"[a-z0-9]+", rag["fixtures"]["query"].lower())) - set(rag["fixtures"]["keyword_retrieval"]["stopwords"]))
+            hits = [{"chunkId": c["id"], "keywordScore": c["keyword"], "score": c["score"]}
+                    for c in sorted(ranked, key=lambda c: c["id"]) if c["keyword"] > 0]
+            if ref.get("keyword_query_terms") != terms or ref.get("keyword_hits") != hits:
+                err("reference_results.rag-hybrid", "keyword terms or hits differ")
+            ev = {e["id"]: e for e in registry["rag-hybrid"]["events"]}
+            if ev.get("rag-hybrid:hybrid-02", {}).get("payload", {}).get("hits") != hits:
+                err("rag-hybrid/hybrid-02", "keyword hits differ")
         if name == "rag-query":
             if qv != ref["query_embedding"]:
                 err("reference_results.rag-query", "query embedding differs")
@@ -422,8 +496,10 @@ def check_rag(rag, comp, registry):
                 err("rag-query/retrieve-06", "discarded chunks differ")
             if ev["retrieve-06"]["payload"]["retained"] != got:
                 err("rag-query/retrieve-06", "retained chunks differ")
-            if ev["retrieve-12"]["payload"]["answer"] != a:
-                err("rag-query/retrieve-12", "answer differs")
+            if ev["retrieve-11"]["payload"]["message"]["content"] != a + "\n\nSources:\n" + "\n".join(R["source_lines"](cites)):
+                err("rag-query/retrieve-11", "model message differs from the composed answer and sources")
+            if ev["retrieve-12"]["payload"]["answer"] != a or ev["retrieve-12"]["payload"]["sources"] != R["source_objects"](cites):
+                err("rag-query/retrieve-12", "answer or sources differ")
             user = ev["retrieve-10"]["payload"]["messages"][1]["content"]
             for c in sel:
                 if c["text"] not in user:
@@ -435,29 +511,37 @@ def check_rag(rag, comp, registry):
                 err("rag-index/index-05", "chunks differ from computed chunks")
             if [x["embedding"] for x in idx["index-07"]["payload"]["embeddings"]] != [c["embedding"] for c in all_chunks]:
                 err("rag-index/index-07", "vectors differ from computed vectors")
-    # combined answers
-    for label, exclude, expected, sources in [
-        ("combined", (), comp["expected_answer"], comp["expected_sources"]),
-        ("combined-missing-terms", ("savings-account.md",), comp["variants"][0]["expected_answer"],
-         comp["variants"][0]["expected_sources"]),
-    ]:
-        _, _, sel = R["retrieve"](R["corpus"](exclude=exclude))
-        a, s, sup = R["answer"](sel, intro="Your current balance is CHF 12,500.75 (source: get_customer_balance tool). "
-                                            "You have an Everyday account.")
+
+    # Combined: answer, sources and every derived payload.
+    intro = "Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have an Everyday account."
+    cases = [("combined", comp, comp)] + [(v["id"], v, comp) for v in comp.get("variants", [])]
+    for label, case, base in cases:
+        if not str(case.get("lesson" if case is not base else "headline", "")).strip():
+            err(label, "missing lesson" if case is not base else "missing headline")
+        _, _, sel = R["retrieve"](R["corpus"](**corpus_kwargs(case if case is not base else None)))
+        a, cites, sup = R["answer"](sel, intro=intro)
         if {"everyday-fee", "everyday-access", "savings-fee-interest", "savings-access"} <= sup:
             a += (" Whether the Savings account would be better depends on how you use your money: it would avoid the "
                   "CHF 5 monthly fee and earn 0.50% annual interest, but it has no debit card, so it suits money you "
                   "rarely need rather than everyday card payments.")
-            if "opening-deposit-savings" in sup:
-                a += " Opening one needs an initial deposit of at least CHF 100."
         elif "savings-fee-interest" not in sup:
             a += " Without the Savings account terms I can't say whether another account type would offer better conditions."
-        if a != expected or s != sources:
+        if a != case["expected_answer"] or R["source_lines"](cites) != case["expected_sources"]:
             err(label, "combined answer or sources differ from recomputation")
-        if label == "combined":
-            final = registry[comp["id"]]["events"][-1]["payload"]["answer"]
-            if final != expected:
-                err(label, "final event answer differs from expected_answer")
+        if case is not base and case.get("expected_selected") != [c["id"] for c in sel]:
+            err(label, "expected_selected differs from recomputation")
+        if case is base:
+            ev = {e["id"].split(":", 1)[1]: e for e in registry[comp["id"]]["events"]}
+            if ev["c-03"]["payload"]["document_blocks"] != [c["id"] for c in sel]:
+                err(label, "c-03 document blocks differ from the retrieved chunks")
+            prompt = ev["c-04"]["payload"]["messages"][1]["content"]
+            for c in sel:
+                if c["text"] not in prompt:
+                    err(label, f"c-04 prompt lacks text of {c['id']}")
+            if ev["c-07"]["payload"]["message"]["content"] != a + "\n\nSources:\n" + "\n".join(R["source_lines"](cites)):
+                err(label, "c-07 model message differs")
+            if ev["c-08"]["payload"]["answer"] != a or ev["c-08"]["payload"]["sources"] != R["source_objects"](cites):
+                err(label, "c-08 answer or sources differ")
 
 
 # ---------------------------------------------------------------- main
@@ -507,7 +591,9 @@ def main():
     final_mcp = registry["mcp-balance"]["events"][-1]["payload"]
     if "CHF 12,500.75" not in final_mcp:
         err("mcp-balance", "final answer lacks CHF 12,500.75")
-    check_rag(rag, comb, registry)
+    if not str(cmp_["compare"].get("headline", "")).strip():
+        err("compare", "missing headline")
+    check_rag(rag, comb, registry, load("02-ui-ux.yaml"))
 
     total = sum(len(s["events"]) for s in registry.values())
     if errors:

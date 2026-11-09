@@ -54,7 +54,8 @@ scenarios:
   title: Check my current account balance
   question: What is the current balance of my bank account?
   learning_question: How does an AI assistant obtain your live account balance?
-  headline: MCP lets the model obtain live account information through a tool that the agent runs.
+  headline: MCP lets the model obtain live account information through a tool on the bank's MCP server,
+    which the agent invokes through its MCP client.
   initial_state:
     mcp_state:
       server: null
@@ -78,7 +79,7 @@ scenarios:
   - id: discovery
     label: Tool discovery
     semantic_phase: preparation
-    takeaway: The client learns which tools the server offers; the agent describes them to the model.
+    takeaway: The client learns which tools the server offers; the agent converts them for the model.
   - id: question
     label: User question
     semantic_phase: user-request
@@ -99,7 +100,8 @@ scenarios:
   - id: context
     label: Add tool result to conversation
     semantic_phase: context-assembly
-    takeaway: The tool result reaches the agent first; the model has not seen it yet.
+    takeaway: The agent adds the tool result to its stored conversation; the model still has not seen
+      it.
   - id: generation
     label: Final model request
     semantic_phase: model-generation
@@ -1289,8 +1291,8 @@ variants:
         customerId: '123'
 - id: mcp-unauthorized
   title: Backend authentication failure
-  lesson: The MCP server uses its own backend credentials; when they fail, neither the user's token nor
-    the server's secret is exposed.
+  lesson: When the MCP server's own backend credential fails, the tool reports an error without exposing
+    the credential.
   extends: mcp-balance
   question: What is the current balance of my bank account?
   fixture_overrides:

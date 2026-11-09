@@ -15,8 +15,8 @@ design:
     tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
     label naming the kind.
   - The RAG question changes to the handover's question and the communication layer
-    (learning questions, takeaways, prediction prompts) is added to the scenarios in
-    issue #22.
+    (learning questions, takeaways, prediction prompts) was added to the scenario data
+    (issue #22).
   - Self-hosted fonts stay because the app must work offline; no other dependency is
     added for the design.
   - Supporting colours are introduced only when a need appears (handover 4.1). White
@@ -156,7 +156,8 @@ modes:
     the headline and plain explanations.'
   protocol: 'Technical level: show all individual events with exact logical messages;
     the inspector holds payloads, boundaries and errors.'
-  default: architecture
+  default_mode: architecture
+  switch_preserves_position: true
 learning:
   interaction: 'Each scenario follows the handover''s pattern (6.1): show the learning
     question and headline, the participants, an optional prediction, one step, the highlighted
@@ -166,7 +167,6 @@ learning:
     is scored and the prompt never blocks keyboard navigation.
   simulated_behaviour: Model output is labelled as simulated wherever it appears; nothing
     suggests a live decision.
-  switch_preserves_position: true
 controls:
   actions:
   - start
