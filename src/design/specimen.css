@@ -1,0 +1,109 @@
+.specimen section {
+  padding-top: var(--space-6);
+}
+
+.specimen h2 {
+  margin-bottom: var(--space-2);
+}
+
+.specimen .lead {
+  max-width: 40rem;
+}
+
+.type-sample {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+  align-items: baseline;
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: var(--space-2) 7rem 5rem 1fr;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  align-items: center;
+}
+
+@media (max-width: 40rem) {
+  .swatches {
+    grid-template-columns: var(--space-2) 7rem 1fr;
+  }
+
+  .swatches .use {
+    grid-column: 2 / -1;
+    padding-bottom: var(--space-1);
+  }
+}
+
+.swatch {
+  width: var(--space-2);
+  height: var(--space-2);
+  outline: var(--line-hair) solid var(--color-rule);
+  outline-offset: -1px;
+}
+
+.figure {
+  overflow-x: auto;
+}
+
+/* Figures keep their real size so labels stay readable; narrow screens scroll them. */
+.figure svg {
+  display: block;
+  width: 40rem;
+  max-width: none;
+  height: auto;
+  overflow: visible;
+}
+
+.payload {
+  max-width: 40rem;
+  overflow-x: auto;
+}
+
+.fold {
+  font: inherit;
+  color: var(--color-ink-muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.tracked {
+  text-decoration: underline var(--line-focus) var(--color-accent);
+  text-underline-offset: 3px;
+}
+
+.axis {
+  stroke: var(--color-rule);
+  stroke-width: var(--line-hair);
+}
+
+.threshold {
+  stroke: var(--color-ink-muted);
+  stroke-width: var(--line-hair);
+}
+
+.dot {
+  fill: var(--color-ink-muted);
+}
+
+.dot--retained {
+  fill: var(--color-accent);
+}
+
+.plot-label {
+  fill: var(--color-ink);
+  font-size: var(--size-small);
+  /* A paper halo keeps labels readable where a line passes behind them. */
+  paint-order: stroke;
+  stroke: var(--color-paper);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.plot-label--muted {
+  fill: var(--color-ink-muted);
+}

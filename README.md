@@ -30,6 +30,20 @@ Locally, `npm run test:e2e` builds first and then serves `dist/`. If a preview s
 
 The site is served under `/agentscope/` by default. Set `AGENTSCOPE_BASE=/` to build for a root site.
 
+## Design rules
+
+The governing rule is to **maximise the signal-to-noise ratio**: anything that carries no information
+is removed. The full rules (grid, type, colour tokens, charts, motion, writing) are in
+`specifications/02-ui-ux.yaml` → `design`, based on Jean-luc Doumont's _Trees, maps, and theorems_
+and Swiss Style. The live specimen at
+[`#/design`](https://m14dch.github.io/agentscope/#/design) shows them in use.
+
+- Colours exist only as tokens in `src/styles/tokens.css`; a unit test fails on any colour value
+  elsewhere in `src/`, and on tokens that differ from the spec or miss its contrast rules.
+- Grey carries structure, one accent marks what to look at now, red means an error and is always
+  labelled.
+- Label data directly; no legends, shadows, gradients, rounded cards or decorative icons.
+
 ## Deployment
 
 Every push to `main` runs `.github/workflows/pages.yml`: all CI checks, a build with the base path from

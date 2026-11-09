@@ -1,0 +1,94 @@
+/* Base typography and layout primitives. No decoration: no shadows, gradients,
+   rounded corners or background textures. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color: var(--color-ink);
+  background: var(--color-paper);
+  font-family: var(--font-text);
+  font-size: 100%;
+  font-size-adjust: none;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-text);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+p,
+dl,
+dd,
+ul,
+ol,
+figure {
+  margin: 0;
+}
+
+h1,
+.title {
+  font-size: var(--size-title);
+  line-height: var(--leading-title);
+  font-weight: var(--weight-strong);
+}
+
+h2,
+h3 {
+  font-size: var(--size-text);
+  line-height: var(--leading-text);
+  font-weight: var(--weight-strong);
+}
+
+code,
+pre {
+  font-family: var(--font-code);
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+}
+
+.small {
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+}
+
+.muted {
+  color: var(--color-ink-muted);
+}
+
+/* 12-column grid; children span columns with --span. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
+  column-gap: var(--grid-gutter);
+  row-gap: var(--space-3);
+}
+
+.grid > * {
+  grid-column: span var(--span, 12);
+}
+
+.page {
+  padding: var(--space-4) var(--page-margin) var(--space-8);
+}
+
+:focus-visible {
+  outline: var(--line-focus) solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

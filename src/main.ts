@@ -1,10 +1,23 @@
-import './style.css';
+import './styles/fonts.css';
+import './styles/tokens.css';
+import './styles/base.css';
 
 const app = document.querySelector<HTMLElement>('#app');
-if (app) {
+
+async function render(): Promise<void> {
+  if (!app) return;
+  if (location.hash === '#/design') {
+    const { renderSpecimen } = await import('./design/specimen');
+    renderSpecimen(app);
+    return;
+  }
+  app.className = 'page';
   app.innerHTML = `
     <h1>AgentScope</h1>
     <p>See how MCP, RAG and agent workflows exchange messages and context, step by step.</p>
-    <p class="note">In development. Everything here is simulated; nothing leaves your browser.</p>
+    <p class="small muted">In development. Everything here is simulated; nothing leaves your browser.</p>
   `;
 }
+
+window.addEventListener('hashchange', () => void render());
+void render();

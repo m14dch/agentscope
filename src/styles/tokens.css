@@ -1,0 +1,53 @@
+/* Design tokens: the only place colour values may appear (02-ui-ux.yaml → design). */
+:root {
+  /* Colour */
+  --color-paper: #ffffff;
+  --color-ink: #111111;
+  --color-ink-muted: #595959;
+  --color-rule: #d4d4d4;
+  --color-accent: #e8590c;
+  --color-error: #c62828;
+
+  /* Type: three sizes, two weights */
+  --font-text: 'Inter Variable', system-ui, sans-serif;
+  --font-code: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --size-small: 0.8125rem; /* 13 px */
+  --leading-small: 1rem; /* 16 px */
+  --size-text: 1rem; /* 16 px */
+  --leading-text: 1.5rem; /* 24 px */
+  --size-title: 1.5rem; /* 24 px */
+  --leading-title: 2rem; /* 32 px */
+  --weight-regular: 400;
+  --weight-strong: 600;
+
+  /* Space: 8 px baseline */
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2rem;
+  --space-6: 3rem;
+  --space-8: 4rem;
+
+  /* Grid */
+  --grid-columns: 12;
+  --grid-gutter: var(--space-2);
+  --page-margin: var(--space-2);
+
+  /* Lines */
+  --line-hair: 1px;
+  --line-network: 1.5px;
+  --line-focus: 2px;
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --grid-gutter: var(--space-3);
+    --page-margin: var(--space-3);
+  }
+}
+
+@media (min-width: 64rem) {
+  :root {
+    --page-margin: var(--space-6);
+  }
+}

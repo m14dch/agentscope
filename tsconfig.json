@@ -17,5 +17,6 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "tests/unit"]
+  "include": ["src", "tests/unit"],
+  "exclude": ["tests/unit/node"]
 }
