@@ -88,7 +88,10 @@ async function computedColours(page: Page, onlyActive: boolean): Promise<Found> 
             record(shadow === 'none' ? 'none' : `text-shadow: ${shadow}`, `${where} text-shadow`);
             continue;
           }
-          for (const p of [...colour, ...(perElement[el.tagName.toLowerCase()] ?? [])]) {
+          for (const p of [
+            ...colour,
+            ...(pseudo === null ? (perElement[el.tagName.toLowerCase()] ?? []) : []),
+          ]) {
             record(style.getPropertyValue(p).trim(), `${where} ${p}`);
           }
           for (const p of paint) {
