@@ -129,6 +129,8 @@ repo_layout:
 - package.json
 - package-lock.json
 - src/main.ts
+- src/styles/
+- src/design/
 - src/engine/
 - src/diagram/
 - src/inspectors/

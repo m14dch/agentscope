@@ -1,5 +1,68 @@
 product: AgentScope
 spec_version: 3.0.0
+design:
+  sources:
+  - Jean-luc Doumont, Trees, maps, and theorems (summaries at https://principiae.be/X0100.php#Summaries)
+  - Swiss Style (International Typographic Style)
+  governing_rule: Maximise the signal-to-noise ratio. Viewers already process protocols,
+    payloads, context and trust boundaries; anything that carries no information is
+    noise and is removed.
+  removal_test: For every line, box, colour, label, icon, animation and word, ask what
+    the viewer loses if it disappears. If nothing, remove it. Prefer whitespace and
+    position to borders and boxes.
+  supporting_laws:
+  - 'Adapt to the audience: experienced engineers get exact payloads and precise terms,
+    without decoration.'
+  - 'Use effective redundancy: state each step''s message in words and show it in the
+    diagram. Colour is never the only carrier of meaning.'
+  grid: 12 columns on an 8 px baseline. Flush-left, ragged-right, asymmetric. Diagram
+    and inspector share alignment lines. Side margin 16 px on phones, 24 px on tablets,
+    48 px on desktops; gutter 16 px, 24 px from tablet width.
+  typography:
+    text: Inter (variable, self-hosted, OFL), Latin subset
+    code: JetBrains Mono (variable, self-hosted, OFL), Latin subset
+    sizes: 'Three only: small 13/16 px for labels and metadata, text 16/24 px, title
+      24/32 px. At most two per region.'
+    weights: 400 and 600 only
+    hierarchy: Size, weight and position; never colour alone
+    figures: Tabular figures for numbers; numbers right-aligned in tables
+  colour:
+    tokens:
+      paper: '#ffffff'
+      ink: '#111111'
+      ink-muted: '#595959'
+      rule: '#d4d4d4'
+      accent: '#e8590c'
+      error: '#c62828'
+    use:
+    - Ink and greys carry everything by default. Non-data elements (lifelines, axes,
+      past steps, separators) use rule or ink-muted.
+    - 'One accent marks what to look at now: the current step, its pair, highlighted
+      lineage values and retained chunks. The accent is used for marks and lines,
+      never for body text.'
+    - Error red is used only for errors, always with a text label naming the kind.
+    - No other colour values exist outside the tokens.
+    - 'Contrast: ink, ink-muted and error reach 4.5:1 on paper; accent and rule-based
+      data marks reach 3:1 where they carry meaning.'
+    - No shadows, gradients, rounded cards, decorative icons, logos or background textures.
+      Light theme only in v1.
+  labels_and_charts:
+  - Label data directly next to what it names; no legends.
+  - Every arrow carries a short text label (for example "MCP · tools/call").
+  - Scores are dots on a 0–1 scale with the threshold as one labelled grey line; retained
+    chunks use the accent. No bars from an arbitrary origin; no gridlines unless they
+    answer a question.
+  - The 2D projection is a plain scatter plot with points labelled directly and axes
+    named by meaning.
+  motion: Motion only shows causality (an arrow draws from sender to receiver). Nothing
+    else animates; with reduced motion nothing animates.
+  writing:
+  - Each step's explanation is the message, one sentence, shown first; details on demand.
+  - Titles are messages or plain nouns, never filler such as "Overview" or "Details".
+  - 'Structure stays shallow and narrow: at most 3 levels and 5 items per level.'
+  specimen: 'The route #/design shows type, colours, each arrow kind, a payload block
+    and a score plot, so the system can be reviewed on the live site. It is not linked
+    from the app.'
 navigation:
   tabs:
   - MCP
@@ -11,28 +74,35 @@ layout:
   desktop:
   - 'Top bar: navigation, scenario, architecture/protocol toggle'
   - 'Main: resizable sequence diagram + payload inspector'
-  - 'Bottom: execution timeline + collapsible model-context and lineage panels'
+  - 'Bottom: execution timeline + collapsible model-context and lineage panels; one
+    panel open at a time, all but the timeline collapsed at start'
+  - 'Header: one persistent statement that everything is simulated and nothing leaves
+    the browser'
   tablet: Stack inspector below horizontally scrollable diagram
   minimum_lifeline_width_px: 110
 diagram:
   participants: Scenario-defined and ordered; labels from the participant registry
     (01-architecture.yaml)
   arrows: One per actual logical message or explicitly labeled internal operation
-  styles:
-    model_api: violet
-    mcp: teal
-    rest: blue
-    internal: neutral
-    error: red
+  encoding:
+    principle: Protocol is shown by the arrow's text label and line style, not by hue.
+    network: solid ink line, 1.5 px
+    in_process: thin solid ink-muted line, 1 px
+    simulated_internal: dashed ink-muted line, 1 px
+    request: filled arrowhead
+    response: open arrowhead
+    current_and_pair: accent, 2 px
+    error: error red with a text marker naming the kind (tool, protocol, transport)
   visibility:
-    past: visible subdued
+    past: visible in ink-muted
     current: emphasized
     future: hidden in protocol mode
   pair_highlighting: true
   auto_scroll_to_current: true
   accessible_without_color: true
-  rendering: SVG lifelines, arrows and labels generated from ordered event data. Show
-    a simulation label on illustrated network exchanges.
+  rendering: SVG lifelines, arrows and labels generated from ordered event data. The
+    header states once that everything is simulated; arrows carry no per-arrow simulation
+    label.
   error_events: An event is an error when its HTTP status is 4xx/5xx, its payload has
     a JSON-RPC error object, or its MCP result has isError true. Each kind gets its
     own label (07-security-protocols.yaml error_taxonomy).
@@ -61,28 +131,33 @@ controls:
     Space: toggle play/pause
   reduced_motion: true
 inspector:
+  message_line: Always visible above the tabs. The event's explanation, then sender →
+    receiver and operation. Replaces separate Overview and Explanation tabs.
   tabs:
-  - Overview
   - Payload
   - Transport
-  - Explanation
   - Security
-  - Data lineage
+  - Lineage
+  empty_tabs: Hidden when the step has nothing for them (for example Transport on
+    in-process calls)
+  simulation_note: One line on illustrated network exchanges stating that the exchange
+    is simulated
   payload_features:
   - syntax highlighting
   - copy
   - expand/collapse JSON
   - correlated request/response
+  - repeated boilerplate (jsonrpc, _meta, repeated headers) folded to one line that
+    expands on click; never hidden
+  - fields that changed or that lineage tracks are highlighted
   transport_tab: Show simulated wire envelopes separately from logical payloads, including
     the MCP headers mirrored from the body (MCP-Protocol-Version, Mcp-Method, Mcp-Name).
     In-process calls have no transport envelope.
   security_tab: Lists the event's security_boundaries with risk and mitigation from
     07-security-protocols.yaml.
 context_panel:
-  views:
-  - Agent state
-  - Model-visible context
-  - Delta since previous event
+  layout: Agent state and model-visible context side by side; only the change since
+    the previous step is highlighted, in place
   rule: Tool results and retrieved text are not model-visible until a subsequent model
     request includes them
 rag_controls:
