@@ -133,6 +133,9 @@ def check_scenario(scn, ctx):
     sid = scn["id"]
     events = scn["events"]
     by_id = {}
+    for field in ctx["scenario_required"]:
+        if field not in scn:
+            err(sid, f"missing {field}")
     phases = {p["id"] for p in scn["phases"]}
     for field in ("learning_question", "headline"):
         if not str(scn.get(field, "")).strip():
@@ -153,6 +156,11 @@ def check_scenario(scn, ctx):
         for f in ctx["required"]:
             if f not in e:
                 err(where, f"missing {f}")
+        for f, allowed in ctx["enums"].items():
+            if e.get(f) not in allowed:
+                err(where, f"{f} {e.get(f)} is not one of {' | '.join(allowed)}")
+        if "correlation_id" in e and not (e["protocol"] == "MCP" and e["message_type"] in ("REQUEST", "RESPONSE")):
+            err(where, "correlation_id outside an MCP request or response")
         if e["id"] in ctx["all_ids"]:
             err(where, "duplicate event id")
         ctx["all_ids"].add(e["id"])
@@ -587,6 +595,9 @@ def main():
            "boundaries": {b["id"] for b in sec["trust_boundaries"]},
            "semantic_phases": {p["id"] for p in cmp_["semantic_phases"]},
            "lineage": set(engine["lineage"]["tracked"]), "required": engine["event_schema"]["required"],
+           "scenario_required": engine["scenario_format"]["required"],
+           "enums": {f: engine["event_schema"]["fields"][f].split(" (")[0].split(" | ")
+                     for f in ("protocol", "transport", "execution_type", "message_type")},
            "tools": next(e for e in mcp["scenarios"][0]["events"] if e["operation"] == "tools/list result")["payload"]["result"]["tools"],
            "all_ids": set()}
     if "DiscoverRequest" not in ctx["schema"].get("$defs", {}):

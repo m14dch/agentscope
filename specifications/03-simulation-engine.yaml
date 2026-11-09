@@ -109,15 +109,24 @@ scenario_format:
   - parameters
   - derived_events
   - optional_steps
-  validation: Validate event structure and cross-references (the invariants above except
-    the schema.json check) at build and startup; a failure stops the build. Errors identify
-    scenario and event path. MCP schema.json validation and the RAG reference recomputation
-    run in specifications/tools/validate_specs.py.
-  encoding: YAML is the design specification. A Vite plugin parses it with YAML 1.1 rules
-    (as PyYAML does) into a bundled JSON module at build time; the JSON is generated and
-    never committed.
-  golden_test: The TypeScript registry (base scenarios, expanded variants and the composed
-    scenario) equals the registry of validate_specs.py --dump-registry.
+  validation: 'At build and startup, check: required scenario and event fields; enum
+    values of protocol, transport, execution_type and message_type; unique event IDs;
+    sequence and scenario_id; declared phases and participants; reciprocal pairs; a
+    correlation_id only on MCP requests and responses, equal to the JSON-RPC id; MCP
+    headers mirroring the body; model-visible context rules; security boundary IDs;
+    lineage keys; value_ref paths; learning fields and prediction prompts. A failure
+    stops the build. Errors identify scenario and event. validate_specs.py additionally
+    validates MCP payloads against schema.json and recomputes the RAG reference results
+    and derived payloads.'
+  encoding: 'YAML is the design specification. A Vite plugin parses it into a bundled
+    JSON module at build time; the JSON is generated and never committed. Plain scalars
+    are typed as PyYAML safe_load types them: booleans yes, no, on, off, true and false
+    in any of their three spellings; null as ~, null or empty; integers in decimal,
+    binary, octal and hexadecimal; floats need a dot. Scalars JSON cannot carry
+    (timestamps, .inf, .nan, sexagesimal numbers) and duplicate keys are build errors.'
+  golden_test: Every bundled file equals PyYAML safe_load of the same file, and the
+    TypeScript registry (base scenarios, expanded variants and the composed scenario)
+    equals the registry of validate_specs.py --dump-registry.
 variant_format:
   description: A variant is a base scenario plus ordered edit operations. Expansion
     produces a complete scenario that passes the same validation.
