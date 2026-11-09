@@ -8,6 +8,8 @@
 
 html {
   color: var(--color-ink);
+  /* SVG paint defaults to black and is inherited; start from the ink token instead. */
+  fill: var(--color-ink);
   background: var(--color-paper);
   font-family: var(--font-text);
   font-size: 100%;
@@ -45,12 +47,6 @@ h3 {
   font-size: var(--size-text);
   line-height: var(--leading-text);
   font-weight: var(--weight-strong);
-}
-
-/* Reading surface for blocks the learner inspects closely. */
-.surface {
-  background: var(--color-surface);
-  padding: var(--space-2);
 }
 
 code,

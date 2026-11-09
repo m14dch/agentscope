@@ -4,34 +4,28 @@ import { contrast } from './contrast';
 
 const TOKENS = [
   'paper',
-  'surface',
   'selection',
   'ink',
   'ink-muted',
   'rule',
   'accent',
   'accent-text',
-  'information',
-  'success',
   'error',
 ] as const;
 type Token = (typeof TOKENS)[number];
 
 /** Backgrounds show the contrast of ink on them; everything else its contrast on paper. */
-const BACKGROUNDS: ReadonlySet<Token> = new Set(['paper', 'surface', 'selection']);
+const BACKGROUNDS: ReadonlySet<Token> = new Set(['paper', 'selection']);
 
 const USE: Record<Token, string> = {
   paper: 'Cream · page',
-  surface: 'White · reading surfaces such as payloads',
   selection: 'Naples Yellow · what the learner selected or tracks',
   ink: 'Deep Slate Olive · text and data',
   'ink-muted': 'Secondary text, past-step labels, in-process arrows',
   rule: 'Neutral Gray · lifelines, axes, separators (never text)',
   accent: 'Peach Red · the current step and its pair, retained chunks',
   'accent-text': 'Small text in the accent role',
-  information: 'Informational states only',
-  success: 'Successful operations only',
-  error: 'Errors only, always with ✕ and a label',
+  error: 'Errors only, always with × and a label',
 };
 
 /** Default retrieval scores from 05-rag-scenarios.yaml → reference_results.rag-query. */
@@ -85,7 +79,7 @@ const ARROWS: Arrow[] = [
   { label: 'LLM · submit conversation', kind: 'network', state: 'current' },
   { label: 'LLM · answer', kind: 'network', response: true, state: 'current' },
   {
-    label: '✕ MCP · tool execution error (isError: true)',
+    label: '× MCP · tool execution error (isError: true)',
     kind: 'network',
     response: true,
     error: true,
@@ -221,8 +215,8 @@ export function renderSpecimen(root: HTMLElement): void {
     <section aria-labelledby="payload">
       <h2 id="payload">Payload</h2>
       <p class="small muted note">Boilerplate folds to one line; select its key to expand or fold it.
-        Tracked values are highlighted.</p>
-      <pre class="payload surface">${PAYLOAD}</pre>
+        Tracked values are highlighted and underlined.</p>
+      <pre class="payload">${PAYLOAD}</pre>
     </section>
 
     <section aria-labelledby="scores">

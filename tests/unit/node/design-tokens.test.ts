@@ -1,6 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import colorNames from 'color-name';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { contrast } from '../../../src/design/contrast';
@@ -27,108 +26,55 @@ function files(dir: string): string[] {
 }
 
 // ---------------------------------------------------------------- colour guard
+// Source scan for hex values and colour functions. Named colours are not matched in source
+// (word lists flag ordinary words such as "mark"); tests/e2e/colours.spec.ts checks every
+// computed colour on the rendered pages instead.
 const SCANNED = /\.(css|ts|js|mjs|html|svg|json|webmanifest)$/;
 const HEX = /#[0-9a-f]{3,8}\b/i;
 const FUNCTION = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark)\(/i;
-const SYSTEM = [
-  'accentcolor',
-  'accentcolortext',
-  'activetext',
-  'buttonborder',
-  'buttonface',
-  'buttontext',
-  'canvas',
-  'canvastext',
-  'field',
-  'fieldtext',
-  'graytext',
-  'highlight',
-  'highlighttext',
-  'linktext',
-  'mark',
-  'marktext',
-  'selecteditem',
-  'selecteditemtext',
-  'visitedtext',
-];
-const NAMED = new RegExp(`\\b(?:${[...Object.keys(colorNames), ...SYSTEM].join('|')})\\b`, 'i');
-const PAINT =
-  '(?:fill|stroke|color|stop-color|flood-color|lighting-color|background|theme_color|background_color)';
-const QUOTED = `(?:"([^"]*)"|'([^']*)'|\`([^\`]*)\`)`;
 
 /** Code without comments, so prose such as "issue #123" is not mistaken for a colour. */
 function withoutComments(path: string, text: string): string {
   const block = text.replace(/\/\*[\s\S]*?\*\//g, '');
-  return /\.(ts|js|mjs)$/.test(path) ? block.replace(/(^|[^:])\/\/.*$/gm, '$1') : block;
-}
-
-/** Values that style something: declarations, style attributes, SVG paint, DOM style writes. */
-function styleValues(path: string, code: string): string[] {
-  const values: string[] = [];
-  const add = (pattern: string) => {
-    for (const m of code.matchAll(new RegExp(pattern, 'g'))) {
-      values.push(m.slice(1).find((group) => group !== undefined) ?? '');
-    }
-  };
-  if (path.endsWith('.css')) add('[\\w-]+\\s*:\\s*([^;{}]+)[;}]');
-  add(`style\\s*=\\s*${QUOTED}`);
-  add(`\\b${PAINT}\\s*=\\s*${QUOTED}`);
-  add(`"${PAINT}"\\s*:\\s*"([^"]*)"`);
-  add(`\\.style\\.[a-zA-Z]+\\s*=\\s*${QUOTED}`);
-  add(`setProperty\\(\\s*['"][^'"]+['"]\\s*,\\s*${QUOTED}`);
-  add(`setAttribute\\(\\s*['"](?:fill|stroke|color|style)['"]\\s*,\\s*${QUOTED}`);
-  return values;
-}
-
-/** Drops var() names but keeps their fallbacks: var(--x, red) leaves "red". */
-function withoutVariableNames(value: string): string {
-  return value.replace(/var\(\s*--[\w-]+\s*,?/g, '(');
+  // Line comments only where "//" starts a line or follows whitespace, never inside "…//…".
+  return /\.(ts|js|mjs)$/.test(path) ? block.replace(/(^|\s)\/\/.*$/gm, '$1') : block;
 }
 
 function colourOffenders(path: string, text: string): string[] {
-  const offenders: string[] = [];
-  const code = withoutComments(path, text);
-  for (const [i, line] of code.split('\n').entries()) {
-    const stripped = line.replace(/#\/[a-z]+/g, ''); // hash routes such as #/design
-    if (HEX.test(stripped) || FUNCTION.test(stripped)) {
-      offenders.push(`${path}:${i + 1}: ${line.trim()}`);
-    }
-  }
-  for (const value of styleValues(path, code)) {
-    if (NAMED.test(withoutVariableNames(value))) offenders.push(`${path}: ${value.trim()}`);
-  }
-  return offenders;
+  return withoutComments(path, text)
+    .split('\n')
+    .map((line, i) => ({ line, at: `${path}:${i + 1}` }))
+    .filter(({ line }) => {
+      const stripped = line.replace(/#\/[a-z]+/g, ''); // hash routes such as #/design
+      return HEX.test(stripped) || FUNCTION.test(stripped);
+    })
+    .map(({ line, at }) => `${at}: ${line.trim()}`);
 }
 
-describe('colour guard', () => {
+describe('colour guard (source scan)', () => {
   it.each([
-    ['a.css', '.c { color: var(--color-ink, red); }'],
-    ['a.css', '.c { color: red }'],
-    ['a.css', '.c{background:blue}'],
-    ['a.ts', "el.innerHTML = `<p style='color: red'>x</p>`;"],
-    ['a.ts', "svg = `<path fill='green' />`;"],
-    ['a.ts', "el.style.color = 'orange';"],
-    ['a.ts', "el.setAttribute('fill', 'purple');"],
-    ['a.ts', "el.style.setProperty('color', 'teal');"],
-    ['a.js', "const c = '#ff0000';"],
-    ['a.webmanifest', '{ "theme_color": "navy" }'],
+    ['a.css', '.c { color: #f00 }'],
+    ['a.ts', "el.style.color = '#ff0000';"],
+    ['a.ts', 'const s = "//"; el.style.color = "#123456";'],
+    ['a.js', "ctx.fillStyle = 'rgb(255 0 0)';"],
     ['a.css', '.c { color: color-mix(in srgb, var(--color-ink), white); }'],
-    ['a.css', '.c { outline-color: CanvasText; }'],
+    ['a.webmanifest', '{ "theme_color": "#000080" }'],
+    ['a.html', '<meta name="theme-color" content="hsl(0 100% 50%)">'],
   ])('catches %s: %s', (path, text) => {
     expect(colourOffenders(path, text)).not.toEqual([]);
   });
 
   it.each([
     ['a.ts', '// see issue #123'],
-    ['a.ts', 'const lead = "Peach Red marks the current step; red never stands alone";'],
     ['a.ts', "location.hash = '#/design';"],
+    ['a.css', '.c { grid-area: mark; animation-name: highlight; }'],
     ['a.css', '.c { color: var(--color-ink); border: 0; }'],
-    ['a.css', '.c { stroke: context-stroke; fill: none; }'],
+    ['a.css', ".c::after { content: 'Highlight the red arrow'; }"],
   ])('allows %s: %s', (path, text) => {
     expect(colourOffenders(path, text)).toEqual([]);
   });
 
-  it('finds no colour value outside tokens.css (src/, public/, index.html)', () => {
+  it('finds no hex value or colour function outside tokens.css', () => {
     const scanned = [
       ...files(join(ROOT, 'src')),
       ...files(join(ROOT, 'public')),
@@ -150,17 +96,10 @@ describe('design tokens', () => {
 
   it('meets the contrast rules of 02-ui-ux.yaml', () => {
     const t = (name: string) => specTokens[name] ?? '';
-    for (const background of ['paper', 'surface']) {
-      for (const name of ['ink', 'ink-muted', 'accent-text', 'information', 'success', 'error']) {
-        expect(contrast(t(name), t(background)), `${name} on ${background}`).toBeGreaterThanOrEqual(
-          4.5,
-        );
-      }
-      expect(
-        contrast(t('accent'), t(background)),
-        `accent on ${background}`,
-      ).toBeGreaterThanOrEqual(3);
+    for (const name of ['ink', 'ink-muted', 'accent-text', 'error']) {
+      expect(contrast(t(name), t('paper')), `${name} on paper`).toBeGreaterThanOrEqual(4.5);
     }
+    expect(contrast(t('accent'), t('paper')), 'accent on paper').toBeGreaterThanOrEqual(3);
     expect(contrast(t('ink'), t('selection')), 'ink on selection').toBeGreaterThanOrEqual(4.5);
   });
 });

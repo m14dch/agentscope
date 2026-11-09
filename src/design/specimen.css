@@ -85,6 +85,8 @@
 
 .specimen .tracked {
   background: var(--color-selection);
+  text-decoration: underline var(--line-hair) var(--color-ink);
+  text-underline-offset: 3px;
 }
 
 /* Dot plot in HTML: fits the width, text stays at its real size. */
