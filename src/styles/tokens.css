@@ -1,12 +1,17 @@
 /* Design tokens: the only place colour values may appear (02-ui-ux.yaml → design). */
 :root {
-  /* Colour */
-  --color-paper: #ffffff;
-  --color-ink: #111111;
-  --color-ink-muted: #595959;
-  --color-rule: #d4d4d4;
-  --color-accent: #e8590c;
-  --color-error: #c62828;
+  /* Colour: Sanzo Wada No. 303 plus supporting colours (02-ui-ux.yaml → design.colour) */
+  --color-paper: #fff9ea; /* Cream: page */
+  --color-surface: #ffffff; /* White: reading surfaces */
+  --color-ink: #253122; /* Deep Slate Olive: text and data */
+  --color-ink-muted: #5c6658; /* derived: secondary text */
+  --color-rule: #b6bfc1; /* Neutral Gray: structure only */
+  --color-accent: #f15a30; /* Peach Red: current step, lines and marks */
+  --color-accent-text: #bc4625; /* darker Peach Red: small text in the accent role */
+  --color-selection: #fbe6a0; /* Naples Yellow: selected or tracked, as a background */
+  --color-information: #3478a1;
+  --color-success: #387c60;
+  --color-error: #b73535;
 
   /* Type: three sizes, two weights */
   --font-text: 'Inter Variable', system-ui, sans-serif;

@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures';
 
 for (const { name, width } of [
+  { name: 'the 320 px reflow width', width: 320 },
   { name: 'phone', width: 390 },
   { name: 'desktop', width: 1280 },
 ]) {
@@ -59,5 +60,25 @@ test('font licences ship with the site', async ({ page }) => {
 
 test('contrast ratios on the specimen come from the live tokens', async ({ page }) => {
   await page.goto('./#/design');
-  await expect(page.getByText('18.88 : 1')).toBeVisible();
+  await expect(page.getByText('ink 12.97 : 1')).toBeVisible();
+});
+
+test('the score axis lines up with the plotted values', async ({ page }) => {
+  await page.goto('./#/design');
+  const centre = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return box.left + box.width / 2;
+      });
+  const track = await page.locator('.dotplot .track').first().boundingBox();
+  if (!track) throw new Error('no track');
+  const at = (value: number) => track.x + value * track.width;
+  expect(Math.abs((await centre('.scale--top span')) - at(0.7))).toBeLessThan(2);
+  expect(Math.abs((await centre('.scale:not(.scale--top) span:last-child')) - at(1))).toBeLessThan(
+    2,
+  );
+  expect(Math.abs((await centre('.retained .dot')) - at(0.9041))).toBeLessThan(2);
 });

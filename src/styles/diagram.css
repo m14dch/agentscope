@@ -63,6 +63,7 @@
 
 /* Current step and its pair: accent line plus a bold label (survives greyscale). */
 .arrow-label--current {
+  fill: var(--color-accent-text);
   font-weight: var(--weight-strong);
 }
 

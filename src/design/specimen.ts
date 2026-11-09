@@ -2,15 +2,36 @@ import '../styles/diagram.css';
 import './specimen.css';
 import { contrast } from './contrast';
 
-const TOKENS = ['paper', 'ink', 'ink-muted', 'rule', 'accent', 'error'] as const;
+const TOKENS = [
+  'paper',
+  'surface',
+  'selection',
+  'ink',
+  'ink-muted',
+  'rule',
+  'accent',
+  'accent-text',
+  'information',
+  'success',
+  'error',
+] as const;
+type Token = (typeof TOKENS)[number];
 
-const USE: Record<(typeof TOKENS)[number], string> = {
-  paper: 'Background',
-  ink: 'Text and data',
+/** Backgrounds show the contrast of ink on them; everything else its contrast on paper. */
+const BACKGROUNDS: ReadonlySet<Token> = new Set(['paper', 'surface', 'selection']);
+
+const USE: Record<Token, string> = {
+  paper: 'Cream · page',
+  surface: 'White · reading surfaces such as payloads',
+  selection: 'Naples Yellow · what the learner selected or tracks',
+  ink: 'Deep Slate Olive · text and data',
   'ink-muted': 'Secondary text, past-step labels, in-process arrows',
-  rule: 'Lifelines, axes, separators (never meaning)',
-  accent: 'What to look at now: current step, its pair, tracked values',
-  error: 'Errors only, always with a text label',
+  rule: 'Neutral Gray · lifelines, axes, separators (never text)',
+  accent: 'Peach Red · the current step and its pair, retained chunks',
+  'accent-text': 'Small text in the accent role',
+  information: 'Informational states only',
+  success: 'Successful operations only',
+  error: 'Errors only, always with ✕ and a label',
 };
 
 /** Default retrieval scores from 05-rag-scenarios.yaml → reference_results.rag-query. */
@@ -32,8 +53,12 @@ function token(name: string): string {
 
 function swatches(): string {
   const paper = token('paper');
+  const ink = token('ink');
   return TOKENS.map((name) => {
-    const ratio = name === 'paper' ? '' : `${contrast(token(name), paper).toFixed(2)} : 1`;
+    const value = token(name);
+    const ratio = BACKGROUNDS.has(name)
+      ? `ink ${contrast(ink, value).toFixed(2)} : 1`
+      : `${contrast(value, paper).toFixed(2)} : 1`;
     return `
       <span class="swatch" style="background: var(--color-${name})"></span>
       <code>${name}</code>
@@ -60,7 +85,7 @@ const ARROWS: Arrow[] = [
   { label: 'LLM · submit conversation', kind: 'network', state: 'current' },
   { label: 'LLM · answer', kind: 'network', response: true, state: 'current' },
   {
-    label: 'MCP · tool execution error (isError: true)',
+    label: '✕ MCP · tool execution error (isError: true)',
     kind: 'network',
     response: true,
     error: true,
@@ -167,7 +192,8 @@ export function renderSpecimen(root: HTMLElement): void {
   root.innerHTML = `
     <h1>Design system</h1>
     <p class="lead">Every element must carry information; anything that does not is removed.
-      Grey carries structure, one accent marks what to look at now, and red means an error.</p>
+      Olive carries text and data, grey carries structure, Peach Red marks the current step,
+      Naples Yellow marks what you selected, and errors always say so in words.</p>
 
     <section aria-labelledby="type">
       <h2 id="type">Type</h2>
@@ -195,8 +221,8 @@ export function renderSpecimen(root: HTMLElement): void {
     <section aria-labelledby="payload">
       <h2 id="payload">Payload</h2>
       <p class="small muted note">Boilerplate folds to one line; select its key to expand or fold it.
-        Tracked values are underlined.</p>
-      <pre class="payload">${PAYLOAD}</pre>
+        Tracked values are highlighted.</p>
+      <pre class="payload surface">${PAYLOAD}</pre>
     </section>
 
     <section aria-labelledby="scores">

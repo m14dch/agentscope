@@ -26,7 +26,7 @@
 
 .specimen .swatches {
   display: grid;
-  grid-template-columns: var(--space-2) 7rem 5rem 1fr;
+  grid-template-columns: var(--space-2) 7rem 7rem 1fr;
   column-gap: var(--space-2);
   row-gap: var(--space-1);
   align-items: center;
@@ -84,21 +84,26 @@
 }
 
 .specimen .tracked {
-  text-decoration: underline var(--line-focus) var(--color-accent);
-  text-underline-offset: 3px;
+  background: var(--color-selection);
 }
 
 /* Dot plot in HTML: fits the width, text stays at its real size. */
 .specimen .dotplot {
   --threshold: 0.7;
   display: grid;
-  grid-template-columns: max-content minmax(8rem, 24rem);
+  /* Room right of the plot for the value label of a score near 1. */
+  --value-room: var(--space-4);
+  grid-template-columns: max-content minmax(5rem, 24rem);
   column-gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
   font-size: var(--size-small);
-  line-height: var(--leading-text);
+  line-height: var(--leading-small);
+}
+
+.specimen .dotplot > li > * {
+  padding: calc(var(--space-1) / 2) 0;
 }
 
 .specimen .dotplot li {
@@ -114,10 +119,10 @@
   color: var(--color-ink);
 }
 
-.specimen .track {
+.specimen .track,
+.specimen .scale {
   position: relative;
-  /* Room for the value label of a score near 1. */
-  margin-right: var(--space-6);
+  margin-right: var(--value-room);
 }
 
 /* The threshold: one grey line, continuous across rows. */
@@ -133,6 +138,7 @@
 .specimen .dot {
   position: absolute;
   top: 50%;
+  z-index: 1;
   left: calc(var(--x) * 100%);
   width: var(--space-1);
   height: var(--space-1);
@@ -155,7 +161,6 @@
 }
 
 .specimen .scale {
-  position: relative;
   height: var(--leading-text);
   border-top: var(--line-hair) solid var(--color-rule);
   color: var(--color-ink-muted);
