@@ -10,7 +10,8 @@ const scenarios = Object.values(registry);
 
 const all = (p: Playback): Snapshot[] =>
   Array.from({ length: p.length + 1 }, (_, k) => p.snapshot(k));
-const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
+const plain = (value: unknown): unknown =>
+  value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 
 function scenario(id: string): Scenario {
   const scn = registry[id];
@@ -98,20 +99,37 @@ describe('snapshots', () => {
     ).toContain(text);
   });
 
-  it('never show the model text before an LLM request has carried it (all scenarios)', () => {
+  it('show the model exactly the latest LLM request, in every scenario', () => {
     for (const scn of scenarios) {
       const p = new Playback(scn);
-      const requests: string[] = [];
+      let latest: unknown = scn.initial_state['model_visible_messages'];
+      let requests = 0;
       for (let k = 1; k <= p.length; k += 1) {
         const e = p.event(k) as ScenarioEvent;
-        if (e.protocol === 'LLM_API' && e.message_type === 'REQUEST')
-          requests.push(JSON.stringify(e.payload));
-        const visible = p.snapshot(k).state['model_visible_messages'];
-        if (visible === undefined) continue;
-        const shown = JSON.stringify(visible);
-        expect(shown === '[]' || requests.includes(shown), `${scn.id} at ${k}`).toBe(true);
+        if (e.protocol === 'LLM_API' && e.message_type === 'REQUEST') {
+          latest = e.payload;
+          requests += 1;
+        }
+        expect(plain(p.snapshot(k).state['model_visible_messages']), `${scn.id} at ${k}`).toEqual(
+          plain(latest),
+        );
       }
+      if (scn.initial_state['model_visible_messages'] !== undefined)
+        expect(requests, scn.id).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('isolation', () => {
+  it('copies the events, so later changes to the registry do not reach snapshots', () => {
+    const scn = structuredClone(scenario('mcp-balance'));
+    const p = new Playback(scn);
+    (scn.events[2] as ScenarioEvent).state_changes = [
+      { path: 'mcp_state.server', op: 'set', value: 'changed' },
+    ];
+    expect(JSON.stringify(p.snapshot(3).state['mcp_state'])).not.toContain('changed');
+    expect(Object.isFrozen(p.event(1))).toBe(true);
+    expect(Object.isFrozen(p.retrievalConfig)).toBe(true);
   });
 });
 
@@ -145,9 +163,18 @@ describe('reducer errors', () => {
 describe('parameter changes', () => {
   it('keep snapshots before the first changed event and recompute the rest', () => {
     const scn = scenario('rag-query');
+    // The derived event's state change depends on top_k, so a stale snapshot would show.
     const derive = (s: Scenario, config: Readonly<Record<string, unknown>>): ScenarioEvent[] =>
       s.events.map((e) =>
-        e.id === 'retrieve-06' ? { ...e, explanation: `top_k ${String(config['top_k'])}` } : e,
+        e.id === 'retrieve-06'
+          ? {
+              ...e,
+              explanation: `top_k ${String(config['top_k'])}`,
+              state_changes: [
+                { path: 'retrieval.retained', op: 'set', value: [`k${String(config['top_k'])}`] },
+              ],
+            }
+          : e,
       );
     const p = new Playback(scn, { deriveEvents: derive });
     const before = all(p);
@@ -158,6 +185,8 @@ describe('parameter changes', () => {
     expect(after[changed - 1]?.state).toBe(before[changed - 1]?.state);
     expect(after[changed - 1]?.retrieval_config['top_k']).toBe(4);
     expect(p.event(changed)?.explanation).toBe('top_k 4');
+    expect(after[changed]?.state['retrieval']).toEqual({ retained: ['k4'] });
+    expect(after[p.length]?.state['retrieval']).toEqual({ retained: ['k4'] });
     expect(p.setParameters({ top_k: 4 })).toBe(p.length + 1);
     expect(() => p.setParameters({ nope: 1 })).toThrow(/has no parameter nope/);
   });
@@ -169,18 +198,23 @@ describe('parameter changes', () => {
 });
 
 class FakeClock implements Clock {
-  pending: { callback: () => void; ms: number } | undefined;
+  readonly timers = new Set<{ callback: () => void; ms: number }>();
   setTimeout(callback: () => void, ms: number): unknown {
-    this.pending = { callback, ms };
-    return this.pending;
+    const timer = { callback, ms };
+    this.timers.add(timer);
+    return timer;
   }
   clearTimeout(handle: unknown): void {
-    if (handle === this.pending) this.pending = undefined;
+    this.timers.delete(handle as { callback: () => void; ms: number });
+  }
+  get pending(): { callback: () => void; ms: number } | undefined {
+    return [...this.timers][0];
   }
   fire(): void {
-    const p = this.pending;
-    this.pending = undefined;
-    p?.callback();
+    const timer = this.pending;
+    if (!timer) return;
+    this.timers.delete(timer);
+    timer.callback();
   }
 }
 
@@ -250,6 +284,73 @@ describe('player', () => {
     expect(seen).toEqual(['playing@0', 'paused@0', 'paused@1']);
     expect(() => player.setSpeed(3 as 1)).toThrow(RangeError);
     expect(SPEEDS).toEqual([0.5, 1, 2, 4]);
+  });
+});
+
+describe('player edge cases', () => {
+  const make = (scn = scenario('mcp-balance')): [Player, FakeClock] => {
+    const clock = new FakeClock();
+    return [new Player(new Playback(scn), clock), clock];
+  };
+
+  it('tells listeners when reset pauses playback at the initial state', () => {
+    const [player, clock] = make();
+    const seen: string[] = [];
+    player.subscribe((p) => seen.push(`${p.status}@${p.cursor}`));
+    player.play();
+    player.reset();
+    expect(seen).toEqual(['playing@0', 'paused@0']);
+    expect(clock.timers.size).toBe(0);
+  });
+
+  it('keeps one timer when a listener changes speed during a tick', () => {
+    const [player, clock] = make();
+    player.subscribe((p) => {
+      if (p.cursor === 1 && p.speed === 1) p.setSpeed(2);
+    });
+    player.play();
+    clock.fire();
+    expect(clock.timers.size).toBe(1);
+    expect(clock.pending?.ms).toBe(STEP_INTERVAL_MS / 2);
+  });
+
+  it('restarts the interval after manual navigation while playing', () => {
+    const [player, clock] = make();
+    player.play();
+    const first = clock.pending;
+    player.next();
+    expect(clock.timers.size).toBe(1);
+    expect(clock.pending).not.toBe(first);
+    expect(player.status).toBe('playing');
+    player.jump(player.playback.length);
+    expect(player.status).toBe('paused');
+    expect(clock.timers.size).toBe(0);
+  });
+
+  it('clamps the cursor when a parameter change shortens the scenario', () => {
+    const scn = scenario('rag-query');
+    const derive = (s: Scenario, config: Readonly<Record<string, unknown>>): ScenarioEvent[] =>
+      config['top_k'] === 1 ? s.events.slice(0, 5) : s.events;
+    const player = new Player(new Playback(scn, { deriveEvents: derive }), new FakeClock());
+    const seen: number[] = [];
+    player.subscribe((p) => seen.push(p.cursor));
+    player.jump(10);
+    player.setParameters({ top_k: 1 });
+    expect(player.cursor).toBe(5);
+    expect(player.snapshot.cursor).toBe(5);
+    expect(seen).toEqual([10, 5]);
+  });
+
+  it('stops and forgets listeners on dispose', () => {
+    const [player, clock] = make();
+    let calls = 0;
+    player.subscribe(() => (calls += 1));
+    player.play();
+    player.dispose();
+    expect(clock.timers.size).toBe(0);
+    expect(player.status).toBe('paused');
+    player.next();
+    expect(calls).toBe(1);
   });
 });
 

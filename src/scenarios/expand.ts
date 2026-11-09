@@ -117,8 +117,18 @@ export function expandVariant(base: Scenario, variant: Variant, problems: string
   for (const [name, value] of Object.entries(variant.parameter_overrides ?? {})) {
     const parameter =
       scn.parameters && Object.hasOwn(scn.parameters, name) ? scn.parameters[name] : undefined;
-    if (parameter) parameter.default = structuredClone(value);
-    else problems.push(`${variant.id}: parameter_overrides names unknown parameter ${name}`);
+    if (parameter) {
+      const { min, max } = parameter;
+      if (
+        typeof value === 'number' &&
+        ((min !== undefined && value < min) || (max !== undefined && value > max))
+      ) {
+        problems.push(
+          `${variant.id}: parameter_overrides ${name} ${value} is outside ${String(min)}..${String(max)}`,
+        );
+      }
+      parameter.default = structuredClone(value);
+    } else problems.push(`${variant.id}: parameter_overrides names unknown parameter ${name}`);
   }
   if (variant.question !== undefined) scn.question = variant.question;
   scn.title = variant.title;

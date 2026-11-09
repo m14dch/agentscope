@@ -208,9 +208,13 @@ function checkScenario(
       }
     }
     for (const ch of list(e.context_changes).map(obj)) {
-      const rule = CONTEXT_ACTIONS[text(ch['target'])];
-      if (ch['action'] !== rule)
-        err(where, `context_change on ${String(ch['target'])} must use action ${String(rule)}`);
+      const target = text(ch['target']);
+      const rule = Object.hasOwn(CONTEXT_ACTIONS, target) ? CONTEXT_ACTIONS[target] : undefined;
+      if (rule === undefined)
+        err(where, `context_change has unknown target ${String(ch['target'])}`);
+      else if (ch['action'] !== rule) {
+        err(where, `context_change on ${String(ch['target'])} must use action ${rule}`);
+      }
       if (
         ch['target'] === 'model_visible_messages' &&
         (!Object.hasOwn(ch, 'value_ref') ||

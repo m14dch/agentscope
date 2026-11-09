@@ -3,7 +3,7 @@
  * computed forward from the initial state and cached, never by reversing side effects.
  */
 import type { Json, Scenario, ScenarioEvent } from '../scenarios/types.ts';
-import { applyEvent, type CoreSnapshot, initialSnapshot } from './reducer.ts';
+import { applyEvent, type CoreSnapshot, deepFreeze, initialSnapshot } from './reducer.ts';
 
 export type RetrievalConfig = Readonly<Record<string, Json>>;
 
@@ -46,8 +46,8 @@ export class Playback {
     options: PlaybackOptions = {},
   ) {
     this.derive = options.deriveEvents ?? ((s) => s.events);
-    this.config = Object.freeze(defaults(scenario));
-    this.events = this.derive(scenario, this.config);
+    this.config = deepFreeze(structuredClone(defaults(scenario)));
+    this.events = this.frozenEvents(this.config);
     this.core = [initialSnapshot(scenario)];
   }
 
@@ -58,6 +58,11 @@ export class Playback {
 
   get retrievalConfig(): RetrievalConfig {
     return this.config;
+  }
+
+  /** A frozen copy, so later changes to the registry cannot reach the snapshots. */
+  private frozenEvents(config: RetrievalConfig): readonly ScenarioEvent[] {
+    return deepFreeze(structuredClone(this.derive(this.scenario, config)));
   }
 
   event(cursor: number): ScenarioEvent | undefined {
@@ -97,8 +102,8 @@ export class Playback {
       if (!Object.hasOwn(known, name))
         throw new RangeError(`${this.scenario.id} has no parameter ${name}`);
     }
-    const config = Object.freeze({ ...this.config, ...structuredClone(values) });
-    const events = this.derive(this.scenario, config);
+    const config = deepFreeze({ ...this.config, ...structuredClone(values) });
+    const events = this.frozenEvents(config);
     let first = 0;
     while (
       first < Math.min(events.length, this.events.length) &&

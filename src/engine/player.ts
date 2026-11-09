@@ -26,6 +26,8 @@ export class Player {
   private playing = false;
   private rate: Speed = 1;
   private timer: unknown;
+  /** Identifies the live timer; a callback from any other timer does nothing. */
+  private token: object | undefined;
   private readonly listeners = new Set<(player: Player) => void>();
 
   constructor(
@@ -59,27 +61,28 @@ export class Player {
     return () => this.listeners.delete(listener);
   }
 
-  /** Go to the first step. */
+  /** Go to the first step; playback keeps its status. */
   start(): void {
-    this.go(Math.min(1, this.playback.length));
+    this.navigate(Math.min(1, this.playback.length));
   }
 
   next(): void {
-    this.go(this.position + 1);
+    this.navigate(this.position + 1);
   }
 
   previous(): void {
-    this.go(this.position - 1);
+    this.navigate(this.position - 1);
   }
 
   jump(cursor: number): void {
-    this.go(cursor);
+    this.navigate(cursor);
   }
 
   /** Return to the initial state before any step and pause. */
   reset(): void {
     this.stop();
-    this.go(0);
+    this.move(0);
+    this.emit();
   }
 
   play(): void {
@@ -104,39 +107,68 @@ export class Player {
     if (!SPEEDS.includes(speed))
       throw new RangeError(`speed ${String(speed)} is not one of ${SPEEDS.join(', ')}`);
     this.rate = speed;
+    if (this.playing) this.schedule();
+    this.emit();
+  }
+
+  /** Changes parameters; the cursor stays, clamped to the new number of steps. */
+  setParameters(values: Parameters<Playback['setParameters']>[0]): number {
+    const changed = this.playback.setParameters(values);
+    this.move(this.position);
+    if (this.atEnd && this.playing) this.stop();
+    this.emit();
+    return changed;
+  }
+
+  /** Stops the timer and removes all listeners. */
+  dispose(): void {
+    this.stop();
+    this.listeners.clear();
+  }
+
+  /** Manual navigation keeps playback running and restarts the interval. */
+  private navigate(cursor: number): void {
+    if (!this.move(cursor)) return;
     if (this.playing) {
-      this.clock.clearTimeout(this.timer);
-      this.schedule();
+      if (this.atEnd) this.stop();
+      else this.schedule();
     }
     this.emit();
   }
 
-  /** Moves the cursor, clamped to 0..length. Manual navigation keeps playback running. */
-  private go(cursor: number): void {
+  /** Moves the cursor, clamped to 0..length; returns whether it changed. */
+  private move(cursor: number): boolean {
     const target = Math.max(0, Math.min(this.playback.length, Math.trunc(cursor)));
-    if (target === this.position) return;
+    if (target === this.position) return false;
     this.playback.snapshot(target);
     this.position = target;
-    if (this.atEnd && this.playing) this.stop();
-    this.emit();
+    return true;
   }
 
+  /** Replaces any pending timer with one for the next step. */
   private schedule(): void {
-    this.timer = this.clock.setTimeout(() => this.tick(), STEP_INTERVAL_MS / this.rate);
+    this.clock.clearTimeout(this.timer);
+    const token = {};
+    this.token = token;
+    this.timer = this.clock.setTimeout(() => this.tick(token), STEP_INTERVAL_MS / this.rate);
   }
 
-  private tick(): void {
-    if (!this.playing) return;
-    this.go(this.position + 1);
-    if (this.playing) this.schedule();
+  private tick(token: object): void {
+    if (!this.playing || token !== this.token) return;
+    this.move(this.position + 1);
+    if (this.atEnd) this.stop();
+    else this.schedule();
+    this.emit();
   }
 
   private stop(): void {
     this.clock.clearTimeout(this.timer);
+    this.timer = undefined;
+    this.token = undefined;
     this.playing = false;
   }
 
   private emit(): void {
-    for (const listener of this.listeners) listener(this);
+    for (const listener of [...this.listeners]) listener(this);
   }
 }
