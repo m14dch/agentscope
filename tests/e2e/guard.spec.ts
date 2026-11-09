@@ -57,7 +57,7 @@ test('blocks requests from a service worker', async ({ page, context, externalRe
   await expect.poll(() => externalRequests).toEqual(['https://example.org/sw']);
 });
 
-test('blocks requests fired while the page unloads', async ({ page, egressAttempts }) => {
+test('blocks requests fired while the page reloads', async ({ page, egressAttempts }) => {
   await page.goto('./');
   await page.evaluate(() =>
     window.addEventListener('pagehide', () => navigator.sendBeacon('https://example.com/beacon')),
@@ -65,4 +65,27 @@ test('blocks requests fired while the page unloads', async ({ page, egressAttemp
   await page.reload();
   // Playwright cannot see this request; the egress proxy refuses and records it.
   await expect.poll(() => egressAttempts).toEqual(['example.com:443']);
+});
+
+test('blocks requests fired when the page closes', async ({ page, egressAttempts }) => {
+  await page.goto('./');
+  await page.evaluate(() =>
+    window.addEventListener('pagehide', () => navigator.sendBeacon('https://example.com/closed')),
+  );
+  await page.close();
+  await expect.poll(() => egressAttempts).toEqual(['example.com:443']);
+});
+
+test.describe('in the default fail mode', () => {
+  test.use({ externalRequestGuard: 'fail' });
+
+  // The guard check itself is unit-tested (tests/unit/guard-check.test.ts);
+  // this proves the fixture applies it to a real browser test.
+  test('fails a test whose page closes after queueing a beacon', async ({ page }) => {
+    test.fail(true, 'The guard must fail this test from its teardown.');
+    await page.goto('./');
+    await page.evaluate(() =>
+      window.addEventListener('pagehide', () => navigator.sendBeacon('https://example.com/late')),
+    );
+  });
 });

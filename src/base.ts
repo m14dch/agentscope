@@ -1,11 +1,14 @@
 /**
  * Normalizes a deployment base path to a leading and trailing slash
- * ('agentscope' → '/agentscope/', '/' stays '/'). An empty value is an error,
- * because it would silently produce relative URLs.
+ * ('agentscope' → '/agentscope/', '/' stays '/'). Empty, relative ('./') and
+ * full-URL values are errors, because they would silently produce wrong URLs.
  */
 export function normalizeBase(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed === '') throw new Error('Base path must not be empty; use "/" for a root site.');
+  if (trimmed.includes(':') || trimmed.startsWith('.')) {
+    throw new Error(`Base path must be an absolute path such as "/agentscope/", got "${raw}".`);
+  }
   const inner = trimmed.replace(/^\/+|\/+$/g, '');
   return inner === '' ? '/' : `/${inner}/`;
 }

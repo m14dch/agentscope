@@ -1,9 +1,13 @@
-import { test as base, expect } from '@playwright/test';
+import { test as base } from '@playwright/test';
 import { EgressProxy } from './egress-proxy';
+import { guardViolations, type GuardMode } from './guard-check';
+
+/** Requests sent while a page unloads reach the proxy about 15 ms later; wait well beyond that. */
+const UNLOAD_SETTLE_MS = 250;
 
 type GuardOptions = {
   /** 'fail' (default) fails the test on any external request; 'record' only records them. */
-  externalRequestGuard: 'fail' | 'record';
+  externalRequestGuard: GuardMode;
 };
 
 type GuardFixtures = {
@@ -86,13 +90,12 @@ export const test = base.extend<GuardFixtures & GuardOptions, WorkerFixtures>({
 
     await use(context);
 
-    // Close pages first so requests fired during unload are counted too.
-    for (const page of context.pages()) await page.close({ runBeforeUnload: true });
-    if (externalRequestGuard === 'fail') {
-      expect(externalRequests, 'requests outside the app origin').toEqual([]);
-      expect(egressAttempts, 'connections refused by the egress proxy').toEqual([]);
-    }
+    // Close pages and give requests fired during unload time to arrive, so they are counted too.
+    await Promise.all(context.pages().map((page) => page.close()));
+    if (externalRequestGuard === 'fail') await new Promise((r) => setTimeout(r, UNLOAD_SETTLE_MS));
+    const violations = guardViolations(externalRequestGuard, externalRequests, egressAttempts);
+    if (violations.length > 0) throw new Error(violations.join('\n'));
   },
 });
 
-export { expect };
+export { expect } from '@playwright/test';

@@ -15,8 +15,11 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    // CI builds in its own step; locally, build first so tests never see a stale dist/.
-    command: process.env.CI ? 'npm run preview' : 'npm run build && npm run preview',
+    // CI builds in its own step and fails fast if dist/ is missing; locally, build first
+    // so tests never see a stale dist/.
+    command: process.env.CI
+      ? `node -e "require('fs').accessSync('dist/index.html')" && npm run preview`
+      : 'npm run build && npm run preview',
     url: `${ORIGIN}${BASE_PATH}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

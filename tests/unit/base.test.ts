@@ -31,4 +31,9 @@ describe('normalizeBase', () => {
     expect(() => normalizeBase('')).toThrow(/must not be empty/);
     expect(() => normalizeBase('  ')).toThrow(/must not be empty/);
   });
+
+  it('rejects relative and full-URL bases', () => {
+    expect(() => normalizeBase('./')).toThrow(/absolute path/);
+    expect(() => normalizeBase('https://cdn.example/x/')).toThrow(/absolute path/);
+  });
 });
