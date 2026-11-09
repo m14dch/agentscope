@@ -18,6 +18,12 @@ export interface ValidationContext {
   revision: string;
 }
 
+/** agent_state is an append-only log; model_visible_messages is replaced by each LLM request. */
+const CONTEXT_ACTIONS: Record<string, string> = {
+  agent_state: 'append',
+  model_visible_messages: 'set',
+};
+
 const ENUM_FIELDS = ['protocol', 'transport', 'execution_type', 'message_type'];
 
 const PROTOCOL_VERSION = 'io.modelcontextprotocol/protocolVersion';
@@ -191,6 +197,27 @@ function checkScenario(
     }
     for (const k of Object.keys(obj(e.tracked_values))) {
       if (!ctx.lineage.has(k)) err(where, `untracked lineage key ${k}`);
+    }
+    for (const ch of list(e.state_changes).map(obj)) {
+      if (
+        (ch['op'] !== 'set' && ch['op'] !== 'append') ||
+        Object.hasOwn(ch, 'value') === Object.hasOwn(ch, 'value_ref')
+      ) {
+        err(where, 'state_change needs op set or append and exactly one of value and value_ref');
+      }
+    }
+    for (const ch of list(e.context_changes).map(obj)) {
+      const rule = CONTEXT_ACTIONS[text(ch['target'])];
+      if (ch['action'] !== rule)
+        err(where, `context_change on ${String(ch['target'])} must use action ${String(rule)}`);
+      if (
+        ch['target'] === 'model_visible_messages' &&
+        (!Object.hasOwn(ch, 'value_ref') ||
+          e.protocol !== 'LLM_API' ||
+          e.message_type !== 'REQUEST')
+      ) {
+        err(where, 'model_visible_messages changes only on LLM requests, with a value_ref');
+      }
     }
     for (const ch of [...list(e.state_changes), ...list(e.context_changes)].map(obj)) {
       const ref = ch['value_ref'];

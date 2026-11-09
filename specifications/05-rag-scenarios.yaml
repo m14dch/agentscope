@@ -1301,7 +1301,7 @@ scenarios:
         account has no debit card and cannot be used for card payments. One withdrawal per month
     context_changes:
     - target: agent_state
-      action: set
+      action: append
       value_ref: payload.prompt_after
       description: Grounded prompt assembled; not yet model-visible
   - id: retrieve-10

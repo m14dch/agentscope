@@ -38,9 +38,12 @@ event_schema:
     tracked_values: Map of lineage keys (see lineage.tracked) to values or lists of
       values present in or produced by this event
     state_changes: 'List of {path, op: set | append, value | value_ref}. value_ref is
-      a dotted path into this event (for example payload.result.tools).'
-    context_changes: 'List of {target: agent_state | model_visible_messages, action:
-      set | append, description, value_ref?}'
+      a dotted path into this event (for example payload.result.tools). path is a dotted
+      path into the snapshot; set replaces the value at path, append adds to the list at
+      path.'
+    context_changes: 'List of {target, action, description, value_ref?}. target agent_state
+      takes action append only; target model_visible_messages takes action set only, with
+      a value_ref, and only on LLM requests.'
     prediction: 'Optional {prompt}: a question shown before this event runs, ending with
       "?"; the event itself answers it'
 phase_schema:
@@ -65,10 +68,28 @@ state_model:
   - retrieval_config
   - lineage
   initial_state: Scenario-provided immutable fixture
+  snapshot: 'The engine computes, for each cursor, a snapshot of every initial_state field
+    plus cursor, selected_event_id, retrieval_config and lineage. playback_status and
+    view_mode belong to the player and the UI, not to snapshots.'
+  cursor: 0 is the initial state before any event; k is the state after events 1 to k.
+    selected_event_id is the ID of event k, absent at 0.
   reducer: Replay state_changes and context_changes from initial state through cursor
+  reducer_rules:
+  - 'state_changes: set replaces the value at path; append adds the value to the list
+    at path. The value is value, or value_ref resolved in the event. A path whose parent
+    does not exist, or an append to a value that is not a list, is a scenario error.'
+  - 'agent_state is the agent''s working memory in order: each agent_state change appends
+    {event, description, value?}, where value is the resolved value_ref.'
+  - 'model_visible_messages is everything the model has seen: each LLM request replaces
+    it with its resolved value_ref, the request payload (messages and tool definitions).'
+  - 'lineage maps each tracked key to its occurrences {event, value} in events 1 to cursor,
+    in order.'
+  - 'retrieval_config maps each scenario parameter to its current value: the default,
+    replaced by the variant''s parameter_overrides, then by the learner''s changes.'
   random_access: Recompute from initial state or cached deterministic snapshots
   parameter_change: Regenerate derived events and downstream snapshots with pure functions.
-    Break score ties by stable chunk ID.
+    Snapshots before the first changed event stay valid. Break score ties by stable chunk
+    ID.
   backward: No imperative reverse side effects
 invariants:
 - Event IDs unique across the expanded registry
@@ -153,7 +174,8 @@ variant_format:
   - Set scenario_id to the variant ID and renumber sequence from 1
   - Prefix every event ID and pair_id with '<variant id>:'
   - Take the scenario ID and title from the variant, the question if given, and the
-    headline from the variant's lesson; keep every other base field
+    headline from the variant's lesson; parameter_overrides replace the defaults of the
+    named parameters; keep every other base field
   - Validate the expanded scenario
 composition_format:
   description: Used by the Combined scenario (06-comparison-scenarios.yaml).

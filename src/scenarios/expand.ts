@@ -114,6 +114,12 @@ export function expandVariant(base: Scenario, variant: Variant, problems: string
         problems.push(`${variant.id}: unknown operation ${(op as { op: string }).op}`);
     }
   }
+  for (const [name, value] of Object.entries(variant.parameter_overrides ?? {})) {
+    const parameter =
+      scn.parameters && Object.hasOwn(scn.parameters, name) ? scn.parameters[name] : undefined;
+    if (parameter) parameter.default = structuredClone(value);
+    else problems.push(`${variant.id}: parameter_overrides names unknown parameter ${name}`);
+  }
   if (variant.question !== undefined) scn.question = variant.question;
   scn.title = variant.title;
   // A variant is presented by its lesson.

@@ -91,6 +91,11 @@ def expand_variant(base, var):
             events[i:i] = copy.deepcopy(op["events"])
         else:
             err(var["id"], f"unknown operation {kind}")
+    for name, value in var.get("parameter_overrides", {}).items():
+        if name not in scn.get("parameters", {}):
+            err(var["id"], f"parameter_overrides names unknown parameter {name}")
+        else:
+            scn["parameters"][name]["default"] = copy.deepcopy(value)
     if "question" in var:
         scn["question"] = var["question"]
     scn["title"] = var["title"]
@@ -187,6 +192,16 @@ def check_scenario(scn, ctx):
         for k in e.get("tracked_values", {}):
             if k not in ctx["lineage"]:
                 err(where, f"untracked lineage key {k}")
+        for ch in e.get("state_changes", []):
+            if ch.get("op") not in ("set", "append") or ("value" in ch) == ("value_ref" in ch):
+                err(where, "state_change needs op set or append and exactly one of value and value_ref")
+        for ch in e.get("context_changes", []):
+            rule = {"agent_state": "append", "model_visible_messages": "set"}.get(ch.get("target"))
+            if ch.get("action") != rule:
+                err(where, f"context_change on {ch.get('target')} must use action {rule}")
+            if ch.get("target") == "model_visible_messages" and (
+                    "value_ref" not in ch or e["protocol"] != "LLM_API" or e["message_type"] != "REQUEST"):
+                err(where, "model_visible_messages changes only on LLM requests, with a value_ref")
         for ch in e.get("state_changes", []) + e.get("context_changes", []):
             if "value_ref" in ch:
                 try:
