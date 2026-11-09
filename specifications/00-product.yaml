@@ -1,5 +1,5 @@
 product: AgentScope
-spec_version: 2.0.0
+spec_version: 3.0.0
 title: AgentScope — See how AI systems work, step by step
 description: Offline interactive protocol and context-flow simulator for MCP, RAG
   and agent workflows.
@@ -14,7 +14,7 @@ audience:
 learning_outcomes:
 - Trace each protocol request and response
 - Distinguish model intent from agent execution
-- Explain MCP initialization, tool discovery and tool execution
+- Explain MCP per-request versioning, server discovery, tool discovery and tool execution
 - Explain RAG ingestion, indexing, retrieval and generation
 - Inspect model-visible context separately from agent state
 - Identify transport, authentication and trust boundaries
@@ -47,6 +47,7 @@ non_goals:
 shared_domain:
   name: Example Bank (fictional)
   api_base: https://api.example-bank.test
+  mcp_endpoint: https://mcp.example-bank.test/mcp
   customer:
     id: '123'
     name: Alex Example
@@ -55,12 +56,28 @@ shared_domain:
       currency: CHF
     account_type: Everyday
   documents:
-  - openapi.yaml
-  - authentication.md
-  - balance-api.md
-  - release-notes.md
-  - everyday-account.md
-  - savings-account.md
+  - id: everyday-account.md
+    used_by: RAG index
+  - id: savings-account.md
+    used_by: RAG index
+  - id: authentication.md
+    used_by: RAG index (distractor)
+  - id: balance-api.md
+    used_by: RAG index (distractor)
+  - id: release-notes.md
+    used_by: RAG index (partly relevant)
+  - id: openapi.yaml
+    used_by: MCP resource in mcp-resources; not indexed
+  - id: community-faq.md
+    used_by: Untrusted document in rag-prompt-injection only
+  fixture_locations:
+    rag_documents: 05-rag-scenarios.yaml fixtures.documents
+    openapi_yaml: 04-mcp-scenarios.yaml fixtures.openapi_yaml
+primary_questions:
+  mcp: What is the current balance of my bank account?
+  rag: What are the conditions for the different bank accounts you offer?
+  combined: What is my current account balance, and would another account type offer
+    better conditions?
 implementation_priority:
 - simulation-engine
 - mcp-happy-path

@@ -1,48 +1,62 @@
 product: AgentScope
-spec_version: 2.0.0
+spec_version: 3.0.0
 mcp:
-  pinned_protocol_revision: '2025-06-18'
+  pinned_protocol_revision: '2026-07-28'
   primary_transport: Streamable HTTP
-  reference: https://modelcontextprotocol.io/specification/2025-06-18
+  reference: https://modelcontextprotocol.io/specification/2026-07-28
   validation:
-  - initialize request/response capabilities and version
-  - initialized notification without id
-  - tools/list schema
-  - tools/call request/result schema
+  - Every request carries params._meta with io.modelcontextprotocol/protocolVersion
+    and io.modelcontextprotocol/clientCapabilities, plus clientInfo
+  - server/discover request and DiscoverResult schema
+  - tools/list schema, including ttlMs and cacheScope
+  - tools/call request and result schema, including structuredContent matching outputSchema
   - resources/list and resources/read schema
+  - Every result carries resultType
   - JSON-RPC errors vs tool isError
-  - HTTP/SSE behavior and session semantics where illustrated
-  - Streamable HTTP POST carries one message and accepts JSON and SSE. An accepted
-    initialized notification returns empty HTTP 202.
+  - Streamable HTTP POST carries one message, accepts JSON and SSE, and mirrors the
+    body in MCP-Protocol-Version, Mcp-Method and (for tools/call and resources/read)
+    Mcp-Name headers
   do_not_assume:
   - Every MCP message is its own TCP connection
+  - MCP needs an initialize handshake or a protocol-level session (removed in 2026-07-28)
   - MCP automatically converts OpenAPI
   - LLM directly calls MCP server
   - MCP client always runs in separate process
-  - MCP server inherits user identity
+  - MCP server inherits user identity or forwards the user's token to its backend
   - Tool result automatically becomes model-visible
+  - Tool annotations or serverInfo are trustworthy
 trust_boundaries:
 - id: user-to-agent
   risk: Untrusted user input
   mitigation: Validate requests and permissions
 - id: agent-to-llm
   risk: Sensitive context disclosure
-  mitigation: Send only authorized data
+  mitigation: Send only authorized data and only the fields the task needs
 - id: agent-to-mcp
   risk: Unauthorized tool invocation
-  mitigation: Tool allowlists, input validation, user approval for sensitive actions
+  mitigation: Tool allowlists, input validation, authorization of arguments against
+    the authenticated identity, user approval for sensitive actions
 - id: mcp-to-rest
   risk: Credential and authorization misuse
-  mitigation: Distinct backend credentials, least privilege, redacted demo token
+  mitigation: Distinct backend credentials, least privilege, no token passthrough,
+    redacted demo tokens
+- id: tool-to-llm
+  risk: Prompt injection or sensitive data in tool output
+  mitigation: Treat tool results as data, keep them in tool messages, preserve instruction
+    hierarchy
 - id: rag-to-llm
   risk: Prompt injection from retrieved text
-  mitigation: Treat retrieved text as untrusted data, preserve instruction hierarchy
+  mitigation: Treat retrieved text as untrusted data, wrap it with provenance and trust
+    labels, preserve instruction hierarchy
 - id: vector-search
   risk: Cross-user document leakage
-  mitigation: Document-level access filters before retrieval
+  mitigation: Document-level access filters applied inside the search
 error_taxonomy:
-  tool_execution: Successful JSON-RPC response with MCP tool result isError=true
-  protocol: JSON-RPC error object
+  tool_execution: Successful JSON-RPC response with MCP tool result isError=true (backend
+    failures, invalid argument values, business rule failures)
+  protocol: 'JSON-RPC error object: -32602 unknown tool or malformed request, -32601
+    method not found (HTTP 404), -32020 header mismatch (HTTP 400), -32022 unsupported
+    protocol version (HTTP 400)'
   transport: HTTP failure or connection problem; not equivalent to tool failure
   model: Provider API failure or refusal
 demo_policy:
