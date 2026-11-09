@@ -78,12 +78,15 @@ design:
     - 'Contrast on paper: ink, ink-muted, accent-text and error reach 4.5:1; accent reaches
       3:1 for marks. Ink on selection reaches 4.5:1.'
     - Enforcement - the source is scanned for hex values and colour functions outside the
-      tokens, and a browser test checks that every computed colour on rendered pages is a
-      token (or transparent, none or a context paint).
+      tokens, and a browser test checks every computed colour on rendered pages (default,
+      focused and selected states, pseudo-elements and SVG gradient stops) is a token or
+      transparent, none or a context paint, and that no shadow or gradient is used.
     - No shadows, gradients, rounded cards, decorative icons, logos or background textures.
       Light theme only in v1.
   labels_and_charts:
   - Label data directly next to what it names; no legends.
+  - 'Underlines have two meanings only: solid ink on Naples Yellow marks a tracked or
+    selected value; dotted ink-muted marks a control that folds or expands content.'
   - Every arrow carries a short text label (for example "MCP · tools/call").
   - Scores are dots on a 0–1 scale with the threshold as one labelled line; retained
     chunks use the accent. No bars from an arbitrary origin; no gridlines unless they
