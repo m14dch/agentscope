@@ -119,6 +119,7 @@ repo_layout:
 - specifications/tools/validate_specs.py
 - specifications/tools/requirements.txt
 - specifications/tools/mcp-schema-2026-07-28.json
+- specifications/tools/LICENSE-mcp-schema
 - index.html
 - vite.config.ts
 - playwright.config.ts
