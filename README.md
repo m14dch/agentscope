@@ -30,6 +30,26 @@ Locally, `npm run test:e2e` builds first and then serves `dist/`. If a preview s
 
 The site is served under `/agentscope/` by default. Set `AGENTSCOPE_BASE=/` to build for a root site.
 
+## Design rules
+
+[`specifications/design-handover.md`](specifications/design-handover.md) sets the direction:
+Principiae (Jean-luc Doumont, _Trees, maps, and theorems_) decides how information is communicated,
+Sanzo Wada's Color Combination No. 303 decides how it looks. The governing rule is to **maximise the
+signal-to-noise ratio**: anything that carries no information is removed. The concrete rules (grid,
+type, colour tokens and contrast, charts, motion, writing) are in `specifications/02-ui-ux.yaml` →
+`design`; the live specimen at [`#/design`](https://m14dch.github.io/agentscope/#/design) shows them
+in use.
+
+- Deep Slate Olive carries text and data on a cream page, Neutral Gray carries structure only,
+  Peach Red marks the current step, Naples Yellow marks what the learner selected or tracks, and
+  errors always carry a × and a label naming the kind. Colour is never the only signal.
+- Colours exist only as tokens in `src/styles/tokens.css`. A unit test fails on hex values or
+  colour functions anywhere else in `src/`, `public/` or `index.html`, and on tokens that differ
+  from the spec or miss its contrast rules. A browser test fails if any colour the rendered pages
+  actually use is not a token.
+- Label data directly; no legends, shadows, gradients, rounded cards or decorative icons.
+- Font licences ship with the site in `public/licenses/fonts.txt`.
+
 ## Deployment
 
 Every push to `main` runs `.github/workflows/pages.yml`: all CI checks, a build with the base path from

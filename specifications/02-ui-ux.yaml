@@ -1,5 +1,111 @@
 product: AgentScope
 spec_version: 3.0.0
+design:
+  sources:
+  - specifications/design-handover.md (Principiae decides how information is communicated;
+    Sanzo Wada No. 303 decides how it looks)
+  - Jean-luc Doumont, Trees, maps, and theorems (summaries at https://principiae.be/X0100.php#Summaries)
+  - Swiss Style (International Typographic Style)
+  handover_decisions:
+  - Palette is Sanzo Wada No. 303 with the handover's supporting colours, plus one derived
+    ink-muted and one darker peach for small text, both needed for contrast.
+  - Diagrams sit on the light reading surface; the dark olive surface is not used (owner
+    decision), so one set of colour rules applies everywhere.
+  - Peach Red marks the current step; Naples Yellow marks what the learner selected or
+    tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
+    label naming the kind.
+  - The RAG question changes to the handover's question and the communication layer
+    (learning questions, takeaways, prediction prompts) is added to the scenarios in
+    issue #22.
+  - Self-hosted fonts stay because the app must work offline; no other dependency is
+    added for the design.
+  - Supporting colours are introduced only when a need appears (handover 4.1). White
+    reading surfaces, information and success are not used yet; white on cream (1.05:1)
+    would add a near-invisible box that carries no information.
+  governing_rule: Maximise the signal-to-noise ratio. Viewers already process protocols,
+    payloads, context and trust boundaries; anything that carries no information is
+    noise and is removed.
+  removal_test: For every line, box, colour, label, icon, animation and word, ask what
+    the viewer loses if it disappears. If nothing, remove it. Prefer whitespace and
+    position to borders and boxes.
+  supporting_laws:
+  - 'Adapt to the audience: experienced engineers get exact payloads and precise terms,
+    without decoration.'
+  - 'Use effective redundancy: state each step''s message in words and show it in the
+    diagram. Colour is never the only carrier of meaning.'
+  grid: 12 columns on an 8 px baseline. Flush-left, ragged-right, asymmetric. Diagram
+    and inspector share alignment lines. Side margin 16 px on phones, 24 px on tablets,
+    48 px on desktops; gutter 16 px, 24 px from tablet width.
+  typography:
+    text: Inter (variable, self-hosted, OFL), Latin subset
+    code: JetBrains Mono (variable, self-hosted, OFL), Latin subset
+    sizes: 'Three only: small 13/16 px for labels and metadata, text 16/24 px, title
+      24/32 px. At most two per region.'
+    weights: 400 and 600 only
+    hierarchy: Size, weight and position; never colour alone
+    figures: Tabular figures for numbers; numbers right-aligned in tables
+  colour:
+    tokens:
+      paper: '#fff9ea'
+      ink: '#253122'
+      ink-muted: '#5c6658'
+      rule: '#b6bfc1'
+      accent: '#f15a30'
+      accent-text: '#bc4625'
+      selection: '#fbe6a0'
+      error: '#b73535'
+    names:
+      paper: Cream (supporting)
+      ink: Deep Slate Olive (Wada 303)
+      ink-muted: Derived from Deep Slate Olive for secondary text
+      rule: Neutral Gray (Wada 303)
+      accent: Peach Red (Wada 303)
+      accent-text: Darker Peach Red for small text
+      selection: Naples Yellow (Wada 303)
+      error: Error (supporting)
+    use:
+    - Paper (cream) is the page and the reading surface.
+    - Ink carries text and data. Ink-muted carries secondary text and past-step labels.
+      Rule (Neutral Gray) carries structure only (lifelines, axes, separators), never
+      text or meaning.
+    - 'Accent (Peach Red) marks what to look at now: the current step and its pair, and
+      retained chunks. It is used for lines and marks; text in that role uses accent-text.'
+    - Selection (Naples Yellow) is a background for what the learner selected or tracks,
+      such as lineage values, always together with an ink underline so the mark does not
+      depend on colour. Never put accent marks on selection.
+    - Error is used only for errors, always with a × and a text label naming the kind.
+    - No other colour values exist outside the tokens, and no large saturated areas.
+    - 'Contrast on paper: ink, ink-muted, accent-text and error reach 4.5:1; accent reaches
+      3:1 for marks. Ink on selection reaches 4.5:1.'
+    - Enforcement - the source is scanned for hex values and colour functions outside the
+      tokens, and a browser test checks every computed colour on rendered pages (default,
+      focused and selected states, pseudo-elements and SVG gradient stops) is a token or
+      transparent, none or a context paint, and that no shadow or gradient is used.
+    - No shadows, gradients, rounded cards, decorative icons, logos or background textures.
+      Light theme only in v1.
+  labels_and_charts:
+  - Label data directly next to what it names; no legends.
+  - 'Underlines have two meanings only: solid ink on Naples Yellow marks a tracked or
+    selected value; dotted ink-muted marks a control that folds or expands content.'
+  - Every arrow carries a short text label (for example "MCP · tools/call").
+  - Scores are dots on a 0–1 scale with the threshold as one labelled line; retained
+    chunks use the accent. No bars from an arbitrary origin; no gridlines unless they
+    answer a question.
+  - The 2D projection is a plain scatter plot with points labelled directly and axes
+    named by meaning.
+  - Charts fit the available width with text at its real size. Only sequence diagrams
+    keep a fixed scale and scroll horizontally on narrow screens.
+  - Figures expose their text to assistive technology; scrollable regions are named
+    and keyboard-focusable.
+  motion: Motion only shows causality (an arrow draws from sender to receiver). Nothing
+    else animates; with reduced motion nothing animates.
+  writing:
+  - Each step's explanation is the message, one sentence, shown first; details on demand.
+  - Titles are messages or plain nouns, never filler such as "Overview" or "Details".
+  - 'Structure stays shallow and narrow: at most 3 levels and 5 items per level.'
+  specimen: 'The route #/design shows type, colours, each arrow kind, a payload block
+    and a score plot, so the system can be reviewed on the live site. It is not linked
+    from the app.'
 navigation:
   tabs:
   - MCP
@@ -11,28 +117,36 @@ layout:
   desktop:
   - 'Top bar: navigation, scenario, architecture/protocol toggle'
   - 'Main: resizable sequence diagram + payload inspector'
-  - 'Bottom: execution timeline + collapsible model-context and lineage panels'
+  - 'Bottom: execution timeline + collapsible model-context and lineage panels; one
+    panel open at a time, all but the timeline collapsed at start'
+  - 'Header: one persistent statement that everything is simulated and nothing leaves
+    the browser'
   tablet: Stack inspector below horizontally scrollable diagram
   minimum_lifeline_width_px: 110
 diagram:
   participants: Scenario-defined and ordered; labels from the participant registry
     (01-architecture.yaml)
   arrows: One per actual logical message or explicitly labeled internal operation
-  styles:
-    model_api: violet
-    mcp: teal
-    rest: blue
-    internal: neutral
-    error: red
+  encoding:
+    principle: Protocol is shown by the arrow's text label and line style, not by hue.
+    network: solid ink line, 1.5 px
+    in_process: thin solid ink-muted line, 1 px
+    simulated_internal: dashed ink-muted line, 1 px (4 px dash, 3 px gap)
+    request: filled arrowhead
+    response: open arrowhead
+    current_and_pair: accent line, 2 px, and the label in weight 600, so the current step
+      stays distinct in greyscale
+    error: error line; the label starts with × and names the kind (tool, protocol, transport)
   visibility:
-    past: visible subdued
+    past: line keeps its kind's style; label in ink-muted
     current: emphasized
     future: hidden in protocol mode
   pair_highlighting: true
   auto_scroll_to_current: true
   accessible_without_color: true
-  rendering: SVG lifelines, arrows and labels generated from ordered event data. Show
-    a simulation label on illustrated network exchanges.
+  rendering: SVG lifelines, arrows and labels generated from ordered event data. The
+    header states once that everything is simulated; arrows carry no per-arrow simulation
+    label.
   error_events: An event is an error when its HTTP status is 4xx/5xx, its payload has
     a JSON-RPC error object, or its MCP result has isError true. Each kind gets its
     own label (07-security-protocols.yaml error_taxonomy).
@@ -61,28 +175,34 @@ controls:
     Space: toggle play/pause
   reduced_motion: true
 inspector:
+  message_line: Always visible above the tabs. The event's explanation, then sender →
+    receiver and operation. Replaces separate Overview and Explanation tabs.
   tabs:
-  - Overview
   - Payload
   - Transport
-  - Explanation
   - Security
-  - Data lineage
+  - Lineage
+  empty_tabs: Hidden when the step has nothing for them (for example Transport on
+    in-process calls)
+  simulation_note: One line on illustrated network exchanges stating that the exchange
+    is simulated
   payload_features:
   - syntax highlighting
   - copy
   - expand/collapse JSON
   - correlated request/response
+  - repeated boilerplate (jsonrpc, _meta, repeated headers) folded to one line that
+    expands on click; never hidden
+  - fields that changed or that lineage tracks are highlighted with the selection background
+    and an ink underline
   transport_tab: Show simulated wire envelopes separately from logical payloads, including
     the MCP headers mirrored from the body (MCP-Protocol-Version, Mcp-Method, Mcp-Name).
     In-process calls have no transport envelope.
   security_tab: Lists the event's security_boundaries with risk and mitigation from
     07-security-protocols.yaml.
 context_panel:
-  views:
-  - Agent state
-  - Model-visible context
-  - Delta since previous event
+  layout: Agent state and model-visible context side by side; only the change since
+    the previous step is highlighted, in place
   rule: Tool results and retrieved text are not model-visible until a subsequent model
     request includes them
 rag_controls:

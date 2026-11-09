@@ -1,0 +1,193 @@
+/* Scoped to the specimen so none of these classes reach the app. */
+.specimen section {
+  padding-top: var(--space-6);
+}
+
+.specimen h2 {
+  margin-bottom: var(--space-2);
+}
+
+.specimen .lead,
+.specimen .note {
+  max-width: 40rem;
+}
+
+.specimen .note {
+  margin-bottom: var(--space-2);
+}
+
+.specimen .type-sample {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+  align-items: baseline;
+}
+
+.specimen .swatches {
+  display: grid;
+  grid-template-columns: var(--space-2) 7rem 7rem 1fr;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  align-items: center;
+}
+
+@media (max-width: 40rem) {
+  .specimen .swatches {
+    grid-template-columns: var(--space-2) 7rem 1fr;
+  }
+
+  .specimen .swatches .use {
+    grid-column: 2 / -1;
+    padding-bottom: var(--space-1);
+  }
+}
+
+.specimen .swatch {
+  width: var(--space-2);
+  height: var(--space-2);
+  outline: var(--line-hair) solid var(--color-rule);
+  outline-offset: -1px;
+}
+
+/* Sequence diagrams keep their scale; narrow screens scroll them. */
+.specimen .scroller {
+  overflow-x: auto;
+}
+
+.specimen .scroller svg {
+  display: block;
+  width: 40rem;
+  max-width: none;
+  height: auto;
+  overflow: visible;
+}
+
+.specimen .payload {
+  max-width: 40rem;
+  overflow-x: auto;
+}
+
+.specimen .fold {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline dotted var(--color-ink-muted);
+  text-underline-offset: 3px;
+}
+
+.specimen .folded {
+  color: var(--color-ink-muted);
+}
+
+.specimen .tracked {
+  background: var(--color-selection);
+  text-decoration: underline var(--line-hair) var(--color-ink);
+  text-underline-offset: 3px;
+}
+
+/* Dot plot in HTML: fits the width, text stays at its real size. */
+.specimen .dotplot {
+  --threshold: 0.7;
+  display: grid;
+  /* Room right of the plot for the value label of a score near 1. */
+  --value-room: var(--space-4);
+  grid-template-columns: max-content minmax(5rem, 24rem);
+  column-gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+}
+
+.specimen .dotplot > li > * {
+  padding: calc(var(--space-1) / 2) 0;
+}
+
+.specimen .dotplot li {
+  display: contents;
+}
+
+.specimen .dotplot .name {
+  text-align: right;
+  color: var(--color-ink-muted);
+}
+
+.specimen .dotplot .retained .name {
+  color: var(--color-ink);
+}
+
+.specimen .track,
+.specimen .scale {
+  position: relative;
+  margin-right: var(--value-room);
+}
+
+/* The threshold: one grey line, continuous across rows. */
+.specimen .track::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--threshold) * 100%);
+  border-left: var(--line-hair) solid var(--color-ink-muted);
+}
+
+.specimen .dot {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  left: calc(var(--x) * 100%);
+  width: var(--space-1);
+  height: var(--space-1);
+  margin: calc(var(--space-1) / -2) 0 0 calc(var(--space-1) / -2);
+  border-radius: 50%;
+  background: var(--color-ink-muted);
+}
+
+.specimen .retained .dot {
+  background: var(--color-accent);
+}
+
+/* Value labels sit on paper so the threshold line passes behind them. */
+.specimen .value {
+  position: absolute;
+  left: calc(var(--x) * 100% + var(--space-1));
+  padding: 0 2px;
+  background: var(--color-paper);
+  color: var(--color-ink-muted);
+}
+
+.specimen .scale {
+  height: var(--leading-text);
+  border-top: var(--line-hair) solid var(--color-rule);
+  color: var(--color-ink-muted);
+}
+
+.specimen .scale--top {
+  border-top: 0;
+}
+
+.specimen .scale span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.specimen .caption {
+  grid-column: 2;
+  font-size: var(--size-small);
+}
+
+.specimen .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

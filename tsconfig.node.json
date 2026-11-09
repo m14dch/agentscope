@@ -4,5 +4,6 @@
     "lib": ["ES2023", "DOM"],
     "types": ["node", "vite/client"]
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "tests/e2e", "scripts"]
+  "include": ["vite.config.ts", "playwright.config.ts", "tests/e2e", "scripts", "tests/unit/node"],
+  "exclude": []
 }

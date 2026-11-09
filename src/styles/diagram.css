@@ -1,0 +1,73 @@
+/* Sequence diagram encoding (02-ui-ux.yaml → diagram.encoding).
+   Protocol is shown by line style and the arrow's text label, never by hue. */
+.lifeline {
+  stroke: var(--color-rule);
+  stroke-width: var(--line-hair);
+}
+
+.participant {
+  fill: var(--color-ink);
+  font-size: var(--size-small);
+  font-weight: var(--weight-strong);
+}
+
+.arrow {
+  fill: none;
+  stroke: var(--color-ink);
+}
+
+.arrow--network {
+  stroke-width: var(--line-network);
+}
+
+.arrow--in-process {
+  stroke: var(--color-ink-muted);
+  stroke-width: var(--line-hair);
+}
+
+.arrow--simulated {
+  stroke: var(--color-ink-muted);
+  stroke-width: var(--line-hair);
+  stroke-dasharray: 4 3;
+}
+
+.arrow--current {
+  stroke: var(--color-accent);
+  stroke-width: var(--line-focus);
+}
+
+.arrow--error {
+  stroke: var(--color-error);
+}
+
+.arrow-label {
+  fill: var(--color-ink);
+  font-size: var(--size-small);
+}
+
+.arrow-label--error {
+  fill: var(--color-error);
+}
+
+/* Arrowheads: filled for requests, open for responses. */
+.head--request {
+  fill: context-stroke;
+  stroke: none;
+}
+
+.head--response {
+  fill: none;
+  stroke: context-stroke;
+  stroke-width: var(--line-hair);
+}
+
+/* Current step and its pair: accent line plus a bold label (survives greyscale). */
+.arrow-label--current {
+  fill: var(--color-accent-text);
+  font-weight: var(--weight-strong);
+}
+
+/* Past steps keep their line style; only the label recedes. */
+.arrow-label--past {
+  fill: var(--color-ink-muted);
+}

@@ -129,6 +129,8 @@ repo_layout:
 - package.json
 - package-lock.json
 - src/main.ts
+- src/styles/
+- src/design/
 - src/engine/
 - src/diagram/
 - src/inspectors/
@@ -136,6 +138,7 @@ repo_layout:
 - src/fixtures/
 - src/components/
 - public/sw.js
+- public/licenses/
 - tests/unit/
 - tests/e2e/
 - ".github/workflows/ci.yml"
