@@ -68,9 +68,11 @@ state_model:
   - retrieval_config
   - lineage
   initial_state: Scenario-provided immutable fixture
-  snapshot: 'The engine computes, for each cursor, a snapshot of every initial_state field
-    plus cursor, selected_event_id, retrieval_config and lineage. playback_status and
-    view_mode belong to the player and the UI, not to snapshots.'
+  snapshot: 'The engine computes, for each cursor, a snapshot of cursor, selected_event_id,
+    retrieval_config, lineage and state, which holds every initial_state field (agent_state,
+    model_visible_messages, mcp_state, rag_index, retrieval and the fixture values).
+    state_change paths address state. playback_status and view_mode belong to the player
+    and the UI, not to snapshots. Every scenario replays without error at build and startup.'
   cursor: 0 is the initial state before any event; k is the state after events 1 to k.
     selected_event_id is the ID of event k, absent at 0.
   reducer: Replay state_changes and context_changes from initial state through cursor
