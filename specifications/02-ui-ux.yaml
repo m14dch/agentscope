@@ -12,13 +12,16 @@ design:
   - Diagrams sit on the light reading surface; the dark olive surface is not used (owner
     decision), so one set of colour rules applies everywhere.
   - Peach Red marks the current step; Naples Yellow marks what the learner selected or
-    tracks. Error red is close to Peach Red in hue, so errors always carry a ✕ and a text
+    tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
     label naming the kind.
   - The RAG question changes to the handover's question and the communication layer
     (learning questions, takeaways, prediction prompts) is added to the scenarios in
     issue #22.
   - Self-hosted fonts stay because the app must work offline; no other dependency is
     added for the design.
+  - Supporting colours are introduced only when a need appears (handover 4.1). White
+    reading surfaces, information and success are not used yet; white on cream (1.05:1)
+    would add a near-invisible box that carries no information.
   governing_rule: Maximise the signal-to-noise ratio. Viewers already process protocols,
     payloads, context and trust boundaries; anything that carries no information is
     noise and is removed.
@@ -44,43 +47,39 @@ design:
   colour:
     tokens:
       paper: '#fff9ea'
-      surface: '#ffffff'
       ink: '#253122'
       ink-muted: '#5c6658'
       rule: '#b6bfc1'
       accent: '#f15a30'
       accent-text: '#bc4625'
       selection: '#fbe6a0'
-      information: '#3478a1'
-      success: '#387c60'
       error: '#b73535'
     names:
       paper: Cream (supporting)
-      surface: White (supporting)
       ink: Deep Slate Olive (Wada 303)
       ink-muted: Derived from Deep Slate Olive for secondary text
       rule: Neutral Gray (Wada 303)
       accent: Peach Red (Wada 303)
       accent-text: Darker Peach Red for small text
       selection: Naples Yellow (Wada 303)
-      information: Information (supporting)
-      success: Success (supporting)
       error: Error (supporting)
     use:
-    - Paper (cream) is the page; surface (white) is for reading-intensive blocks such
-      as payloads and the inspector.
+    - Paper (cream) is the page and the reading surface.
     - Ink carries text and data. Ink-muted carries secondary text and past-step labels.
       Rule (Neutral Gray) carries structure only (lifelines, axes, separators), never
       text or meaning.
     - 'Accent (Peach Red) marks what to look at now: the current step and its pair, and
       retained chunks. It is used for lines and marks; text in that role uses accent-text.'
     - Selection (Naples Yellow) is a background for what the learner selected or tracks,
-      such as lineage values. Never put accent marks on selection.
-    - Error is used only for errors, always with a ✕ and a text label naming the kind.
-      Information and success are used only where they carry a state the learner needs.
+      such as lineage values, always together with an ink underline so the mark does not
+      depend on colour. Never put accent marks on selection.
+    - Error is used only for errors, always with a × and a text label naming the kind.
     - No other colour values exist outside the tokens, and no large saturated areas.
-    - 'Contrast on paper and surface: ink, ink-muted, accent-text, information, success
-      and error reach 4.5:1; accent reaches 3:1 for marks. Ink on selection reaches 4.5:1.'
+    - 'Contrast on paper: ink, ink-muted, accent-text and error reach 4.5:1; accent reaches
+      3:1 for marks. Ink on selection reaches 4.5:1.'
+    - Enforcement - the source is scanned for hex values and colour functions outside the
+      tokens, and a browser test checks that every computed colour on rendered pages is a
+      token (or transparent, none or a context paint).
     - No shadows, gradients, rounded cards, decorative icons, logos or background textures.
       Light theme only in v1.
   labels_and_charts:
@@ -134,7 +133,7 @@ diagram:
     response: open arrowhead
     current_and_pair: accent line, 2 px, and the label in weight 600, so the current step
       stays distinct in greyscale
-    error: error line; the label starts with ✕ and names the kind (tool, protocol, transport)
+    error: error line; the label starts with × and names the kind (tool, protocol, transport)
   visibility:
     past: line keeps its kind's style; label in ink-muted
     current: emphasized
@@ -192,6 +191,7 @@ inspector:
   - repeated boilerplate (jsonrpc, _meta, repeated headers) folded to one line that
     expands on click; never hidden
   - fields that changed or that lineage tracks are highlighted with the selection background
+    and an ink underline
   transport_tab: Show simulated wire envelopes separately from logical payloads, including
     the MCP headers mirrored from the body (MCP-Protocol-Version, Mcp-Method, Mcp-Name).
     In-process calls have no transport envelope.
