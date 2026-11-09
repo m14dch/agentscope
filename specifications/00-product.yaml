@@ -60,6 +60,8 @@ shared_domain:
     used_by: RAG index
   - id: savings-account.md
     used_by: RAG index
+  - id: account-opening.md
+    used_by: RAG index
   - id: authentication.md
     used_by: RAG index (distractor)
   - id: balance-api.md
@@ -75,7 +77,7 @@ shared_domain:
     openapi_yaml: 04-mcp-scenarios.yaml fixtures.openapi_yaml
 primary_questions:
   mcp: What is the current balance of my bank account?
-  rag: What are the conditions for the different bank accounts you offer?
+  rag: What are the conditions for opening and maintaining a bank account?
   combined: What is my current account balance, and would another account type offer
     better conditions?
 implementation_priority:

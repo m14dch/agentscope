@@ -41,12 +41,16 @@ event_schema:
       a dotted path into this event (for example payload.result.tools).'
     context_changes: 'List of {target: agent_state | model_visible_messages, action:
       set | append, description, value_ref?}'
+    prediction: 'Optional {prompt}: a question shown before this event runs, ending with
+      "?"; the event itself answers it'
 phase_schema:
   fields:
     id: Unique within the scenario
     label: Shown in architecture mode
     semantic_phase: One of 06-comparison-scenarios.yaml semantic_phases; drives Compare
       synchronization
+    takeaway: Required. One sentence stating what the learner should understand from
+      the phase; a message, not a noun
 state_model:
   fields:
   - cursor
@@ -91,10 +95,15 @@ scenario_format:
   required:
   - id
   - title
+  - learning_question
+  - headline
   - participants
   - phases
   - events
   - initial_state
+  learning_fields:
+    learning_question: The question the scenario teaches, ending with "?"
+    headline: One sentence stating the scenario's main message
   optional:
   - question
   - parameters
@@ -114,7 +123,7 @@ variant_format:
     fixture_overrides: Optional fixture changes interpreted by the relevant engine
     parameter_overrides: Optional parameter values
     operations: Optional ordered list of edit operations
-    lesson: What the variant teaches
+    lesson: Required. One sentence stating what the variant teaches
   operations:
     patch: '{op: patch, event, set: {dotted.path: value}}. Replaces the value at each
       path; numeric path segments index arrays.'

@@ -93,6 +93,9 @@ def expand_variant(base, var):
     if "question" in var:
         scn["question"] = var["question"]
     scn["title"] = var["title"]
+    if not str(var.get("lesson", "")).strip():
+        err(var["id"], "variant has no lesson")
+    scn["headline"] = var.get("lesson", "")  # a variant is presented by its lesson
     return finalize(scn, var["id"], True)
 
 
@@ -111,7 +114,8 @@ def compose(comp, registry):
             events += part
         else:
             events += copy.deepcopy(step["insert"])
-    scn = {k: copy.deepcopy(comp[k]) for k in ("title", "question", "participants", "phases", "initial_state")}
+    scn = {k: copy.deepcopy(comp[k]) for k in ("title", "question", "learning_question", "headline", "participants",
+                                                "phases", "initial_state") if k in comp}
     scn["events"] = events
     return finalize(scn, comp["id"], True)
 
@@ -129,6 +133,14 @@ def check_scenario(scn, ctx):
     events = scn["events"]
     by_id = {}
     phases = {p["id"] for p in scn["phases"]}
+    for field in ("learning_question", "headline"):
+        if not str(scn.get(field, "")).strip():
+            err(sid, f"missing {field}")
+    if not str(scn.get("learning_question", "")).rstrip().endswith("?"):
+        err(sid, "learning_question must end with '?'")
+    for p in scn["phases"]:
+        if not str(p.get("takeaway", "")).strip():
+            err(sid, f"phase {p['id']} has no takeaway")
     for p in scn["phases"]:
         if p["semantic_phase"] not in ctx["semantic_phases"]:
             err(sid, f"phase {p['id']} has unknown semantic_phase {p['semantic_phase']}")
@@ -151,6 +163,8 @@ def check_scenario(scn, ctx):
         for p in (e["sender"], e["receiver"]):
             if p not in scn["participants"]:
                 err(where, f"participant {p} not declared")
+        if "prediction" in e and not str(e["prediction"].get("prompt", "")).rstrip().endswith("?"):
+            err(where, "prediction prompt must end with '?'")
         if e["execution_type"] != "NETWORK" and "http" in e:
             err(where, "HTTP envelope on non-network event")
         if e["execution_type"] == "IN_PROCESS" and e["transport"] != "in_process":
@@ -300,7 +314,13 @@ def rag_engine(rag):
                 n += 1
         return out
 
-    def retrieve(docs, size=50, ov=10, top_k=3, thr=0.7, rerank=False):
+    params = next(sc for sc in rag["scenarios"] if sc["id"] == "rag-query")["parameters"]
+    default_k = params["top_k"]["default"]
+    default_thr = params["similarity_threshold"]["default"]
+
+    def retrieve(docs, size=50, ov=10, top_k=None, thr=None, rerank=False):
+        top_k = default_k if top_k is None else top_k
+        thr = default_thr if thr is None else thr
         qv = embed(fx["query"])
         qt = sorted(set(toks(fx["query"])) - stop)
         cs = chunks(docs, size, ov)
@@ -314,9 +334,13 @@ def rag_engine(rag):
         return qv, ranked, sorted([c for c in cs if c["score"] >= thr], key=key)[:top_k]
 
     facts = fx["answer_facts"]
+    groups = fx["answer_groups"]
     injected = rag["variants"][-1]["untrusted_document_instruction"]
 
-    def answer(sel, intro="Example Bank offers the following accounts."):
+    def join(items):
+        return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+    def answer(sel, intro=None):
         if not sel:
             return "I could not find sufficiently relevant information in the indexed documents to answer this question.", [], set()
         cites = []
@@ -327,11 +351,11 @@ def rag_engine(rag):
             return cites.index(c["id"]) + 1
 
         official = [c for c in sel if c["documentId"] in docs12]
-        parts, supported = [intro], set()
+        parts, supported, missing = ([intro] if intro else []), set(), []
         by_id = {c["id"]: c for c in sel}
-        for acct in ("Everyday", "Savings"):
-            sents, missing, conflicts = [], [], []
-            for f in [f for f in facts if f["account"] == acct]:
+        for group in groups:
+            clauses, conflicts = [], []
+            for f in [f for f in facts if f["group"] == group["id"]]:
                 vals = {}
                 for c in official:
                     ev = f["evidence"].get(c["version"], f["evidence"].get("*"))
@@ -342,21 +366,18 @@ def rag_engine(rag):
                     continue
                 supported.add(f["id"])
                 if len(vals) == 1:
-                    s, cs = next(iter(vals.items()))
-                    sents.append(f"{s} [{cite(sorted(cs, key=lambda c: c['id'])[0])}]")
+                    st, cs = next(iter(vals.items()))
+                    clauses.append(f"{st} [{cite(sorted(cs, key=lambda c: c['id'])[0])}]")
                 else:
                     ordered = sorted(vals.items(), key=lambda kv: kv[1][0]["version"])
-                    alts = "; ".join(f"version {cs[0]['version']} says it {s} [{cite(cs[0])}]" for s, cs in ordered)
-                    conflicts.append(f"The indexed documents conflict on the {acct} account's {f['aspect']}: {alts}. "
-                                     f"Version {ordered[-1][1][0]['version']} is the newest.")
-            if not sents and not conflicts:
-                parts.append(f"No retrieved evidence covers the {acct} account.")
-                continue
-            if sents:
-                parts.append(f"The {acct} account " + ", ".join(sents[:-1]) + (" and " if len(sents) > 1 else "") + sents[-1] + ".")
+                    alts = "; ".join(f"version {cs[0]['version']}: {st} [{cite(cs[0])}]" for st, cs in ordered)
+                    conflicts.append(f"The indexed documents conflict on {f['aspect']} ({alts}); version "
+                                     f"{ordered[-1][1][0]['version']} is the newest.")
+            if clauses:
+                parts.append(f"{group['label']}: {join(clauses)}.")
             parts += conflicts
-            if missing:
-                parts.append(f"The retrieved evidence does not cover the {acct} account's {' or '.join(missing)}.")
+        if missing:
+            parts.append(f"The retrieved evidence does not cover {join(missing)}.")
         if any(injected in c["text"] for c in sel):
             parts.append("Note: a retrieved document contained instructions addressed to the assistant; they were treated as data and ignored.")
         srcs = [f"[{i + 1}] {by_id[c]['documentId']} v{by_id[c]['version']}, chunk {c}" for i, c in enumerate(cites)]
@@ -370,9 +391,9 @@ def check_rag(rag, comp, registry):
     refs = rag["reference_results"]
     cases = {
         "rag-query": ({}, {}), "rag-query-top-k-1": ({}, {"top_k": 1}), "rag-query-top-k-4": ({}, {"top_k": 4}),
-        "rag-query-threshold-0.6-top-k-5": ({}, {"top_k": 5, "thr": 0.6}),
+        "rag-query-top-k-8": ({}, {"top_k": 8}), "rag-query-threshold-0.95": ({}, {"thr": 0.95}),
         "rag-no-match": ({}, {"top_k": 1, "thr": 0.99}), "rag-stale": ({"versions": ("1.0",)}, {}),
-        "rag-conflict": ({"versions": ("1.0", "1.2")}, {"top_k": 5}), "rag-hybrid": ({}, {"rerank": True}),
+        "rag-conflict": ({"versions": ("1.0", "1.2")}, {"top_k": 8}), "rag-hybrid": ({}, {"rerank": True}),
         "rag-prompt-injection": ({"extra": ("community-faq.md",)}, {}),
     }
     for name, (ckw, rkw) in cases.items():
@@ -427,6 +448,8 @@ def check_rag(rag, comp, registry):
             a += (" Whether the Savings account would be better depends on how you use your money: it would avoid the "
                   "CHF 5 monthly fee and earn 0.50% annual interest, but it has no debit card, so it suits money you "
                   "rarely need rather than everyday card payments.")
+            if "opening-deposit-savings" in sup:
+                a += " Opening one needs an initial deposit of at least CHF 100."
         elif "savings-fee-interest" not in sup:
             a += " Without the Savings account terms I can't say whether another account type would offer better conditions."
         if a != expected or s != sources:

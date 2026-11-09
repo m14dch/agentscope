@@ -151,9 +151,21 @@ diagram:
     a JSON-RPC error object, or its MCP result has isError true. Each kind gets its
     own label (07-security-protocols.yaml error_taxonomy).
 modes:
-  architecture: Collapse each scenario phase into one expandable group labelled with
-    the phase label
-  protocol: Show all individual events with exact logical messages
+  architecture: 'Conceptual level: collapse each scenario phase into one expandable group
+    headed by its takeaway (the phase label is secondary). Shows the learning question,
+    the headline and plain explanations.'
+  protocol: 'Technical level: show all individual events with exact logical messages;
+    the inspector holds payloads, boundaries and errors.'
+  default: architecture
+learning:
+  interaction: 'Each scenario follows the handover''s pattern (6.1): show the learning
+    question and headline, the participants, an optional prediction, one step, the highlighted
+    interaction, its message, then the technical details on demand.'
+  prediction: When the next event carries a prediction prompt, show the prompt before
+    the step runs, together with a Continue control. The step itself answers it; nothing
+    is scored and the prompt never blocks keyboard navigation.
+  simulated_behaviour: Model output is labelled as simulated wherever it appears; nothing
+    suggests a live decision.
   switch_preserves_position: true
 controls:
   actions:
@@ -208,8 +220,8 @@ context_panel:
 rag_controls:
   top_k:
     min: 1
-    max: 5
-    default: 3
+    max: 8
+    default: 5
   similarity_threshold:
     min: 0
     max: 1
