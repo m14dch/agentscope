@@ -2,8 +2,23 @@ product: AgentScope
 spec_version: 3.0.0
 design:
   sources:
+  - specifications/design-handover.md (Principiae decides how information is communicated;
+    Sanzo Wada No. 303 decides how it looks)
   - Jean-luc Doumont, Trees, maps, and theorems (summaries at https://principiae.be/X0100.php#Summaries)
   - Swiss Style (International Typographic Style)
+  handover_decisions:
+  - Palette is Sanzo Wada No. 303 with the handover's supporting colours, plus one derived
+    ink-muted and one darker peach for small text, both needed for contrast.
+  - Diagrams sit on the light reading surface; the dark olive surface is not used (owner
+    decision), so one set of colour rules applies everywhere.
+  - Peach Red marks the current step; Naples Yellow marks what the learner selected or
+    tracks. Error red is close to Peach Red in hue, so errors always carry a ✕ and a text
+    label naming the kind.
+  - The RAG question changes to the handover's question and the communication layer
+    (learning questions, takeaways, prediction prompts) is added to the scenarios in
+    issue #22.
+  - Self-hosted fonts stay because the app must work offline; no other dependency is
+    added for the design.
   governing_rule: Maximise the signal-to-noise ratio. Viewers already process protocols,
     payloads, context and trust boundaries; anything that carries no information is
     noise and is removed.
@@ -28,28 +43,50 @@ design:
     figures: Tabular figures for numbers; numbers right-aligned in tables
   colour:
     tokens:
-      paper: '#ffffff'
-      ink: '#111111'
-      ink-muted: '#595959'
-      rule: '#d4d4d4'
-      accent: '#e8590c'
-      error: '#c62828'
+      paper: '#fff9ea'
+      surface: '#ffffff'
+      ink: '#253122'
+      ink-muted: '#5c6658'
+      rule: '#b6bfc1'
+      accent: '#f15a30'
+      accent-text: '#bc4625'
+      selection: '#fbe6a0'
+      information: '#3478a1'
+      success: '#387c60'
+      error: '#b73535'
+    names:
+      paper: Cream (supporting)
+      surface: White (supporting)
+      ink: Deep Slate Olive (Wada 303)
+      ink-muted: Derived from Deep Slate Olive for secondary text
+      rule: Neutral Gray (Wada 303)
+      accent: Peach Red (Wada 303)
+      accent-text: Darker Peach Red for small text
+      selection: Naples Yellow (Wada 303)
+      information: Information (supporting)
+      success: Success (supporting)
+      error: Error (supporting)
     use:
-    - Ink and greys carry everything by default. Non-data elements (lifelines, axes,
-      past steps, separators) use rule or ink-muted.
-    - 'One accent marks what to look at now: the current step, its pair, highlighted
-      lineage values and retained chunks. The accent is used for marks and lines,
-      never for body text.'
-    - Error red is used only for errors, always with a text label naming the kind.
-    - No other colour values exist outside the tokens.
-    - 'Contrast: ink, ink-muted and error reach 4.5:1 on paper; accent and rule-based
-      data marks reach 3:1 where they carry meaning.'
+    - Paper (cream) is the page; surface (white) is for reading-intensive blocks such
+      as payloads and the inspector.
+    - Ink carries text and data. Ink-muted carries secondary text and past-step labels.
+      Rule (Neutral Gray) carries structure only (lifelines, axes, separators), never
+      text or meaning.
+    - 'Accent (Peach Red) marks what to look at now: the current step and its pair, and
+      retained chunks. It is used for lines and marks; text in that role uses accent-text.'
+    - Selection (Naples Yellow) is a background for what the learner selected or tracks,
+      such as lineage values. Never put accent marks on selection.
+    - Error is used only for errors, always with a ✕ and a text label naming the kind.
+      Information and success are used only where they carry a state the learner needs.
+    - No other colour values exist outside the tokens, and no large saturated areas.
+    - 'Contrast on paper and surface: ink, ink-muted, accent-text, information, success
+      and error reach 4.5:1; accent reaches 3:1 for marks. Ink on selection reaches 4.5:1.'
     - No shadows, gradients, rounded cards, decorative icons, logos or background textures.
       Light theme only in v1.
   labels_and_charts:
   - Label data directly next to what it names; no legends.
   - Every arrow carries a short text label (for example "MCP · tools/call").
-  - Scores are dots on a 0–1 scale with the threshold as one labelled grey line; retained
+  - Scores are dots on a 0–1 scale with the threshold as one labelled line; retained
     chunks use the accent. No bars from an arbitrary origin; no gridlines unless they
     answer a question.
   - The 2D projection is a plain scatter plot with points labelled directly and axes
@@ -97,7 +134,7 @@ diagram:
     response: open arrowhead
     current_and_pair: accent line, 2 px, and the label in weight 600, so the current step
       stays distinct in greyscale
-    error: error red with a text marker naming the kind (tool, protocol, transport)
+    error: error line; the label starts with ✕ and names the kind (tool, protocol, transport)
   visibility:
     past: line keeps its kind's style; label in ink-muted
     current: emphasized
@@ -154,7 +191,7 @@ inspector:
   - correlated request/response
   - repeated boilerplate (jsonrpc, _meta, repeated headers) folded to one line that
     expands on click; never hidden
-  - fields that changed or that lineage tracks are highlighted
+  - fields that changed or that lineage tracks are highlighted with the selection background
   transport_tab: Show simulated wire envelopes separately from logical payloads, including
     the MCP headers mirrored from the body (MCP-Protocol-Version, Mcp-Method, Mcp-Name).
     In-process calls have no transport envelope.
