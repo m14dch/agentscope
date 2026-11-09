@@ -189,6 +189,9 @@ describe('parameter changes', () => {
     expect(after[p.length]?.state['retrieval']).toEqual({ retained: ['k4'] });
     expect(p.setParameters({ top_k: 4 })).toBe(p.length + 1);
     expect(() => p.setParameters({ nope: 1 })).toThrow(/has no parameter nope/);
+    expect(() => p.setParameters({ top_k: 99 })).toThrow(/top_k 99 is outside 1..8/);
+    expect(() => p.setParameters({ rerank: 'yes' })).toThrow(/rerank must be a boolean/);
+    expect(p.retrievalConfig['top_k']).toBe(4);
   });
 
   it("start from a variant's parameter_overrides", () => {
@@ -350,7 +353,9 @@ describe('player edge cases', () => {
     expect(clock.timers.size).toBe(0);
     expect(player.status).toBe('paused');
     player.next();
+    player.play();
     expect(calls).toBe(1);
+    expect(clock.timers.size).toBe(0);
   });
 });
 

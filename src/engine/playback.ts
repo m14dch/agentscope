@@ -93,14 +93,28 @@ export class Playback {
   }
 
   /**
-   * Changes parameter values, regenerates the derived events and drops the snapshots
-   * from the first changed event on. Returns that event's cursor (length + 1 if none).
+   * Changes parameter values (each within its type, min and max), regenerates the derived
+   * events and drops the snapshots from the first changed event on. Returns that event's
+   * cursor (length + 1 if none). When a Player owns this playback, call
+   * Player.setParameters instead, which also clamps the player's cursor.
    */
   setParameters(values: Readonly<Record<string, Json>>): number {
     const known = this.scenario.parameters ?? {};
-    for (const name of Object.keys(values)) {
-      if (!Object.hasOwn(known, name))
-        throw new RangeError(`${this.scenario.id} has no parameter ${name}`);
+    for (const [name, value] of Object.entries(values)) {
+      const spec = Object.hasOwn(known, name) ? known[name] : undefined;
+      if (!spec) throw new RangeError(`${this.scenario.id} has no parameter ${name}`);
+      if (typeof value !== typeof spec.default) {
+        throw new TypeError(
+          `${name} must be a ${typeof spec.default}, not ${JSON.stringify(value)}`,
+        );
+      }
+      const { min, max } = spec;
+      if (
+        typeof value === 'number' &&
+        ((min !== undefined && value < min) || (max !== undefined && value > max))
+      ) {
+        throw new RangeError(`${name} ${value} is outside ${String(min)}..${String(max)}`);
+      }
     }
     const config = deepFreeze({ ...this.config, ...structuredClone(values) });
     const events = this.frozenEvents(config);

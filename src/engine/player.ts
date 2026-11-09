@@ -28,6 +28,7 @@ export class Player {
   private timer: unknown;
   /** Identifies the live timer; a callback from any other timer does nothing. */
   private token: object | undefined;
+  private disposed = false;
   private readonly listeners = new Set<(player: Player) => void>();
 
   constructor(
@@ -86,7 +87,7 @@ export class Player {
   }
 
   play(): void {
-    if (this.playing || this.atEnd) return;
+    if (this.disposed || this.playing || this.atEnd) return;
     this.playing = true;
     this.schedule();
     this.emit();
@@ -120,8 +121,9 @@ export class Player {
     return changed;
   }
 
-  /** Stops the timer and removes all listeners. */
+  /** Stops the timer and removes all listeners; play does nothing afterwards. */
   dispose(): void {
+    this.disposed = true;
     this.stop();
     this.listeners.clear();
   }
