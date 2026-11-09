@@ -1,0 +1,85 @@
+product: AgentScope
+spec_version: 2.0.0
+phases:
+- id: 1
+  name: Engine and diagram
+  exit:
+  - Step navigation and random access correct
+  - Event inspector displays payload
+  - Architecture/protocol modes preserve cursor
+- id: 2
+  name: MCP primary
+  exit:
+  - Initialization, discovery, tool invocation, REST and response fully traced
+  - JSON-RPC IDs correlated
+  - Context visibility correctly delayed
+- id: 3
+  name: RAG ingestion and retrieval
+  exit:
+  - Chunking and embedding inspection works
+  - Computed vector scores agree with vectors
+  - topK and threshold recompute context
+- id: 4
+  name: Compare and combined
+  exit:
+  - Semantic-phase sync works
+  - Combined answer shows live value and document evidence
+- id: 5
+  name: Security, errors and polish
+  exit:
+  - Errors correctly classified
+  - Offline browser E2E passes
+  - Accessible reduced-motion mode works
+unit_tests:
+- Event IDs unique; sequence monotonic
+- All pair_id references reciprocal
+- MCP notifications lack id
+- JSON-RPC request/response ids match
+- Previous/jump/reset reconstruct same state
+- Parameter changes invalidate downstream snapshots
+- No model-visible tool result before next LLM request
+- Tracked customerId and balance remain consistent
+- Cosine similarity computed correctly
+- Retrieval selection respects topK and threshold
+- Document citations resolve to source fixtures
+- No HTTP framing for in-process calls
+e2e_tests:
+- id: mcp-walkthrough
+  steps:
+  - Open MCP primary
+  - Play through all events
+  - Inspect tools/list and tools/call
+  - Verify REST GET and response
+  - Verify final CHF 12,500.75
+- id: rag-walkthrough
+  steps:
+  - Run ingestion
+  - Inspect chunks and vectors
+  - Run retrieval
+  - Change topK
+  - Inspect changed LLM prompt and citations
+- id: navigation
+  steps:
+  - Jump to last step
+  - Step backward
+  - Switch architecture view
+  - Reset and replay
+  - Verify deterministic snapshots
+- id: offline
+  steps:
+  - Block all network
+  - Load built static app
+  - Complete MCP and RAG scenarios
+quality_gates:
+  runtime_network_requests: 0
+  min_supported_events: 100
+  desktop_and_tablet: true
+  keyboard_navigation: true
+  reduced_motion: true
+  scenario_schema_validation: true
+definition_of_done:
+- Static build and source delivered
+- README includes run and extend instructions
+- All primary scenarios deterministic and executable
+- All protocol examples validated against pinned revision
+- No fictional model output represented as real inference

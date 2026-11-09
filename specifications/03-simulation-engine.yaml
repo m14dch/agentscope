@@ -1,0 +1,84 @@
+product: AgentScope
+spec_version: 2.0.0
+event_schema:
+  required:
+  - id
+  - scenario_id
+  - phase
+  - sequence
+  - sender
+  - receiver
+  - operation
+  - protocol
+  - execution_type
+  - message_type
+  - explanation
+  fields:
+    id: Unique string
+    scenario_id: Scenario registry ID
+    phase: Semantic phase ID
+    sequence: Integer, strictly increasing
+    sender: Participant ID
+    receiver: Participant ID
+    operation: Method or internal action
+    protocol: MCP | HTTP | LLM_API | RAG_INTERNAL | UI | DB
+    transport: streamable_http | https | in_process | simulated | none
+    execution_type: NETWORK | IN_PROCESS | SIMULATED_INTERNAL
+    message_type: REQUEST | RESPONSE | NOTIFICATION | ACTION | RESULT
+    correlation_id: Optional request/response ID; absent for notifications
+    pair_id: Optional matching event ID
+    payload: Structured logical message or string
+    http: Optional HTTP envelope; never for in-process operations
+    explanation: Plain-language reason and outcome
+    technical_notes: List of explanatory notes
+    security_boundaries: List of crossed boundaries
+    tracked_values: Value paths and provenance
+    state_changes: Declarative patches applied by reducer
+    context_changes: Changes to agent or model-visible context
+    parent_phase_id: Optional architecture grouping
+state_model:
+  fields:
+  - cursor
+  - selected_event_id
+  - playback_status
+  - view_mode
+  - agent_state
+  - model_visible_messages
+  - mcp_state
+  - rag_index
+  - retrieval_config
+  - lineage
+  initial_state: Scenario-provided immutable fixture
+  reducer: Replay state_changes from initial state through cursor
+  random_access: Recompute from initial state or cached deterministic snapshots
+  parameter_change: Regenerate affected derived events and downstream snapshots
+  backward: No imperative reverse side effects
+invariants:
+- Event IDs unique across registry
+- Sequence strictly increasing within scenario
+- Each pair_id resolves to exactly one matching event
+- JSON-RPC request IDs match responses; notifications have no ID
+- Tool result does not appear in model-visible context before model submission
+- No HTTP envelope on in-process events
+- All tracked values resolve to fixture or event-derived data
+- Same scenario and parameters yield identical results
+lineage:
+  tracked:
+  - customerId
+  - balance
+  - sourceDocumentId
+  - chunkId
+  - retrievedText
+  presentation: Highlight value occurrences and transformations across event payloads
+scenario_format:
+  required:
+  - id
+  - title
+  - participants
+  - phases
+  - events
+  - initial_state
+  validation: Schema validation at startup; fail with explicit scenario and event path
+deterministic_model:
+  behavior: Select prewritten response templates from evidence states
+  label: Simulated model output, not real inference

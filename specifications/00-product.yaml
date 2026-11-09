@@ -1,0 +1,64 @@
+product: AgentScope
+spec_version: 2.0.0
+title: AgentScope — See how AI systems work, step by step
+description: Offline interactive protocol and context-flow simulator for MCP, RAG and agent workflows.
+audience:
+  primary: Experienced software engineers new to AI integration
+  prerequisites:
+  - HTTP
+  - REST
+  - JSON
+  - authentication
+  - distributed systems
+learning_outcomes:
+- Trace each protocol request and response
+- Distinguish model intent from agent execution
+- Explain MCP initialization, tool discovery and tool execution
+- Explain RAG ingestion, indexing, retrieval and generation
+- Inspect model-visible context separately from agent state
+- Identify transport, authentication and trust boundaries
+- Compare MCP and RAG and understand how they compose
+modules:
+- id: mcp
+  label: MCP
+- id: rag
+  label: RAG
+- id: compare
+  label: Compare
+- id: combined
+  label: Combined
+constraints:
+  offline: true
+  no_backend: true
+  no_real_llm: true
+  no_credentials: true
+  deterministic: true
+  desktop_first: true
+  tablet_supported: true
+non_goals:
+- Production MCP server
+- Real vector database
+- Live model playground
+- Generic UML editor
+shared_domain:
+  name: Example Bank (fictional)
+  api_base: https://api.example-bank.test
+  customer:
+    id: '123'
+    name: Alex Example
+    balance:
+      amount: 12500.75
+      currency: CHF
+  documents:
+  - openapi.yaml
+  - authentication.md
+  - balance-api.md
+  - release-notes.md
+implementation_priority:
+- simulation-engine
+- mcp-happy-path
+- context-and-lineage
+- rag-ingestion
+- rag-retrieval
+- comparison
+- errors-and-polish

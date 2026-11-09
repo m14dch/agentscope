@@ -1,0 +1,51 @@
+product: AgentScope
+spec_version: 2.0.0
+mcp:
+  pinned_protocol_revision: '2025-06-18'
+  primary_transport: Streamable HTTP
+  reference: https://modelcontextprotocol.io/specification/2025-06-18
+  validation:
+  - initialize request/response capabilities and version
+  - initialized notification without id
+  - tools/list schema
+  - tools/call request/result schema
+  - resources/list and resources/read schema
+  - JSON-RPC errors vs tool isError
+  - HTTP/SSE behavior and session semantics where illustrated
+  do_not_assume:
+  - Every MCP message is its own TCP connection
+  - MCP automatically converts OpenAPI
+  - LLM directly calls MCP server
+  - MCP client always runs in separate process
+  - MCP server inherits user identity
+  - Tool result automatically becomes model-visible
+trust_boundaries:
+- id: user-to-agent
+  risk: Untrusted user input
+  mitigation: Validate requests and permissions
+- id: agent-to-llm
+  risk: Sensitive context disclosure
+  mitigation: Send only authorized data
+- id: agent-to-mcp
+  risk: Unauthorized tool invocation
+  mitigation: Tool allowlists, input validation, user approval for sensitive actions
+- id: mcp-to-rest
+  risk: Credential and authorization misuse
+  mitigation: Distinct backend credentials, least privilege, redacted demo token
+- id: rag-to-llm
+  risk: Prompt injection from retrieved text
+  mitigation: Treat retrieved text as untrusted data, preserve instruction hierarchy
+- id: vector-search
+  risk: Cross-user document leakage
+  mitigation: Document-level access filters before retrieval
+error_taxonomy:
+  tool_execution: Successful JSON-RPC response with MCP tool result isError=true
+  protocol: JSON-RPC error object
+  transport: HTTP failure or connection problem; not equivalent to tool failure
+  model: Provider API failure or refusal
+demo_policy:
+  all_data_fictional: true
+  never_real_tokens: true
+  redact_auth_headers: true
+  no_external_network: true
+  label_internal_calls_as_illustrative: true

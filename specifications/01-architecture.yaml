@@ -1,0 +1,63 @@
+product: AgentScope
+spec_version: 2.0.0
+runtime:
+  kind: static_single_page_application
+  preferred_language: TypeScript
+  frontend: Vanilla TypeScript or small component framework
+  rendering: SVG lifelines and arrows; HTML inspectors
+  build: May use development bundler; deliver fully offline static dist
+  network_requests_at_runtime: false
+modules:
+  scenario_registry: Loads and validates scenario YAML/JSON data
+  playback_engine: Deterministically reduces ordered events into snapshots
+  diagram_renderer: Displays lifelines, phases, arrows, request/response pairs
+  inspector: Displays exact logical payload, transport framing, rationale and notes
+  context_inspector: Separately displays agent working state and model-visible messages
+  lineage_view: Highlights value origin, transformations and destinations
+  rag_visualizer: Chunking and simplified 2D embedding projection
+  comparison_view: Synchronizes two simulations by semantic phase
+boundaries:
+- from: end-user
+  to: agent
+  type: UI event
+- from: agent
+  to: llm-provider
+  type: Provider-specific model API; simulated network
+- from: agent
+  to: mcp-client
+  type: In-process method call
+- from: mcp-client
+  to: mcp-server
+  type: MCP JSON-RPC over Streamable HTTP
+- from: mcp-server
+  to: rest-api
+  type: REST over HTTPS
+- from: rest-api
+  to: database
+  type: Illustrative internal query
+- from: orchestrator
+  to: embedding-model
+  type: Illustrative model API
+- from: orchestrator
+  to: vector-db
+  type: Illustrative query API
+source_of_truth:
+  scenario: Event data and fixtures; no independent hardcoded payloads in UI
+  state: Initial snapshot plus deterministic event reducer
+  view: Derived from current snapshot and selected event
+repo_layout:
+- src/engine
+- src/diagram
+- src/inspectors
+- src/scenarios
+- src/fixtures
+- src/components
+- tests/unit
+- tests/e2e
+- dist
+delivery:
+- Source code
+- Static offline build
+- Scenario fixtures
+- Automated tests
+- README

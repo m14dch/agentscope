@@ -1,0 +1,577 @@
+product: AgentScope
+spec_version: 2.0.0
+protocol:
+  revision: '2025-06-18'
+  transport: Streamable HTTP
+  note: Pinned educational revision; verify all envelopes and HTTP behavior against official revision
+tool_mapping:
+  source: Manually implemented adapter informed by OpenAPI
+  automatic_conversion: false
+scenarios:
+- id: mcp-balance
+  title: Get live customer balance
+  initial_state:
+    mcp_initialized: false
+    discovered_tools: []
+    model_visible_messages: []
+  participants:
+  - user
+  - agent
+  - llm
+  - mcp-client
+  - mcp-server
+  - rest-api
+  - database
+  phases:
+  - initialization
+  - discovery
+  - question
+  - tool
+  - backend
+  - answer
+  events:
+  - id: mcp-01
+    scenario_id: mcp-balance
+    phase: initialization
+    sequence: 1
+    sender: agent
+    receiver: mcp-client
+    operation: Create client
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: Create client
+  - id: mcp-02
+    scenario_id: mcp-balance
+    phase: initialization
+    sequence: 2
+    sender: mcp-client
+    receiver: mcp-server
+    operation: Establish Streamable HTTP transport
+    protocol: HTTP
+    execution_type: NETWORK
+    message_type: REQUEST
+    explanation: Establish Streamable HTTP transport
+  - id: mcp-03
+    scenario_id: mcp-balance
+    phase: initialization
+    sequence: 3
+    sender: mcp-client
+    receiver: mcp-server
+    operation: initialize
+    protocol: MCP
+    execution_type: NETWORK
+    message_type: REQUEST
+    explanation: initialize
+    payload:
+      jsonrpc: '2.0'
+      id: 1
+      method: initialize
+      params:
+        protocolVersion: '2025-06-18'
+        capabilities: {}
+        clientInfo:
+          name: agentscope-demo
+          version: 1.0.0
+    transport: streamable_http
+    pair_id: mcp-04
+    correlation_id: '1'
+  - id: mcp-04
+    scenario_id: mcp-balance
+    phase: initialization
+    sequence: 4
+    sender: mcp-server
+    receiver: mcp-client
+    operation: initialize result
+    protocol: MCP
+    execution_type: NETWORK
+    message_type: RESPONSE
+    explanation: initialize result
+    payload:
+      jsonrpc: '2.0'
+      id: 1
+      result:
+        protocolVersion: '2025-06-18'
+        capabilities:
+          tools:
+            listChanged: true
+          resources: {}
+        serverInfo:
+          name: example-bank-mcp
+          version: 1.0.0
+    transport: streamable_http
+    pair_id: mcp-03
+    correlation_id: '1'
+  - id: mcp-05
+    scenario_id: mcp-balance
+    phase: initialization
+    sequence: 5
+    sender: mcp-client
+    receiver: mcp-server
+    operation: notifications/initialized
+    protocol: MCP
+    execution_type: NETWORK
+    message_type: NOTIFICATION
+    explanation: notifications/initialized
+    payload:
+      jsonrpc: '2.0'
+      method: notifications/initialized
+    transport: streamable_http
+  - id: mcp-06
+    scenario_id: mcp-balance
+    phase: discovery
+    sequence: 6
+    sender: agent
+    receiver: mcp-client
+    operation: List tools
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: List tools
+  - id: mcp-07
+    scenario_id: mcp-balance
+    phase: discovery
+    sequence: 7
+    sender: mcp-client
+    receiver: mcp-server
+    operation: tools/list
+    protocol: MCP
+    execution_type: NETWORK
+    message_type: REQUEST
+    explanation: tools/list
+    payload:
+      jsonrpc: '2.0'
+      id: 2
+      method: tools/list
+      params: {}
+    transport: streamable_http
+    pair_id: mcp-08
+    correlation_id: '2'
+  - id: mcp-08
+    scenario_id: mcp-balance
+    phase: discovery
+    sequence: 8
+    sender: mcp-server
+    receiver: mcp-client
+    operation: tools/list result
+    protocol: MCP
+    execution_type: NETWORK
+    message_type: RESPONSE
+    explanation: tools/list result
+    payload:
+      jsonrpc: '2.0'
+      id: 2
+      result:
+        tools:
+        - &id001
+          name: get_customer_balance
+          description: Retrieve the current balance for a customer
+          inputSchema:
+            type: object
+            properties:
+              customerId:
+                type: string
+            required:
+            - customerId
+    transport: streamable_http
+    pair_id: mcp-07
+    correlation_id: '2'
+  - id: mcp-09
+    scenario_id: mcp-balance
+    phase: discovery
+    sequence: 9
+    sender: mcp-client
+    receiver: agent
+    operation: Return discovered tools
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: RESULT
+    explanation: Return discovered tools
+    payload:
+      tools:
+      - *id001
+  - id: mcp-10
+    scenario_id: mcp-balance
+    phase: discovery
+    sequence: 10
+    sender: agent
+    receiver: llm
+    operation: Map tool schema to provider format
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: Prepare provider-specific tool definitions; this is not an MCP message
+  - id: mcp-11
+    scenario_id: mcp-balance
+    phase: question
+    sequence: 11
+    sender: user
+    receiver: agent
+    operation: Ask current balance
+    protocol: UI
+    execution_type: IN_PROCESS
+    message_type: REQUEST
+    explanation: Ask current balance
+    payload: What is the current balance of customer 123?
+    tracked_values:
+      customerId: '123'
+  - id: mcp-12
+    scenario_id: mcp-balance
+    phase: question
+    sequence: 12
+    sender: agent
+    receiver: llm
+    operation: Submit messages and tool definitions
+    protocol: LLM_API
+    execution_type: NETWORK
+    message_type: REQUEST
+    explanation: Submit messages and tool definitions
+    payload:
+      messages:
+      - role: user
+        content: What is the current balance of customer 123?
+      tools:
+      - *id001
+    pair_id: mcp-13
+    context_changes:
+    - target: model_visible_messages
+      action: set
+      description: User question and available tool definitions
+  - id: mcp-13
+    scenario_id: mcp-balance
+    phase: question
+    sequence: 13
+    sender: llm
+    receiver: agent
+    operation: Return requested tool call
+    protocol: LLM_API
+    execution_type: NETWORK
+    message_type: RESPONSE
+    explanation: Return requested tool call
+    payload:
+      tool_calls:
+      - name: get_customer_balance
+        arguments:
+          customerId: '123'
+    pair_id: mcp-12
+    tracked_values:
+      customerId: '123'
+  - id: mcp-14
+    scenario_id: mcp-balance
+    phase: question
+    sequence: 14
+    sender: agent
+    receiver: agent
+    operation: Validate requested tool and policy
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: Validate requested tool and policy
+  - id: mcp-15
+    scenario_id: mcp-balance
+    phase: tool
+    sequence: 15
+    sender: agent
+    receiver: mcp-client
+    operation: Invoke selected tool
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: Invoke selected tool
+    payload:
+      name: get_customer_balance
+      arguments:
+        customerId: '123'
+    tracked_values:
+      customerId: '123'
+  - id: mcp-16
+    scenario_id: mcp-balance
+    phase: tool
+    sequence: 16
+    sender: mcp-client
+    receiver: mcp-server
+    operation: tools/call
+    protocol: MCP
+    execution_type: NETWORK
+    message_type: REQUEST
+    explanation: tools/call
+    payload:
+      jsonrpc: '2.0'
+      id: 42
+      method: tools/call
+      params:
+        name: get_customer_balance
+        arguments:
+          customerId: '123'
+    transport: streamable_http
+    pair_id: mcp-25
+    correlation_id: '42'
+    tracked_values:
+      customerId: '123'
+  - id: mcp-17
+    scenario_id: mcp-balance
+    phase: tool
+    sequence: 17
+    sender: mcp-server
+    receiver: mcp-server
+    operation: Validate tool arguments
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: Validate tool arguments
+  - id: mcp-18
+    scenario_id: mcp-balance
+    phase: tool
+    sequence: 18
+    sender: mcp-server
+    receiver: mcp-server
+    operation: Map tool to REST adapter
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: Map tool to REST adapter
+  - id: mcp-19
+    scenario_id: mcp-balance
+    phase: backend
+    sequence: 19
+    sender: mcp-server
+    receiver: rest-api
+    operation: GET /customers/123/balance
+    protocol: HTTP
+    execution_type: NETWORK
+    message_type: REQUEST
+    explanation: GET /customers/123/balance
+    payload:
+      method: GET
+      path: /customers/123/balance
+      headers:
+        Authorization: Bearer <REDACTED_DEMO_TOKEN>
+    pair_id: mcp-23
+    tracked_values:
+      customerId: '123'
+  - id: mcp-20
+    scenario_id: mcp-balance
+    phase: backend
+    sequence: 20
+    sender: rest-api
+    receiver: rest-api
+    operation: Authenticate and authorize
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: Authenticate and authorize
+  - id: mcp-21
+    scenario_id: mcp-balance
+    phase: backend
+    sequence: 21
+    sender: rest-api
+    receiver: database
+    operation: Query current balance
+    protocol: DB
+    execution_type: IN_PROCESS
+    message_type: REQUEST
+    explanation: Query current balance
+    payload:
+      customerId: '123'
+    pair_id: mcp-22
+    tracked_values:
+      customerId: '123'
+  - id: mcp-22
+    scenario_id: mcp-balance
+    phase: backend
+    sequence: 22
+    sender: database
+    receiver: rest-api
+    operation: Return balance
+    protocol: DB
+    execution_type: IN_PROCESS
+    message_type: RESPONSE
+    explanation: Return balance
+    payload:
+      customerId: '123'
+      currency: CHF
+      balance: 12500.75
+    pair_id: mcp-21
+    tracked_values:
+      customerId: '123'
+      balance: 12500.75
+  - id: mcp-23
+    scenario_id: mcp-balance
+    phase: backend
+    sequence: 23
+    sender: rest-api
+    receiver: mcp-server
+    operation: HTTP 200 OK
+    protocol: HTTP
+    execution_type: NETWORK
+    message_type: RESPONSE
+    explanation: HTTP 200 OK
+    payload:
+      status: 200
+      body:
+        customerId: '123'
+        currency: CHF
+        balance: 12500.75
+    pair_id: mcp-19
+    tracked_values:
+      customerId: '123'
+      balance: 12500.75
+  - id: mcp-24
+    scenario_id: mcp-balance
+    phase: tool
+    sequence: 24
+    sender: mcp-server
+    receiver: mcp-server
+    operation: Wrap REST result as MCP content
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: Wrap REST result as MCP content
+  - id: mcp-25
+    scenario_id: mcp-balance
+    phase: tool
+    sequence: 25
+    sender: mcp-server
+    receiver: mcp-client
+    operation: tools/call result
+    protocol: MCP
+    execution_type: NETWORK
+    message_type: RESPONSE
+    explanation: tools/call result
+    payload:
+      jsonrpc: '2.0'
+      id: 42
+      result: &id002
+        content:
+        - type: text
+          text: '{"customerId":"123","currency":"CHF","balance":12500.75}'
+        isError: false
+    transport: streamable_http
+    pair_id: mcp-16
+    correlation_id: '42'
+    tracked_values:
+      customerId: '123'
+      balance: 12500.75
+  - id: mcp-26
+    scenario_id: mcp-balance
+    phase: tool
+    sequence: 26
+    sender: mcp-client
+    receiver: agent
+    operation: Return tool result
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: RESULT
+    explanation: Return tool result
+    payload: *id002
+    tracked_values:
+      customerId: '123'
+      balance: 12500.75
+    context_changes:
+    - target: agent_state
+      action: set
+      description: Tool result received; not yet visible to model
+  - id: mcp-27
+    scenario_id: mcp-balance
+    phase: answer
+    sequence: 27
+    sender: agent
+    receiver: agent
+    operation: Append tool result to conversation
+    protocol: RAG_INTERNAL
+    execution_type: IN_PROCESS
+    message_type: ACTION
+    explanation: Append tool result to conversation
+  - id: mcp-28
+    scenario_id: mcp-balance
+    phase: answer
+    sequence: 28
+    sender: agent
+    receiver: llm
+    operation: Submit tool result for final answer
+    protocol: LLM_API
+    execution_type: NETWORK
+    message_type: REQUEST
+    explanation: Submit tool result for final answer
+    payload:
+      tool_result: *id002
+    pair_id: mcp-29
+    tracked_values:
+      customerId: '123'
+      balance: 12500.75
+    context_changes:
+    - target: model_visible_messages
+      action: append
+      description: Tool result submitted to LLM
+  - id: mcp-29
+    scenario_id: mcp-balance
+    phase: answer
+    sequence: 29
+    sender: llm
+    receiver: agent
+    operation: Return final answer
+    protocol: LLM_API
+    execution_type: NETWORK
+    message_type: RESPONSE
+    explanation: Return final answer
+    payload:
+      text: The current balance of customer 123 is CHF 12,500.75.
+    pair_id: mcp-28
+    tracked_values:
+      customerId: '123'
+      balance: 12500.75
+  - id: mcp-30
+    scenario_id: mcp-balance
+    phase: answer
+    sequence: 30
+    sender: agent
+    receiver: user
+    operation: Display final answer
+    protocol: UI
+    execution_type: IN_PROCESS
+    message_type: RESPONSE
+    explanation: Display final answer
+    payload: The current balance of customer 123 is CHF 12,500.75.
+    tracked_values:
+      customerId: '123'
+      balance: 12500.75
+- id: mcp-resources
+  title: Read OpenAPI document as MCP resource
+  extends: mcp-balance
+  required_operations:
+  - resources/list
+  - resources/list result
+  - resources/read
+  - resources/read result
+  resource_uri: file:///docs/openapi.yaml
+- id: mcp-not-found
+  title: Backend 404 becomes tool execution error
+  extends: mcp-balance
+  override:
+    rest_status: 404
+    tool_result_isError: true
+- id: mcp-unauthorized
+  title: Backend authentication failure
+  extends: mcp-balance
+  override:
+    rest_status: 401
+    tool_result_isError: true
+- id: mcp-jsonrpc-error
+  title: Malformed MCP request
+  extends: mcp-balance
+  override:
+    jsonrpc_error:
+      code: -32602
+      message: Invalid params
+- id: mcp-multiple-tools
+  title: Customer profile followed by balance
+  extends: mcp-balance
+  tool_order:
+  - get_customer
+  - get_customer_balance
+requirements:
+- Show HTTP envelope separately from JSON-RPC logical message
+- Notifications never have JSON-RPC IDs
+- Agent invokes MCP client; LLM does not invoke MCP directly
+- Tool discovery is optional per turn after initialization and may be cached
+- Backend REST authorization is separate from MCP transport authorization

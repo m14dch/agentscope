@@ -1,0 +1,58 @@
+product: AgentScope
+spec_version: 2.0.0
+compare:
+  id: compare-rag-mcp
+  left_scenario: rag-query
+  right_scenario: mcp-balance
+  left_question: How does the customer balance API work?
+  right_question: What is customer 123’s current balance?
+  synchronization: By semantic phases, not equal step numbers
+  phases:
+  - user-request
+  - information-acquisition
+  - context-assembly
+  - model-generation
+  - answer
+  show:
+  - Data source
+  - Freshness expectations
+  - Model-visible context
+  - Actions vs retrieval
+  - Trust boundaries
+combined:
+  id: combined-balance-explanation
+  question: What is customer 123’s current balance, and how does the documentation say it is calculated?
+  participants:
+  - user
+  - agent
+  - embedding-model
+  - vector-db
+  - llm
+  - mcp-client
+  - mcp-server
+  - rest-api
+  - database
+  ordered_operations:
+  - User question
+  - Embed documentation query
+  - Retrieve documentation chunks
+  - Assemble retrieved evidence in agent state
+  - Submit question, evidence, and tools to model
+  - Model requests live balance tool
+  - Agent validates request
+  - MCP tools/call
+  - REST GET current balance
+  - MCP tool result
+  - Agent appends tool result
+  - Send updated context to LLM
+  - Return answer with live balance and documentation citations
+  required_boundaries:
+  - RAG retrieval does not invoke banking balance API
+  - MCP call provides live data
+  - Tool output and retrieved documents are lower-trust content
+  - Final response combines both sources
+conceptual_rules:
+- MCP is a protocol; RAG is an architectural pattern
+- MCP can expose a RAG search tool
+- MCP resources may provide documents used as context
+- RAG can retrieve fresh sources; MCP can expose static resources

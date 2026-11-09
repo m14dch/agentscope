@@ -1,0 +1,105 @@
+product: AgentScope
+spec_version: 2.0.0
+navigation:
+  tabs:
+  - MCP
+  - RAG
+  - Compare
+  - Combined
+  default: MCP
+layout:
+  desktop:
+  - 'Top bar: navigation, scenario, architecture/protocol toggle'
+  - 'Main: resizable sequence diagram + payload inspector'
+  - 'Bottom: execution timeline + collapsible model-context and lineage panels'
+  tablet: Stack inspector below horizontally scrollable diagram
+  minimum_lifeline_width_px: 110
+diagram:
+  participants: Scenario-defined and ordered
+  arrows: One per actual logical message or explicitly labeled internal operation
+  styles:
+    model_api: violet
+    mcp: teal
+    rest: blue
+    internal: neutral
+    error: red
+  visibility:
+    past: visible subdued
+    current: emphasized
+    future: hidden in protocol mode
+  pair_highlighting: true
+  auto_scroll_to_current: true
+  accessible_without_color: true
+modes:
+  architecture: Collapse event groups into expandable semantic phases
+  protocol: Show all individual events with exact logical messages
+  switch_preserves_position: true
+controls:
+  actions:
+  - start
+  - next
+  - previous
+  - play
+  - pause
+  - reset
+  - jump_to_step
+  speeds:
+  - 0.5
+  - 1
+  - 2
+  - 4
+  keyboard:
+    ArrowRight: next
+    ArrowLeft: previous
+    Space: toggle play/pause
+  reduced_motion: true
+inspector:
+  tabs:
+  - Overview
+  - Payload
+  - Transport
+  - Explanation
+  - Security
+  - Data lineage
+  payload_features:
+  - syntax highlighting
+  - copy
+  - expand/collapse JSON
+  - correlated request/response
+  transport_tab: Only shows actual or clearly simulated transport envelopes; never invents transport for in-process
+    calls
+context_panel:
+  views:
+  - Agent state
+  - Model-visible context
+  - Delta since previous event
+  rule: Tool result is not model-visible until a subsequent model request includes it
+rag_controls:
+  top_k:
+    min: 1
+    max: 5
+    default: 3
+  similarity_threshold:
+    min: 0
+    max: 1
+    default: 0.7
+  reranking:
+    default: false
+  chunk_size_words:
+    options:
+    - 25
+    - 50
+    - 100
+    default: 50
+  overlap_words:
+    options:
+    - 0
+    - 10
+    - 20
+    default: 10
+accessibility:
+- Keyboard operable controls
+- Visible focus
+- Semantic labels
+- Reduced-motion preference
+- Readable code at 200% zoom
