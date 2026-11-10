@@ -14,11 +14,16 @@ export const SERVICE_WORKER_FILE = 'sw.js';
 export type PrecacheManifest = {
   /** The build's version stamp (commit SHA in CI, "dev" locally). */
   version: string;
-  /** Content hash over every listed file's path and bytes. */
+  /** One combined hash over every listed file's path and bytes. */
   hash: string;
-  /** Every file in dist relative to the base path, sorted; excludes the manifest and sw.js. */
-  files: string[];
+  /**
+   * Every file in dist relative to the base path, sorted, with its Subresource Integrity
+   * digest; excludes the manifest and sw.js.
+   */
+  files: PrecachedFile[];
 };
+
+export type PrecachedFile = { path: string; integrity: string };
 
 export type BuiltFile = { path: string; content: Uint8Array };
 
@@ -35,6 +40,11 @@ export function readBuild(dir: string): BuiltFile[] {
     });
 }
 
+/** The Subresource Integrity digest of some bytes (sha256-<base64>). */
+export function integrity(content: Uint8Array): string {
+  return `sha256-${createHash('sha256').update(content).digest('base64')}`;
+}
+
 export function precacheManifest(files: readonly BuiltFile[], version: string): PrecacheManifest {
   const listed = files
     .filter((file) => file.path !== MANIFEST_FILE && file.path !== SERVICE_WORKER_FILE)
@@ -46,7 +56,7 @@ export function precacheManifest(files: readonly BuiltFile[], version: string): 
   return {
     version,
     hash: hash.digest('hex').slice(0, 16),
-    files: listed.map((file) => file.path),
+    files: listed.map((file) => ({ path: file.path, integrity: integrity(file.content) })),
   };
 }
 

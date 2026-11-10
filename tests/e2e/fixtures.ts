@@ -55,9 +55,9 @@ export const test = base.extend<GuardFixtures & GuardOptions, WorkerFixtures>({
     // eslint-disable-next-line no-empty-pattern
     async ({}, use) => {
       const manifest = JSON.parse(readFileSync('dist/asset-manifest.json', 'utf8')) as {
-        files: string[];
+        files: { path: string }[];
       };
-      await use(manifest.files);
+      await use(manifest.files.map((file) => file.path));
     },
     { scope: 'worker' },
   ],

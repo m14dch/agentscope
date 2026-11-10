@@ -39,6 +39,21 @@ function renderProblems(root: HTMLElement): void {
   root.replaceChildren(title, message, items);
 }
 
+/** A lazily loaded page failed to load: say so instead of leaving the page blank. */
+function renderLoadError(root: HTMLElement): void {
+  root.className = 'page';
+  const title = document.createElement('h1');
+  title.textContent = 'AgentScope';
+  const message = document.createElement('p');
+  message.className = 'error';
+  message.textContent =
+    '× The design specimen could not be loaded. Reload the page to get the current version.';
+  const back = document.createElement('a');
+  back.href = '#/';
+  back.textContent = 'Back to the app';
+  root.replaceChildren(title, message, back);
+}
+
 async function render(): Promise<void> {
   if (!app) return;
   if (problems.length) {
@@ -48,9 +63,17 @@ async function render(): Promise<void> {
   if (location.hash === '#/design') {
     shell?.destroy();
     shell = undefined;
-    const { renderSpecimen } = await import('./design/specimen');
+    let specimen: typeof import('./design/specimen');
+    try {
+      specimen = await import('./design/specimen');
+    } catch {
+      // For example a tab still running a build whose files are gone (01-architecture.yaml
+      // offline_mechanics failed_load).
+      if (location.hash === '#/design') renderLoadError(app);
+      return;
+    }
     // The hash may have changed while the specimen was loading.
-    if (location.hash === '#/design') renderSpecimen(app);
+    if (location.hash === '#/design') specimen.renderSpecimen(app);
     return;
   }
   shell ??= new Shell(app);

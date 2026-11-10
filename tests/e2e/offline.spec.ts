@@ -11,7 +11,7 @@ const product = parse(readFileSync('specifications/00-product.yaml', 'utf8')) as
 const manifest = JSON.parse(readFileSync('dist/asset-manifest.json', 'utf8')) as {
   version: string;
   hash: string;
-  files: string[];
+  files: { path: string; integrity: string }[];
 };
 
 const simulated = (page: Page) => page.locator('.simulated');
@@ -117,12 +117,12 @@ test('pages: the subpath build serves shell, assets, hash navigation and a base-
   request,
 }) => {
   test.setTimeout(60_000);
-  // CI and the default build both use a repository subpath.
-  expect(BASE_PATH).not.toBe('/');
+  // CI and the default build both use a repository subpath; a root build has none to test.
+  test.skip(BASE_PATH === '/', 'Built for a root site (AGENTSCOPE_BASE=/), not a subpath');
   const base = new URL(BASE_PATH, test.info().project.use.baseURL).href;
 
   // Every file of the build loads under the base path, and nothing outside it.
-  for (const file of ['', 'sw.js', 'asset-manifest.json', ...manifest.files]) {
+  for (const file of ['', 'sw.js', 'asset-manifest.json', ...manifest.files.map((f) => f.path)]) {
     expect((await request.get(new URL(file, base).href)).status(), file).toBe(200);
   }
 
@@ -184,4 +184,60 @@ test('nothing about offline is shown before the build is cached', async ({ page,
   await expect(page.locator('.offline-status')).toBeHidden();
   release();
   await expect(simulated(page)).toContainText('Available offline.', { timeout: 30_000 });
+});
+
+test('a stale file whose bytes do not match its digest fails the install', async ({
+  page,
+  context,
+}) => {
+  // As if a CDN still served the previous build's copy of one file.
+  await context.route('**/licenses/fonts.txt', (route) =>
+    route.fulfill({ contentType: 'text/plain', body: 'a previous version' }),
+  );
+  // Keep the worker the app registers, so its fate is known even if its registration goes.
+  await context.addInitScript(() => {
+    const container = navigator.serviceWorker;
+    const register = container.register.bind(container);
+    container.register = async (...args) => {
+      const registration = await register(...args);
+      (window as unknown as { registered: ServiceWorker | null }).registered =
+        registration.installing ?? registration.waiting ?? registration.active;
+      return registration;
+    };
+  });
+  await page.goto('./');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('AgentScope');
+  await page.waitForFunction(() => 'registered' in window);
+  const state = await page.evaluate(async () => {
+    const worker = (window as unknown as { registered: ServiceWorker | null }).registered;
+    const settled = () => worker?.state === 'activated' || worker?.state === 'redundant';
+    if (worker && !settled()) {
+      await new Promise<void>((resolve) =>
+        worker.addEventListener('statechange', () => settled() && resolve()),
+      );
+    }
+    return worker?.state;
+  });
+  expect(state).toBe('redundant');
+  // No partial cache is left behind.
+  expect(await page.evaluate(() => caches.keys())).toEqual([]);
+  await expect(page.locator('.offline-status')).toBeHidden();
+});
+
+test.describe('without a service worker', () => {
+  test.use({ serviceWorkers: 'block' });
+
+  test('a lazily loaded page that fails to load shows an error, not a blank page', async ({
+    page,
+    context,
+  }) => {
+    // As in a tab still running a build whose files are gone.
+    await context.route('**/assets/specimen-*.js', (route) => route.abort('failed'));
+    await page.goto('./#/design');
+    await expect(page.locator('.error')).toHaveText(
+      '× The design specimen could not be loaded. Reload the page to get the current version.',
+    );
+    await page.getByRole('link', { name: 'Back to the app' }).click();
+    await expect(page.locator('.simulated')).toBeVisible();
+  });
 });

@@ -56,19 +56,24 @@ One workflow, `.github/workflows/ci.yml`, runs on pull requests, pushes to `main
 validates the specifications, lints, runs the unit tests, builds `dist/` once and runs the browser tests against
 that build. On `main` (a push, or a run started by hand from the Actions tab) it then deploys exactly that tested
 `dist/` to GitHub Pages and runs `scripts/check-deployment.ts`, which fails the workflow if the live page, any
-asset it references, the service worker or any file of the asset manifest does not load. Pull requests and runs from other branches never deploy. Deployable runs take
+asset it references, the service worker or any file of the asset manifest does not load, or a listed file does
+not match its integrity digest. Pull requests and runs from other branches never deploy. Deployable runs take
 the base path from the repository's Pages settings; other runs build for `/agentscope/`. The repository's Pages
 source must be **GitHub Actions**. Each CI build carries `<meta name="agentscope-version">` with its commit SHA, so
 the check also detects a stale deployment.
 
 ### Offline
 
-The build writes `dist/asset-manifest.json` (every file of the build, the version stamp and a content hash)
-and generates `dist/sw.js` from `src/offline/sw.js` with that manifest inlined. On HTTPS or localhost the page
-registers it for the base path; it precaches the whole build into one cache per build, deletes only this app's
-older caches for the same scope, and serves the app from the cache on reload. Once the cache is complete the
-header says "Available offline." The development server registers no service worker. In Chrome DevTools,
-Application → Service workers → Unregister (or a private window) starts from a clean state.
+The build writes `dist/asset-manifest.json` (every file of the build with its integrity digest, the version
+stamp and a content hash) and generates `dist/sw.js` from `src/offline/sw.js` with that manifest inlined. On
+HTTPS or localhost the page registers it for the base path. It precaches the whole build into one cache per
+build, checking every file against its digest, so a stale file from the CDN fails the install and the browser
+tries again later. It keeps the previous build's cache for tabs still running it, deletes only this app's older
+caches for the same scope, and serves the app from the cache on reload. Once the cache is complete the header
+says "Available offline." The first load after a deployment still shows the previous build while the new one
+installs; the next load shows the current one, without an update notice. The development server registers no
+service worker. In Chrome DevTools, Application → Service workers → Unregister (or a private window) starts
+from a clean state.
 
 ### Checking a deployment
 

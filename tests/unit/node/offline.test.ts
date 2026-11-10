@@ -1,6 +1,6 @@
 // The build-generated asset manifest and the service worker (01-architecture.yaml
-// deployment offline_mechanics). The worker runs in a VM with a fake Cache Storage,
-// so install, cleanup, serving and readiness are checked without a browser.
+// deployment offline_mechanics). The worker runs in a VM with a fake Cache Storage and
+// network, so install, cleanup, serving and readiness are checked without a browser.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +8,7 @@ import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   type BuiltFile,
+  integrity,
   precacheManifest,
   readBuild,
   serviceWorkerSource,
@@ -33,8 +34,21 @@ describe('precacheManifest', () => {
   it('lists every built file except the generated ones, sorted, with the version', () => {
     const manifest = precacheManifest(build, 'abc123');
     expect(manifest.version).toBe('abc123');
-    expect(manifest.files).toEqual(['assets/index-a.js', 'index.html', 'licenses/fonts.txt']);
+    expect(manifest.files.map((f) => f.path)).toEqual([
+      'assets/index-a.js',
+      'index.html',
+      'licenses/fonts.txt',
+    ]);
     expect(manifest.hash).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('gives each file its Subresource Integrity digest', () => {
+    const manifest = precacheManifest(build, 'v');
+    // sha256 of the bytes "index.html", base64: the digest a browser checks.
+    expect(manifest.files.find((f) => f.path === 'index.html')?.integrity).toBe(
+      'sha256-DrVHMEZYgFqteI0yDxC/Hyknl7Xm10Wjv2F1hNoBcFE=',
+    );
+    for (const f of manifest.files) expect(f.integrity).toBe(integrity(file(f.path).content));
   });
 
   it('hashes content: the same files give the same hash, any change a new one', () => {
@@ -91,6 +105,7 @@ class FakeCache {
   }
 }
 
+/** Keeps creation order, as the real Cache Storage does. */
 class FakeCacheStorage {
   readonly stores = new Map<string, FakeCache>();
   async open(name: string) {
@@ -106,40 +121,69 @@ class FakeCacheStorage {
   async delete(name: string) {
     return this.stores.delete(name);
   }
+  /** Never creates the named cache. */
+  async match(key: string, options: { cacheName: string }) {
+    return this.stores.get(options.cacheName)?.match(key);
+  }
 }
 
-type FakeRequest = { url: string; method: string; mode: string; cache: string };
+type FakeRequest = {
+  url: string;
+  method: string;
+  mode: string;
+  cache: string;
+  integrity: string;
+};
 type Listener = (event: unknown) => void;
 
-function startWorker(options: { missing?: string } = {}) {
-  const manifest = precacheManifest(
-    [file('index.html'), file('assets/index-a.js'), file('licenses/fonts.txt')],
-    'v1',
-  );
+const BUILD = [file('index.html'), file('assets/index-a.js'), file('licenses/fonts.txt')];
+
+/**
+ * Starts the generated worker. The fake network answers with the build's bytes (the
+ * base URL with index.html's), except for `stale` (other bytes), `missing` (404) and
+ * `redirected`; like a browser, it rejects bytes that do not match the request's integrity.
+ */
+function startWorker(options: { missing?: string; stale?: string; redirected?: string } = {}) {
+  const manifest = precacheManifest(BUILD, 'v1');
   const listeners = new Map<string, Listener>();
   const caches = new FakeCacheStorage();
   const fetched: FakeRequest[] = [];
   const state = { skipped: false, claimed: false };
+  const matches = (url: string, path: string | undefined) => !!path && url.endsWith(path);
   const sandbox = {
     URL,
     Set,
     Promise,
     Error,
+    Response,
     caches,
     Request: class {
       readonly url: string;
       readonly method = 'GET';
       readonly mode = 'cors';
       readonly cache: string;
-      constructor(url: string, init: { cache?: string } = {}) {
+      readonly integrity: string;
+      constructor(url: string, init: { cache?: string; integrity?: string } = {}) {
         this.url = url;
         this.cache = init.cache ?? 'default';
+        this.integrity = init.integrity ?? '';
       }
     },
     fetch: async (request: FakeRequest) => {
       fetched.push(request);
-      const missing = options.missing && request.url.endsWith(options.missing);
-      return new Response(`network ${request.url}`, { status: missing ? 404 : 200 });
+      if (matches(request.url, options.missing)) return new Response('', { status: 404 });
+      const text = matches(request.url, options.stale)
+        ? 'stale'
+        : request.url.slice(SCOPE.length) || 'index.html';
+      const bytes = new TextEncoder().encode(text);
+      if (request.integrity && request.integrity !== integrity(bytes)) {
+        throw new TypeError(`Failed to fetch: integrity mismatch for ${request.url}`);
+      }
+      const response = new Response(bytes, { status: 200 });
+      if (matches(request.url, options.redirected)) {
+        Object.defineProperty(response, 'redirected', { value: true });
+      }
+      return response;
     },
     self: {
       registration: { scope: SCOPE },
@@ -176,8 +220,15 @@ function startWorker(options: { missing?: string } = {}) {
     method: 'GET',
     mode: 'cors',
     cache: 'default',
+    integrity: '',
     ...init,
   });
+
+  /** The body the worker answers with, or undefined when it leaves the request alone. */
+  async function served(req: FakeRequest): Promise<string | undefined> {
+    const response = await dispatch('fetch', { request: req });
+    return response && (await (await response).text());
+  }
 
   async function status(): Promise<unknown> {
     let reply: unknown;
@@ -186,43 +237,73 @@ function startWorker(options: { missing?: string } = {}) {
     return reply;
   }
 
-  return { caches, fetched, state, cacheName, dispatch, request, status };
+  const digest = (path: string) => manifest.files.find((f) => f.path === path)?.integrity;
+
+  return { caches, fetched, state, cacheName, dispatch, request, served, status, digest };
 }
 
 describe('service worker', () => {
-  it('install fetches the base URL and every listed file past the HTTP cache', async () => {
+  it('install fetches the base URL and every file past the HTTP cache, with digests', async () => {
     const worker = startWorker();
     await worker.dispatch('install');
-    const urls = ['', 'assets/index-a.js', 'index.html', 'licenses/fonts.txt'].map(
-      (path) => new URL(path, SCOPE).href,
+    expect(worker.fetched.map((r) => [r.url, r.cache, r.integrity])).toEqual([
+      [SCOPE, 'reload', worker.digest('index.html')],
+      [`${SCOPE}assets/index-a.js`, 'reload', worker.digest('assets/index-a.js')],
+      [`${SCOPE}index.html`, 'reload', worker.digest('index.html')],
+      [`${SCOPE}licenses/fonts.txt`, 'reload', worker.digest('licenses/fonts.txt')],
+    ]);
+    expect([...(await worker.caches.open(worker.cacheName)).entries.keys()].sort()).toEqual(
+      [SCOPE, ...BUILD.map((f) => `${SCOPE}${f.path}`)].sort(),
     );
-    expect(worker.fetched.map((r) => [r.url, r.cache])).toEqual(urls.map((u) => [u, 'reload']));
-    expect([...(await worker.caches.open(worker.cacheName)).entries.keys()]).toEqual(urls);
     expect(worker.state.skipped).toBe(true);
   });
 
-  it('install fails, and the worker does not take over, when any file fails', async () => {
+  it('a file that fails to load fails the install and leaves no cache', async () => {
     const worker = startWorker({ missing: 'licenses/fonts.txt' });
     await expect(worker.dispatch('install')).rejects.toThrow(
       `Precache failed: ${SCOPE}licenses/fonts.txt returned 404`,
     );
     expect(worker.state.skipped).toBe(false);
+    expect(await worker.caches.keys()).toEqual([]);
   });
 
-  it('activation deletes only this app’s older caches for the same scope', async () => {
-    const worker = startWorker();
+  it('a stale file whose bytes do not match its digest fails the install', async () => {
+    const worker = startWorker({ stale: 'assets/index-a.js' });
+    await expect(worker.dispatch('install')).rejects.toThrow('integrity mismatch');
+    expect(worker.state.skipped).toBe(false);
+    expect(await worker.caches.keys()).toEqual([]);
+  });
+
+  it('stores a redirected response as a plain one with the same body', async () => {
+    const worker = startWorker({ redirected: 'index.html' });
     await worker.dispatch('install');
-    const kept = [
-      worker.cacheName,
+    const cache = await worker.caches.open(worker.cacheName);
+    const stored = await cache.match(`${SCOPE}index.html`);
+    expect(stored?.redirected).toBe(false);
+    expect(await stored?.text()).toBe('index.html');
+  });
+
+  it('activation keeps the current and the newest previous cache of this scope only', async () => {
+    const worker = startWorker();
+    const others = [
       'another-app',
       'agentscope:https://example.test/other/:v0:0000',
       'agentscope:https://example.test/agentscope/x/:v0:0000',
     ];
-    for (const name of [...kept, `agentscope:${SCOPE}:v0:0000`, `agentscope:${SCOPE}:dev:1111`]) {
+    // Created before this build's cache, oldest first.
+    for (const name of [
+      `agentscope:${SCOPE}:v-2:2222`,
+      ...others,
+      `agentscope:${SCOPE}:v-1:1111`,
+      `agentscope:${SCOPE}:v0:0000`,
+    ]) {
       await worker.caches.open(name);
     }
+    await worker.dispatch('install');
     await worker.dispatch('activate');
-    expect((await worker.caches.keys()).sort()).toEqual([...kept].sort());
+    expect((await worker.caches.keys()).sort()).toEqual(
+      [...others, `agentscope:${SCOPE}:v0:0000`, worker.cacheName].sort(),
+    );
     expect(worker.state.claimed).toBe(true);
   });
 
@@ -230,27 +311,41 @@ describe('service worker', () => {
     const worker = startWorker();
     await worker.dispatch('install');
     worker.fetched.length = 0;
-    const served = async (request: FakeRequest) => {
-      const response = await worker.dispatch('fetch', { request });
-      return response && (await (await response).text());
-    };
-    expect(await served(worker.request('assets/index-a.js'))).toBe(
-      `network ${SCOPE}assets/index-a.js`,
-    );
+    expect(await worker.served(worker.request('assets/index-a.js'))).toBe('assets/index-a.js');
     for (const url of ['', '#/rag/rag-query/3', 'index.html#/mcp']) {
-      expect(await served(worker.request(url, { mode: 'navigate' })), url).toBe(`network ${SCOPE}`);
+      expect(await worker.served(worker.request(url, { mode: 'navigate' })), url).toBe(
+        'index.html',
+      );
     }
     expect(worker.fetched).toEqual([]);
   });
 
-  it('leaves everything else to the network', async () => {
+  it('serves a file of a previous build from this scope’s caches, newest first', async () => {
+    const worker = startWorker();
+    const put = async (cacheName: string, path: string, body: string) =>
+      (await worker.caches.open(cacheName)).put(`${SCOPE}${path}`, new Response(body));
+    await put(`agentscope:${SCOPE}:v-1:1111`, 'assets/specimen-old.js', 'older');
+    await put(`agentscope:${SCOPE}:v0:0000`, 'assets/specimen-old.js', 'previous');
+    await put('another-app', 'assets/only-elsewhere.js', 'not ours');
+    await worker.dispatch('install');
+    worker.fetched.length = 0;
+    expect(await worker.served(worker.request('assets/specimen-old.js'))).toBe('previous');
+    expect(worker.fetched).toEqual([]);
+    // Other apps' caches are never read: this request goes to the network.
+    await worker.served(worker.request('assets/only-elsewhere.js'));
+    expect(worker.fetched.map((r) => r.url)).toEqual([`${SCOPE}assets/only-elsewhere.js`]);
+  });
+
+  it('sends misses in the scope to the network and leaves everything else alone', async () => {
     const worker = startWorker();
     await worker.dispatch('install');
+    worker.fetched.length = 0;
+    expect(await worker.served(worker.request('assets/index-a.js?v=2'))).toBe(
+      'assets/index-a.js?v=2',
+    );
+    expect(worker.fetched.map((r) => r.url)).toEqual([`${SCOPE}assets/index-a.js?v=2`]);
     for (const request of [
-      worker.request('api/balance'),
       worker.request('assets/index-a.js', { method: 'POST' }),
-      worker.request('assets/index-a.js?v=2'),
-      worker.request('?x=1', { mode: 'navigate' }),
       worker.request('https://example.test/other/index.html'),
       worker.request('https://elsewhere.test/agentscope/index.html'),
     ]) {
@@ -263,9 +358,7 @@ describe('service worker', () => {
     await worker.dispatch('install');
     (await worker.caches.open(worker.cacheName)).entries.delete(`${SCOPE}index.html`);
     worker.fetched.length = 0;
-    const response = await worker.dispatch('fetch', { request: worker.request('index.html') });
-    expect(response).toBeDefined();
-    await response;
+    expect(await worker.served(worker.request('index.html'))).toBe('index.html');
     expect(worker.fetched.map((r) => r.url)).toEqual([`${SCOPE}index.html`]);
   });
 

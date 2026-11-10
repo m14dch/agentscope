@@ -51,6 +51,20 @@ function confirmComplete(worker: ServiceWorker): Promise<boolean> {
   });
 }
 
+/** Resolves true once the worker is activated, false if it becomes redundant first. */
+export function activated(worker: ServiceWorker): Promise<boolean> {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (worker.state === 'activated' || worker.state === 'redundant') {
+        worker.removeEventListener('statechange', check);
+        resolve(worker.state === 'activated');
+      }
+    };
+    worker.addEventListener('statechange', check);
+    check();
+  });
+}
+
 /**
  * Registers the service worker and reports readiness. Does nothing where service
  * workers cannot run (insecure origins, browsers without support); failures stay quiet,
@@ -61,7 +75,8 @@ export async function enableOffline(): Promise<void> {
   try {
     await navigator.serviceWorker.register(appUrl('sw.js'), { scope: appUrl('') });
     const registration = await navigator.serviceWorker.ready;
-    if (registration.active && (await confirmComplete(registration.active))) markReady();
+    const worker = registration.active;
+    if (worker && (await activated(worker)) && (await confirmComplete(worker))) markReady();
   } catch {
     // Registration or caching failed: no indicator.
   }
