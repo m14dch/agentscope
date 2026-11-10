@@ -7,7 +7,13 @@ import {
   setPath,
 } from '../../src/scenarios/expand.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
-import type { Composition, Json, Scenario, ScenarioEvent } from '../../src/scenarios/types.ts';
+import type {
+  Composition,
+  ContextChange,
+  Json,
+  Scenario,
+  ScenarioEvent,
+} from '../../src/scenarios/types.ts';
 import {
   contextFrom,
   validateRegistry,
@@ -322,7 +328,7 @@ describe('more validation rules', () => {
       { target: 'model_visible_messages', action: 'set', description: 'Leak.', value_ref: 'id' },
     ];
     expect(validateRegistry({ base: scn }, ctx)).toEqual([
-      'base/e3: model_visible_messages changes only on LLM requests, with a value_ref',
+      'base/e3: model_visible_messages changes only on LLM requests',
       'base/e3: only LLM requests may change model-visible context',
     ]);
   });
@@ -330,7 +336,10 @@ describe('more validation rules', () => {
   it('keeps agent_state append-only and requires well-formed state changes', () => {
     const scn = base();
     const e3 = scn.events[2] as ScenarioEvent;
-    e3.context_changes = [{ target: 'agent_state', action: 'set', description: 'Replace.' }];
+    e3.context_changes = [
+      { target: 'agent_state', action: 'set', description: 'Replace.', value_ref: 'id' },
+      { target: 'agent_state', action: 'append', description: 'No value.' } as ContextChange,
+    ];
     e3.state_changes = [
       { path: 'a', op: 'set' },
       { path: 'a', op: 'set', value: 1, value_ref: 'id' },
@@ -341,6 +350,7 @@ describe('more validation rules', () => {
       'base/e3: state_change needs op set or append and exactly one of value and value_ref',
       'base/e3: state_change needs op set or append and exactly one of value and value_ref',
       'base/e3: context_change on agent_state must use action append',
+      'base/e3: context_change needs a value_ref',
     ]);
   });
 

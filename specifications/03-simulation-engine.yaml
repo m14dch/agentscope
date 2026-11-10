@@ -41,9 +41,9 @@ event_schema:
       a dotted path into this event (for example payload.result.tools). path is a dotted
       path into the snapshot; set replaces the value at path, append adds to the list at
       path.'
-    context_changes: 'List of {target, action, description, value_ref?}. target agent_state
-      takes action append only; target model_visible_messages takes action set only, with
-      a value_ref, and only on LLM requests.'
+    context_changes: 'List of {target, action, description, value_ref}. target agent_state
+      takes action append only; target model_visible_messages takes action set only, and
+      only on LLM requests. Both need a value_ref.'
     prediction: 'Optional {prompt}: a question shown before this event runs, ending with
       "?"; the event itself answers it'
 phase_schema:

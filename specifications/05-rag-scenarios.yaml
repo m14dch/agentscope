@@ -1303,7 +1303,7 @@ scenarios:
     - target: agent_state
       action: append
       value_ref: payload.prompt_after
-      description: Grounded prompt assembled; not yet model-visible
+      description: Grounded prompt assembled
   - id: retrieve-10
     scenario_id: rag-query
     phase: generation

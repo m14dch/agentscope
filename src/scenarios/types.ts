@@ -33,7 +33,7 @@ export interface ContextChange {
   target: 'agent_state' | 'model_visible_messages';
   action: 'set' | 'append';
   description: string;
-  value_ref?: string;
+  value_ref: string;
 }
 
 /** A question shown before the event runs; the event itself answers it. */

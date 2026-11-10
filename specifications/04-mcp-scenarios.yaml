@@ -439,6 +439,7 @@ scenarios:
     - target: agent_state
       action: append
       description: User question received
+      value_ref: payload
   - id: mcp-10
     scenario_id: mcp-balance
     phase: planning
@@ -522,6 +523,7 @@ scenarios:
     - target: agent_state
       action: append
       description: Assistant tool-call message stored
+      value_ref: payload.message
   - id: mcp-12
     scenario_id: mcp-balance
     phase: planning
@@ -839,7 +841,7 @@ scenarios:
     - target: agent_state
       action: append
       value_ref: payload
-      description: Tool result received; not yet visible to the model
+      description: Tool result received
   - id: mcp-25
     scenario_id: mcp-balance
     phase: context
@@ -864,7 +866,7 @@ scenarios:
     - target: agent_state
       action: append
       value_ref: payload
-      description: Tool message stored in conversation; still not model-visible
+      description: Tool message stored in conversation
   - id: mcp-26
     scenario_id: mcp-balance
     phase: generation
@@ -1167,7 +1169,8 @@ variants:
       context_changes:
       - target: agent_state
         action: append
-        description: OpenAPI resource stored; not model-visible
+        description: OpenAPI resource stored
+        value_ref: payload
 - id: mcp-not-found
   title: Backend 404 becomes a tool execution error
   lesson: A backend failure comes back as a tool result with isError true, so the model can explain it
@@ -1930,7 +1933,7 @@ variants:
       - target: agent_state
         action: append
         value_ref: payload
-        description: Profile tool result stored; not yet model-visible
+        description: Profile tool result stored
     - id: mt-11
       phase: planning
       sender: agent
