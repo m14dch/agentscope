@@ -171,7 +171,8 @@ scenario_format:
     (timestamps, .inf, .nan, sexagesimal numbers), duplicate keys, keys that are not
     strings, anchors, aliases, explicit tags and merge keys are build errors.'
   golden_test: Every bundled file equals PyYAML safe_load of the same file, and the
-    TypeScript registry (base scenarios, expanded variants and the composed scenario)
+    TypeScript registry (base scenarios, expanded variants, the composed scenario and its
+    variants)
     equals the registry of validate_specs.py --dump-registry.
 variant_format:
   description: A variant is a base scenario plus ordered edit operations. Expansion
@@ -219,6 +220,11 @@ composition_format:
     and derived_events from the composition
   - Copied ranges must contain complete request/response pairs
   - Validate the composed scenario
+  variants: 'A variant of the composed scenario (06-comparison-scenarios.yaml combined.variants)
+    extends the composition''s ID and expands as variant_format describes, from the composed
+    events before their IDs are prefixed, so its event IDs carry the variant ID only. It follows
+    the composed scenario in the registry. Fields the variant format does not name (such as
+    expected_answer) are reference data for the validators and are not copied.'
 deterministic_model:
   behavior: Select prewritten response templates from evidence states. RAG answers
     follow 05-rag-scenarios.yaml answer_rules.

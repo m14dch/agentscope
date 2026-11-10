@@ -575,6 +575,10 @@ combined:
     lesson: With the Savings document missing from the index, the answer still gives the balance and the
       Savings deposit from the opening guide but states that the Savings terms are not covered instead
       of comparing the accounts.
+    phase_overrides:
+      answer:
+        takeaway: The answer states the live balance and the cited conditions, and says which terms
+          the evidence does not cover instead of comparing the accounts.
     expected_selected:
     - account-opening@1.2-c50o10-001
     - everyday-account@1.2-c50o10-002

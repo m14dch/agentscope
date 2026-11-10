@@ -141,7 +141,7 @@ navigation:
     MCP: 04-mcp-scenarios.yaml scenarios, then its variants
     RAG: 05-rag-scenarios.yaml rag-query, rag-index, then its variants
     Compare: 06-comparison-scenarios.yaml compare
-    Combined: 06-comparison-scenarios.yaml combined
+    Combined: 06-comparison-scenarios.yaml combined, then its variants
   routes: '#/<tab>/<scenario>/<step>, with /protocol appended in protocol mode (for example
     #/mcp/mcp-balance/14/protocol). Missing parts take defaults: the tab''s first scenario,
     step 0, architecture mode. A step beyond the scenario is clamped. An unknown tab or
@@ -161,8 +161,9 @@ layout:
   - 'Main: resizable sequence diagram + payload inspector'
   - 'Bottom: execution timeline + a collapsible model-context panel, collapsed at start,
     in rag-index the ingestion panel (rag_ingestion), in rag-query and its variants the
-    retrieval panel (rag_retrieval) and, in rag-stale and rag-conflict, the version panel
-    (rag_controls.version_panel). Lineage lives in the inspector''s
+    retrieval panel (rag_retrieval), in rag-stale and rag-conflict, the version panel
+    (rag_controls.version_panel) and, in the Combined scenario and its variants, the answer''s
+    provenance (combined_answer). Lineage lives in the inspector''s
     Lineage tab and in the diagram (lineage_selection), not in a panel of its own'
   - 'Header: one persistent statement that everything is simulated and nothing leaves
     the browser'
@@ -388,6 +389,15 @@ context_panel:
     background; nothing else is marked.
   shown_when: The panel exists only for scenarios whose initial state has agent_state
     or model_visible_messages.
+  provenance: 'Tool data and document evidence are told apart by a label at the start of
+    their item, in weight 600, and by their place, never by colour alone. In agent state an
+    entry stored from a tool result or a tool message says "Tool data", and the retained chunks
+    say "Document evidence". In the model-visible context a tool message says "Tool data ·
+    <tool> result", naming the tool of its tool call; a message carrying document blocks shows
+    its own text first, then each block below it in prompt order as "Document evidence ·
+    <document ID> v<version> · chunk <chunk ID>" (with "· untrusted" for an untrusted
+    document), followed by the block''s text. Other entries and messages carry no source
+    label.'
 lineage_selection:
   select: 'In the Lineage tab each tracked value can be selected (a toggle button); one
     value at a time. Escape or selecting it again clears the selection. It stays while
@@ -535,6 +545,36 @@ rag_retrieval:
     if that control is gone, moves to the panel's heading. When the panel disappears
     (stepping back before retrieve-05) while it holds focus, focus moves to the step slider,
     as in rag_ingestion.
+combined_answer:
+  shown_in: 'The Combined scenario and its variants, below the timeline, from the step that
+    displays the answer (c-08); absent before. The answer and its sources are read from the
+    played c-08, the balance from the played tools/call result (mcp-23) and chunk text from the
+    index the scenario searches, so the screen always equals the events.'
+  title: Where each part of the answer comes from
+  statements: 'The answer, labelled simulated (learning.simulated_behaviour), as its statements
+    in answer order, each with its source as a label in a column of its own to the left (above
+    the statement below 64rem), so label and position carry the provenance and colour does not:
+    "Tool data · MCP" for the intro sentence that names the tool (06 answer_composition.intro),
+    "Session context" for the rest of the intro (the account type the agent read from its
+    session at c-02), "Document evidence · RAG" for the cited statements (05 answer_rules
+    groups and conflict sentences), "Not in the evidence" for the sentence naming the
+    unsupported aspects, and "Comparison" for the comparison sentence of 06
+    answer_composition, if one applies. Joined by single spaces, the statements are exactly the
+    answer of c-08.'
+  links: 'The balance in the tool statement is a button that opens the tool result below the
+    statements: the tool and its arguments (the tools/call request), the result''s
+    structuredContent, the step of the tools/call result as a jump link, and the step of the
+    first model request that contains the result. Each [n] is a citation button that opens its
+    chunk next to its source document, as rag_retrieval.answer does, and never breaks from the
+    punctuation after it. One of them is open at a time; activating it again closes it; the open
+    one is pressed and keeps focus while the panel rebuilds.'
+  sources: 'Below the statements the sources, in the order of the statements: "Tool data" with
+    "<tool> result, returned at step <n>" (a jump link), then "Documents" with the source lines
+    exactly as 05 answer_rules writes them.'
+  gap: In a variant whose evidence lacks terms (combined-missing-terms), the "Not in the
+    evidence" statement names them and the comparison statement says that no comparison is
+    made; the gap is stated in words like every other statement.
+  focus: As rag_retrieval.focus, with this panel's heading and the step slider.
 accessibility:
 - Keyboard operable controls
 - Visible focus
