@@ -230,7 +230,10 @@ export function buildRegistry(sources: SpecSources): { registry: Registry; probl
     registry[variant.id] = expandVariant(base, variant, problems);
   }
   const comb = sources.comparison.combined;
-  registry[comb.id] = compose(comb, registry, problems);
+  // Composed once with local IDs, so copy-step problems are reported once; its variants
+  // expand from it.
+  const local = compose(comb, registry, problems, false);
+  registry[comb.id] = finalize(structuredClone(local), comb.id);
   for (const variant of comb.variants ?? []) {
     if (variant['extends'] !== comb.id) {
       problems.push(
@@ -238,9 +241,7 @@ export function buildRegistry(sources: SpecSources): { registry: Registry; probl
       );
       continue;
     }
-    // Copy-step problems are reported once, by the composition itself.
-    const base = compose(comb, registry, [], false);
-    registry[variant.id] = expandVariant(base, variant as unknown as Variant, problems);
+    registry[variant.id] = expandVariant(local, variant as unknown as Variant, problems);
   }
   return { registry, problems };
 }

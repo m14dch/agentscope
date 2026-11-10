@@ -133,8 +133,26 @@ export interface Retrieval {
   selected: ScoredChunk[];
 }
 
+/** Where an intro sentence of the Combined answer comes from (06 answer_composition.intro). */
+export type IntroSource = 'tool' | 'session';
+
+export interface IntroSentence {
+  source: IntroSource;
+  text: string;
+}
+
+/**
+ * One part of an answer (05 answer_rules, 06 answer_composition.rule): the answer is the
+ * parts' texts joined by single spaces. Views label parts by kind; they never parse the text.
+ */
+export type AnswerPart =
+  | { kind: 'intro'; source: IntroSource; text: string }
+  | { kind: 'group' | 'conflict' | 'gap' | 'note' | 'no-evidence' | 'comparison'; text: string };
+
 export interface Answer {
   text: string;
+  /** The parts the text is composed of, in order. */
+  parts: AnswerPart[];
   /** Cited evidence in citation order: citation n is cited[n - 1]. */
   cited: EvidenceItem[];
   /** IDs of the answer facts the evidence supports. */
@@ -404,11 +422,17 @@ export class RagEngine {
   }
 
   /**
-   * answer_rules: the evidence-based answer and its citations. `intro` is written before the
-   * answer groups (the Combined scenario's balance sentence).
+   * answer_rules: the evidence-based answer, its parts and its citations. `intro` is written
+   * before the answer groups (the Combined scenario's balance and account sentences).
    */
-  answer(selected: readonly EvidenceItem[], intro?: string): Answer {
-    if (!selected.length) return { text: NO_EVIDENCE_ANSWER, cited: [], supported: new Set() };
+  answer(selected: readonly EvidenceItem[], intro: readonly IntroSentence[] = []): Answer {
+    if (!selected.length)
+      return {
+        text: NO_EVIDENCE_ANSWER,
+        parts: [{ kind: 'no-evidence', text: NO_EVIDENCE_ANSWER }],
+        cited: [],
+        supported: new Set(),
+      };
     const marked = new Map<string, EvidenceItem>();
     // Placeholders are numbered by first appearance in the final text.
     const cite = (c: EvidenceItem): string => {
@@ -416,7 +440,11 @@ export class RagEngine {
       return `${MARK}${c.id}${MARK}`;
     };
     const official = selected.filter((c) => this.official.has(c.documentId));
-    const parts: string[] = intro ? [intro] : [];
+    const parts: AnswerPart[] = intro.map((s) => ({
+      kind: 'intro',
+      source: s.source,
+      text: s.text,
+    }));
     const supported = new Set<string>();
     const missing: string[] = [];
     for (const group of this.fixtures.answer_groups) {
@@ -468,20 +496,29 @@ export class RagEngine {
         });
         return `${subject} ${joinAnd(items)}`;
       });
-      if (phrases.length) parts.push(`${group.label}: ${phrases.join('; ')}.`);
-      parts.push(...conflicts);
+      if (phrases.length)
+        parts.push({ kind: 'group', text: `${group.label}: ${phrases.join('; ')}.` });
+      parts.push(...conflicts.map((text) => ({ kind: 'conflict' as const, text })));
     }
-    if (missing.length) parts.push(`The retrieved evidence does not cover ${joinAnd(missing)}.`);
-    if (selected.some((c) => this.injectedIn(c))) parts.push(INJECTION_NOTE);
+    if (missing.length)
+      parts.push({
+        kind: 'gap',
+        text: `The retrieved evidence does not cover ${joinAnd(missing)}.`,
+      });
+    if (selected.some((c) => this.injectedIn(c)))
+      parts.push({ kind: 'note', text: INJECTION_NOTE });
+    // Numbered part by part in order, which numbers them as the joined text would.
     const cited: EvidenceItem[] = [];
-    const text = parts
-      .join(' ')
-      .replace(new RegExp(`${MARK}([^${MARK}]+)${MARK}`, 'g'), (_, id: string) => {
+    const placeholder = new RegExp(`${MARK}([^${MARK}]+)${MARK}`, 'g');
+    const numbered = parts.map((p) => ({
+      ...p,
+      text: p.text.replace(placeholder, (_, id: string) => {
         const c = marked.get(id) as EvidenceItem;
         if (!cited.includes(c)) cited.push(c);
         return String(cited.indexOf(c) + 1);
-      });
-    return { text, cited, supported };
+      }),
+    }));
+    return { text: numbered.map((p) => p.text).join(' '), parts: numbered, cited, supported };
   }
 }
 

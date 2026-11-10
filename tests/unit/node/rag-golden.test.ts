@@ -31,6 +31,8 @@ type Entry =
       selected: string[];
       evidence: string[];
       answer: string;
+      /** The answer's parts as [kind, text] (05 answer_rules). */
+      parts: [string, string][];
       sources: string[];
     };
 
@@ -66,7 +68,12 @@ describe('RAG engine golden test', () => {
       const overrides = variants.find((v) => v.id === entry.case)?.fixture_overrides as
         JsonObject | undefined;
       const docs = engine.corpus(corpusOverrides(overrides));
-      const where = JSON.stringify({ ...entry, ranking: undefined, answer: undefined });
+      const where = JSON.stringify({
+        ...entry,
+        ranking: undefined,
+        answer: undefined,
+        parts: undefined,
+      });
       if ('ranking' in entry) {
         const r = engine.retrieve(docs, {
           chunkSize: entry.size,
@@ -99,6 +106,10 @@ describe('RAG engine golden test', () => {
       ).toEqual(entry.evidence);
       const answer = engine.answer(evidence);
       expect(answer.text, where).toBe(entry.answer);
+      expect(
+        answer.parts.map((p) => [p.kind, p.text]),
+        where,
+      ).toEqual(entry.parts);
       expect(sourceLines(answer.cited), where).toEqual(entry.sources);
     }
   }, 30_000); // Runs a Python grid of 2000+ cases; 5 s is too tight under parallel load.

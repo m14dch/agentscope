@@ -10,6 +10,7 @@ import {
   type Answer,
   type EvidenceItem,
   type IndexedDocument,
+  type IntroSentence,
   type RagFixtures,
   type Retrieval,
   RagEngine,
@@ -35,7 +36,8 @@ export interface Comparison {
 }
 
 export interface AnswerComposition {
-  intro: string;
+  /** The intro's sentences with their sources. */
+  intro: IntroSentence[];
   comparisons: Comparison[];
   /** Explanation of the model's answer event when no comparison applies. */
   explanation: string;
@@ -401,10 +403,49 @@ export function combinedAnswer(
   );
   return applies
     ? {
-        answer: { ...answer, text: `${answer.text} ${applies.sentence}` },
+        answer: {
+          ...answer,
+          text: `${answer.text} ${applies.sentence}`,
+          parts: [...answer.parts, { kind: 'comparison', text: applies.sentence }],
+        },
         explanation: applies.explanation,
       }
     : { answer, explanation: composition.explanation };
+}
+
+const isText = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+const record = (v: unknown): v is Record<string, unknown> =>
+  v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** What is wrong with an answer_composition (06 combined), or undefined if nothing. */
+export function answerCompositionProblem(raw: unknown): string | undefined {
+  if (!record(raw)) return 'missing';
+  const { intro, comparisons, explanation } = raw;
+  if (
+    !Array.isArray(intro) ||
+    !intro.length ||
+    !intro.every(
+      (s) =>
+        record(s) && (s['source'] === 'tool' || s['source'] === 'session') && isText(s['text']),
+    )
+  )
+    return 'intro must list sentences, each with source tool or session and a text';
+  if (
+    !Array.isArray(comparisons) ||
+    !comparisons.every((c) => record(c) && isText(c['sentence']) && isText(c['explanation']))
+  )
+    return 'each comparison needs a sentence and an explanation';
+  if (!isText(explanation)) return 'explanation is missing';
+  return undefined;
+}
+
+/** The Combined answer composition of the specifications, checked; a problem is an error naming it. */
+export function answerComposition(sources: SpecSources): AnswerComposition {
+  const raw = (sources.comparison.combined as unknown as { answer_composition?: unknown })
+    .answer_composition;
+  const problem = answerCompositionProblem(raw);
+  if (problem) throw new Error(`06 combined.answer_composition: ${problem}`);
+  return raw as AnswerComposition;
 }
 
 const num = (v: Json | undefined, fallback: number): number =>
@@ -425,9 +466,7 @@ export class RagDerivation {
       scenarios: Scenario[];
     };
     this.engine = new RagEngine(rag.fixtures);
-    this.composition = (
-      sources.comparison.combined as unknown as { answer_composition: AnswerComposition }
-    ).answer_composition;
+    this.composition = answerComposition(sources);
     const param = (scenario: string, name: string): Json | undefined =>
       rag.scenarios.find((s) => s.id === scenario)?.parameters?.[name]?.default;
     this.defaults = {
@@ -494,6 +533,20 @@ export class RagDerivation {
       handler(copy, ctx);
       return copy;
     });
+  }
+
+  /**
+   * The Combined answer with its parts, computed as the scenario's derived c-07 and c-08 are
+   * (02 combined_answer.statements).
+   */
+  combinedAnswer(
+    scenario: Scenario,
+    config: RetrievalConfig,
+    fixtureOverrides: JsonObject | undefined = scenario.fixture_overrides,
+  ): Answer {
+    const docs = this.engine.corpus(corpusOverrides(fixtureOverrides));
+    const { selected } = this.engine.retrieve(docs, this.parameters(config));
+    return combinedAnswer(this.engine, selected, this.composition).answer;
   }
 
   /** Playback's deriveEvents hook. */
