@@ -129,8 +129,9 @@ layout:
   desktop:
   - 'Top bar: navigation, scenario, architecture/protocol toggle'
   - 'Main: resizable sequence diagram + payload inspector'
-  - 'Bottom: execution timeline + collapsible model-context and lineage panels; one
-    panel open at a time, all but the timeline collapsed at start'
+  - 'Bottom: execution timeline + a collapsible model-context panel, collapsed at start.
+    Lineage lives in the inspector''s Lineage tab and in the diagram (lineage_selection),
+    not in a panel of its own'
   - 'Header: one persistent statement that everything is simulated and nothing leaves
     the browser'
   - 'Above the diagram: the scenario''s learning question and headline'
@@ -285,7 +286,8 @@ inspector:
   security_tab: Lists the event's security_boundaries with risk and mitigation from
     07-security-protocols.yaml.
   lineage_tab: 'Lists the event''s tracked_values: each key once, with its value or values,
-    each followed by the step where it first appeared, as a link that jumps there.'
+    each followed by its occurrences (lineage_selection.occurrences) and a toggle that
+    selects it.'
   tab_rules: The tabs follow the ARIA tabs pattern (arrow keys move between tabs while
     one has focus). The chosen tab stays chosen while stepping as long as the step has
     content for it; otherwise the first tab with content shows. A step with no content
@@ -313,6 +315,28 @@ context_panel:
     the previous step is highlighted, in place
   rule: Tool results and retrieved text are not model-visible until a subsequent model
     request includes them
+  agent_state: 'The agent''s working memory as a list, oldest first: each entry''s step,
+    description and value. An entry stays labelled "not yet seen by the model" until
+    the first LLM request after the step that stored it.'
+  model_visible: 'What the model saw in its latest request: each message with its role
+    and content, then the number of tool definitions. Before the first request: "The
+    model has not seen anything yet."'
+  highlight: Entries added and messages new since the previous step have the selection
+    background; nothing else is marked.
+  shown_when: The panel exists only for scenarios whose initial state has agent_state
+    or model_visible_messages.
+lineage_selection:
+  select: 'In the Lineage tab each tracked value can be selected (a toggle button); one
+    value at a time. Escape or selecting it again clears the selection. It stays while
+    stepping through the scenario and is cleared when the scenario changes.'
+  diagram: Every reached step whose tracked_values include the selected value gets the
+    selection background behind its label and an ink underline, in both modes; a
+    collapsed group containing such a step shows the mark on its caption.
+  payload: With a selection, only fields equal to the selected value are highlighted;
+    without one, all of the step's tracked values are.
+  occurrences: The Lineage tab lists, for each value, the step where it first appeared
+    and every later step up to the current one, as jump links; steps after the current
+    one are not revealed.
 rag_controls:
   top_k:
     min: 1
