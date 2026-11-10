@@ -339,8 +339,9 @@ lineage_selection:
   payload: With a selection, only fields equal to the selected value are highlighted;
     without one, all of the step's tracked values are.
   occurrences: The Lineage tab lists, for each value, the step where it first appeared
-    and every later step up to the current one, as jump links; steps after the current
-    one are not revealed.
+    and the later steps up to the current one as jump links, at most five, followed by
+    how many more there are; selecting the value marks every one of them in the diagram,
+    so a long list adds no information. Steps after the current one are not revealed.
 rag_controls:
   top_k:
     min: 1
