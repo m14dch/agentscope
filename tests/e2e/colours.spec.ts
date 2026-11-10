@@ -128,6 +128,7 @@ for (const route of [
   './#/design',
   './#/mcp/mcp-not-found/23/protocol',
   './#/mcp/mcp-balance/14',
+  './#/mcp/mcp-balance/2/protocol',
 ]) {
   test(`every computed colour on ${route} is a design token`, async ({ page }) => {
     await page.goto(route);

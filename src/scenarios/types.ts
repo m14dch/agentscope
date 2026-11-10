@@ -163,6 +163,22 @@ export interface Composition {
   variants?: (Omit<Variant, 'extends'> & JsonObject)[];
 }
 
+/** One message of an earlier protocol revision, shown only for comparison. */
+export interface EarlierMessage {
+  operation: string;
+  sender: string;
+  receiver: string;
+  http: HttpEnvelope;
+  payload: Json;
+}
+
+/** 04-mcp-scenarios.yaml protocol.earlier_revision_handshake. */
+export interface EarlierRevision {
+  revision: string;
+  summary: string;
+  messages: EarlierMessage[];
+}
+
 /** The parsed specification files the app bundles (00, 01, 03, 04, 05, 06, 07). */
 export interface SpecSources {
   product: { primary_questions: { mcp: string; rag: string; combined: string } } & JsonObject;
@@ -172,14 +188,21 @@ export interface SpecSources {
     scenario_format: { required: string[] };
     lineage: { tracked: string[] };
   } & JsonObject;
-  mcp: { protocol: { revision: string }; scenarios: Scenario[]; variants: Variant[] } & JsonObject;
+  mcp: {
+    protocol: { revision: string; earlier_revision_handshake?: EarlierRevision };
+    scenarios: Scenario[];
+    variants: Variant[];
+  } & JsonObject;
   rag: { scenarios: Scenario[]; variants: Variant[] } & JsonObject;
   comparison: {
     semantic_phases: { id: string }[];
     compare: { phase_mapping: Record<string, Record<string, string>> } & JsonObject;
     combined: Composition;
   } & JsonObject;
-  security: { trust_boundaries: { id: string }[] } & JsonObject;
+  security: {
+    trust_boundaries: { id: string }[];
+    error_taxonomy?: Record<string, string>;
+  } & JsonObject;
 }
 
 /** Base scenarios, expanded variants and the composed scenario, in that order. */

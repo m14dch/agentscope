@@ -13,6 +13,74 @@ protocol:
     notification (answered with an empty HTTP 202) and an optional Mcp-Session-Id. Revision 2026-07-28
     removed the handshake and protocol-level sessions. The inspector for mcp-02 may show the legacy handshake
     for comparison, clearly labelled as an earlier revision.
+  earlier_revision_handshake:
+    revision: '2025-11-25'
+    summary: 'Revision 2025-11-25 needed two HTTP exchanges before the first tool call: initialize and
+      its result with an Mcp-Session-Id, then the notifications/initialized notification, answered with
+      an empty 202.'
+    messages:
+    - operation: initialize
+      sender: mcp-client
+      receiver: mcp-server
+      http:
+        method: POST
+        path: /mcp
+        headers:
+          Accept: application/json, text/event-stream
+          Content-Type: application/json
+          Authorization: Bearer <REDACTED_MCP_ACCESS_TOKEN>
+      payload:
+        jsonrpc: '2.0'
+        id: 1
+        method: initialize
+        params:
+          protocolVersion: '2025-11-25'
+          capabilities: {}
+          clientInfo:
+            name: agentscope-demo
+            version: 1.0.0
+    - operation: initialize result
+      sender: mcp-server
+      receiver: mcp-client
+      http:
+        status: 200
+        headers:
+          Content-Type: application/json
+          Mcp-Session-Id: demo-session-7f3a
+      payload:
+        jsonrpc: '2.0'
+        id: 1
+        result:
+          protocolVersion: '2025-11-25'
+          capabilities:
+            tools: {}
+            resources: {}
+          serverInfo:
+            name: example-bank-mcp
+            version: 1.0.0
+          instructions: Example Bank tools return live account data for the authenticated customer.
+    - operation: notifications/initialized
+      sender: mcp-client
+      receiver: mcp-server
+      http:
+        method: POST
+        path: /mcp
+        headers:
+          Accept: application/json, text/event-stream
+          Content-Type: application/json
+          MCP-Protocol-Version: '2025-11-25'
+          Mcp-Session-Id: demo-session-7f3a
+          Authorization: Bearer <REDACTED_MCP_ACCESS_TOKEN>
+      payload:
+        jsonrpc: '2.0'
+        method: notifications/initialized
+    - operation: HTTP 202 Accepted
+      sender: mcp-server
+      receiver: mcp-client
+      http:
+        status: 202
+        headers: {}
+      payload: null
 endpoints:
   mcp_server: https://mcp.example-bank.test/mcp
   rest_api: https://api.example-bank.test
