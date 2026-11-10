@@ -85,7 +85,7 @@ describe('ingestion panel model', () => {
     expect(everyday.words.slice(40, 50)).toEqual(second.words.slice(0, 10));
 
     // At 25 words with 20 shared, only the immediate neighbours count, not every chunk
-    // that holds a word: the third chunk (words 10–34) shares 15–34 and 10–29.
+    // that holds a word: the third chunk (words 10–34) shares 10–29 with the previous one and 15–34 with the next.
     player.setParameters({ chunk_size_words: 25, overlap_words: 20 });
     const dense = model(player).documents[0];
     if (!dense) throw new Error('no document');

@@ -258,27 +258,35 @@ export class RagEngine {
 
   /** embedding.vector: 0.1 smoothing plus lexicon weights, L2-normalized, 4 decimals. */
   embed(text: string): number[] {
-    return this.embedding(text).vector;
+    const sums = this.sums(text);
+    const length = Math.sqrt(sums.reduce((s, x) => s + x * x, 0));
+    return sums.map((x) => round4(x / length));
   }
 
-  /**
-   * embedding.vector with its working: per dimension the lexicon words found in the text
-   * (with counts and weights) and the sum before normalizing, the vector's length, and
-   * the vector itself.
-   */
-  embedding(text: string): EmbeddingWorking {
-    const dims = this.fixtures.embedding.dimensions;
-    const sums = new Array<number>(dims.length).fill(SMOOTHING);
-    const found = new Map<string, number>();
+  /** Per dimension: 0.1 plus the weights of the lexicon words in the text; counts them in `found`. */
+  private sums(text: string, found?: Map<string, number>): number[] {
+    const n = this.fixtures.embedding.dimensions.length;
+    const sums = new Array<number>(n).fill(SMOOTHING);
     for (const t of tokens(text)) {
       const w = this.lexicon.get(t);
       if (!w) continue;
-      found.set(t, (found.get(t) ?? 0) + 1);
-      for (let i = 0; i < dims.length; i += 1) sums[i] = (sums[i] as number) + (w[i] as number);
+      found?.set(t, (found.get(t) ?? 0) + 1);
+      for (let i = 0; i < n; i += 1) sums[i] = (sums[i] as number) + (w[i] as number);
     }
+    return sums;
+  }
+
+  /**
+   * embedding.vector with its working, for the ingestion view: per dimension the lexicon
+   * words found in the text (with counts and weights) and the sum before normalizing, the
+   * vector's length, and the vector itself (equal to embed).
+   */
+  embedding(text: string): EmbeddingWorking {
+    const found = new Map<string, number>();
+    const sums = this.sums(text, found);
     const length = Math.sqrt(sums.reduce((s, x) => s + x * x, 0));
     return {
-      dimensions: dims.map((name, i) => ({
+      dimensions: this.fixtures.embedding.dimensions.map((name, i) => ({
         name,
         hits: [...found]
           .filter(([word]) => (this.lexicon.get(word)?.[i] ?? 0) > 0)
