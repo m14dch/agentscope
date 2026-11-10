@@ -158,3 +158,8 @@
 .group-label {
   text-decoration: underline dotted var(--color-ink-muted);
 }
+
+/* A selected caption is a value mark, not a fold control: solid ink underline. */
+.group-label.arrow-label--selected {
+  text-decoration: underline solid var(--color-ink);
+}

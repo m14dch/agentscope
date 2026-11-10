@@ -65,6 +65,25 @@ function strings(value: Json | undefined): string[] {
 const MIN_SHARED = 8;
 
 /**
+ * Whether a stored entry is still unseen (02 context_panel.agent_state): the model's own
+ * output and entries with nothing to send are never labelled; others are seen once a later
+ * LLM request contains one of their strings.
+ */
+function unseen(
+  stored: ScenarioEvent | undefined,
+  values: string[],
+  index: number,
+  requests: { index: number; text: string[] }[],
+): boolean {
+  if (stored?.protocol === 'LLM_API' && stored.message_type === 'RESPONSE') return false;
+  const shared = values.filter((t) => t.length >= MIN_SHARED);
+  if (!shared.length) return false;
+  return !requests.some(
+    (r) => r.index > index && shared.some((t) => r.text.some((s) => s.includes(t))),
+  );
+}
+
+/**
  * The panel's content at a cursor: an entry stays unseen until an LLM request after the
  * step that stored it contains its value (02 context_panel.agent_state).
  */
@@ -87,13 +106,7 @@ export function contextModel(
     const entryOut: MemoryEntry = {
       step: index + 1,
       description: String(entry['description'] ?? ''),
-      unseen: !requests.some(
-        (r) =>
-          r.index > index &&
-          strings(entry['value'])
-            .filter((t) => t.length >= MIN_SHARED)
-            .some((t) => r.text.some((s) => s.includes(t))),
-      ),
+      unseen: unseen(events[index], strings(entry['value']), index, requests),
       added: i >= earlier,
     };
     if (Object.hasOwn(entry, 'value')) entryOut.value = entry['value'] as Json;

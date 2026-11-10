@@ -234,6 +234,8 @@ export class Shell {
     });
     details.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || !details.open) return;
+      // Closing the menu is all this Escape does; it does not clear a lineage selection.
+      e.preventDefault();
       details.open = false;
       details.querySelector('summary')?.focus();
     });
@@ -550,11 +552,7 @@ export class Shell {
   private readonly onKey = (e: KeyboardEvent): void => {
     const c = this.current;
     if (!c || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
-    if (
-      e.key === 'Escape' &&
-      c.selection &&
-      !(e.target instanceof Element && e.target.closest('details[open]'))
-    ) {
+    if (e.key === 'Escape' && c.selection) {
       this.select(undefined);
       e.preventDefault();
       return;

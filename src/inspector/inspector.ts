@@ -399,7 +399,9 @@ export class Inspector {
         );
         const where: (Node | string)[] = [];
         if (!earlier.length) where.push(el('span', 'muted', 'first here'));
-        earlier.forEach((k, n) => {
+        // At most five later steps by number; selecting the value marks them all.
+        const LATER = 5;
+        earlier.slice(0, LATER + 1).forEach((k, n) => {
           if (n === 1) where.push(el('span', 'muted', '; also '));
           else if (n > 1) where.push(', ');
           const link = this.stepLink(
@@ -410,6 +412,8 @@ export class Inspector {
           if (n > 0) link.setAttribute('aria-label', `step ${k + 1}`);
           where.push(link);
         });
+        const more = earlier.length - (LATER + 1);
+        if (more > 0) where.push(el('span', 'muted', ` and ${more} more`));
         const selected = step.selection?.key === key && step.selection.value === v;
         const toggle = focusKey(
           el('button', 'select-value', selected ? 'Selected' : 'Select'),
@@ -417,10 +421,8 @@ export class Inspector {
         );
         toggle.type = 'button';
         toggle.setAttribute('aria-pressed', String(selected));
-        toggle.setAttribute(
-          'aria-label',
-          `${selected ? 'Clear selection of' : 'Select'} ${key} ${JSON.stringify(v)}`,
-        );
+        // A stable name; aria-pressed carries the state.
+        toggle.setAttribute('aria-label', `Select ${key} ${JSON.stringify(v)}`);
         toggle.addEventListener('click', () =>
           this.context.select(selected ? undefined : { key, value: v }),
         );

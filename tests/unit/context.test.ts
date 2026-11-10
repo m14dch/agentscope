@@ -58,6 +58,54 @@ describe('context panel model', () => {
   });
 });
 
+describe('labels the review asked for', () => {
+  it('never labels the model own tool call as unseen', () => {
+    const entry = at('mcp-balance', 'mcp-11').memory.find(
+      (m) => m.description === 'Assistant tool-call message stored',
+    );
+    expect(entry?.unseen).toBe(false);
+  });
+
+  it('holds retained chunks unseen from retrieval until the grounded prompt', () => {
+    const held = (id: string) =>
+      at('rag-query', id).memory.find(
+        (m) => m.description === 'Retained chunks held for the prompt',
+      );
+    expect(held('retrieve-06')).toMatchObject({ step: 6, unseen: true, added: true });
+    expect(held('retrieve-09')?.unseen).toBe(true);
+    expect(held('retrieve-10')?.unseen).toBe(false);
+  });
+
+  it('stores the Combined question and assembled prompt before the model sees them', () => {
+    const scn = scenario('combined-balance-explanation');
+    const p = new Playback(scn);
+    const k = p.events.findIndex((e) => e.id.endsWith(':c-03')) + 1;
+    const model = contextModel(p.events, p.snapshot(k), p.snapshot(k - 1));
+    expect(model.memory.map((m) => m.description)).toEqual([
+      'User question received',
+      'Retained chunks held for the prompt',
+      'Prompt assembled with evidence and tool names',
+    ]);
+    expect(model.memory.every((m) => m.unseen)).toBe(true);
+    expect(model.messages).toBeUndefined();
+  });
+
+  it('does not label an entry with nothing to send', () => {
+    expect(
+      contextModel(
+        [],
+        {
+          cursor: 0,
+          lineage: {},
+          state: { agent_state: [{ event: 'x', description: 'Empty', value: [] }] },
+          retrieval_config: {},
+        },
+        undefined,
+      ).memory[0]?.unseen,
+    ).toBe(false);
+  });
+});
+
 describe('tracked values', () => {
   it('keep customerId and balance consistent in every scenario', () => {
     const seen = { customerId: new Set<unknown>(), balance: new Set<unknown>() };

@@ -51,9 +51,10 @@ test('selecting a tracked value marks its reached steps in the diagram, and Esca
   await page.getByRole('button', { name: 'Select balance 12500.75' }).click();
   // Reached steps that carry the balance: 20 to 24.
   await expect(page.locator('.step .label-mark')).toHaveCount(5);
-  await expect(
-    page.getByRole('button', { name: 'Clear selection of balance 12500.75' }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Select balance 12500.75' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   // Later steps are not revealed in the occurrences.
   const row = page.locator('.lineage-row').filter({ hasText: 'balance' });
   await expect(row.locator('li')).toHaveText('12500.75 first at step 20; also 21, 22, 23 Selected');
@@ -76,13 +77,28 @@ test('with a selection only its fields are highlighted in the payload', async ({
   await expect(marks.filter({ hasText: '12500.75' }).first()).toBeVisible();
 });
 
-test('architecture mode marks the group caption holding the selected value', async ({ page }) => {
+test('architecture mode marks the group caption holding the selected value with a solid ink underline', async ({
+  page,
+}) => {
   await open(page, '#/mcp/mcp-balance/24/protocol');
   await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
   await page.getByRole('button', { name: 'Select balance 12500.75' }).click();
   await page.getByRole('button', { name: 'Architecture' }).click();
-  await expect(
-    page.locator('[data-group="backend"] + .label-mark, .label-mark').first(),
-  ).toBeVisible();
-  await expect(page.locator('.group-label.arrow-label--selected')).not.toHaveCount(0);
+  const caption = page.locator('.group-label.arrow-label--selected').first();
+  await expect(caption).toBeVisible();
+  const style = await caption.evaluate((node) => {
+    const s = getComputedStyle(node);
+    return { line: s.textDecorationLine, kind: s.textDecorationStyle };
+  });
+  expect(style).toEqual({ line: 'underline', kind: 'solid' });
+});
+
+test('Escape in the scenario picker closes it and keeps the selection', async ({ page }) => {
+  await open(page, '#/mcp/mcp-balance/24/protocol');
+  await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
+  await page.getByRole('button', { name: 'Select balance 12500.75' }).click();
+  await page.locator('.picker summary').click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.picker')).not.toHaveAttribute('open', '');
+  await expect(page.locator('.step .label-mark')).toHaveCount(5);
 });

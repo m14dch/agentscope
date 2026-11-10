@@ -220,9 +220,11 @@ export function layout(input: LayoutInput): DiagramLayout {
       : xr < xs
         ? xr + SIZES.headRoom
         : xs + SIZES.labelGap;
-    const labelWidth = measure(label, true);
-    right = Math.max(right, labelX + labelWidth + SIZES.margin);
+    // The layout reserves the bold width, so nothing moves when a label becomes current.
+    right = Math.max(right, labelX + measure(label, true) + SIZES.margin);
     const vis = visibility(index, cursor);
+    const emphasized = vis === 'current' || (index === pair && index < cursor);
+    const labelWidth = measure(label, emphasized);
     return {
       index,
       event: e,
@@ -236,7 +238,7 @@ export function layout(input: LayoutInput): DiagramLayout {
       line: lineKind(e),
       error: errorKind(e),
       visibility: vis,
-      emphasized: vis === 'current' || (index === pair && index < cursor),
+      emphasized,
       selected: index < cursor && !!input.selected?.has(index),
       labelWidth,
     };
