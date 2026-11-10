@@ -266,8 +266,16 @@ function checkDerived(
     const parameter = Object.hasOwn(parameters, by) ? obj(parameters[by]) : {};
     if (typeof parameter['default'] !== 'boolean')
       err(sid, `optional step enabled_by ${by} is not a boolean parameter`);
-    for (const id of list(step['events']).map(text)) {
-      if (!local.has(id)) err(sid, `optional_steps names unknown event ${id}`);
+    const events = list(step['events']).map(text);
+    for (const id of events) {
+      if (!local.has(id)) {
+        err(sid, `optional_steps names unknown event ${id}`);
+        continue;
+      }
+      const pair = (byId.get(id) ?? byId.get(`${sid}:${id}`))?.pair_id;
+      const partner = pair?.startsWith(`${sid}:`) ? pair.slice(sid.length + 1) : pair;
+      if (partner !== undefined && !events.includes(partner))
+        err(sid, `optional step ${id} and its pair ${partner} are in different entries`);
     }
   }
 }

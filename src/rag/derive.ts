@@ -8,6 +8,7 @@ import { type DeriveEvents, localId, type RetrievalConfig } from '../engine/play
 import type { Json, JsonObject, Scenario, ScenarioEvent, SpecSources } from '../scenarios/types.ts';
 import {
   type Answer,
+  type EvidenceItem,
   type IndexedDocument,
   type RagFixtures,
   type Retrieval,
@@ -15,6 +16,7 @@ import {
   type ScoredChunk,
   corpusOverrides,
   modelMessage,
+  parentDocuments,
   sourceObjects,
   tokens,
   words,
@@ -46,6 +48,7 @@ export interface RagParameters {
   threshold: number;
   rerank: boolean;
   keywordRetrieval: boolean;
+  fetchFullDocuments: boolean;
 }
 
 interface Context {
@@ -53,6 +56,10 @@ interface Context {
   params: RagParameters;
   docs: IndexedDocument[];
   retrieval: Retrieval;
+  /** The parent documents of the retained chunks. */
+  parents: EvidenceItem[];
+  /** What the prompt carries and the answer is built from: the chunks or their parents. */
+  evidence: EvidenceItem[];
   answer: () => Answer;
   combinedAnswer: () => { answer: Answer; explanation: string };
 }
@@ -80,6 +87,13 @@ function track(e: ScenarioEvent, key: string, values: Json[]): void {
 const ids = (chunks: readonly ScoredChunk[]): string[] => chunks.map((c) => c.id);
 const documentIds = (chunks: readonly ScoredChunk[]): string[] =>
   [...new Set(chunks.map((c) => c.documentId))].sort();
+/** Thresholds in explanations are rounded to 2 decimals (05 derived_event_rules.inputs). */
+export const thresholdText = (x: number): string => String(Number(x.toFixed(2)));
+
+/** The grounding instruction without chunk IDs, when the evidence is whole documents. */
+const CHUNK_CITATION = 'document ID, version and chunk ID';
+const DOCUMENT_CITATION = 'document ID and version';
+
 const quoted = (items: string[]): string =>
   items.length === 1
     ? `'${items[0] as string}'`
@@ -88,18 +102,18 @@ const quoted = (items: string[]): string =>
         .map((t) => `'${t}'`)
         .join(', ')} and '${items.at(-1) as string}'`;
 
-/** retrieve-10's user message: the question and one document block per retained chunk. */
+/** retrieve-10's user message: the question and one document block per evidence item. */
 export function groundedUserMessage(
   engine: RagEngine,
   question: string,
-  chunks: readonly ScoredChunk[],
+  evidence: readonly EvidenceItem[],
 ): string {
-  const blocks = chunks.length
-    ? chunks
-        .map(
-          (c) =>
-            `<document id="${c.documentId}" version="${c.version}" chunk="${c.id}" trust="${engine.trustOf(c.documentId)}">\n${c.text}\n</document>`,
-        )
+  const blocks = evidence.length
+    ? evidence
+        .map((c) => {
+          const chunk = c.document ? '' : ` chunk="${c.id}"`;
+          return `<document id="${c.documentId}" version="${c.version}"${chunk} trust="${engine.trustOf(c.documentId)}">\n${c.text}\n</document>`;
+        })
         .join('\n')
     : '(none)';
   return `Question: ${question}\n\nRetrieved documents:\n${blocks}`;
@@ -125,8 +139,16 @@ function trackRetained(e: ScenarioEvent, ctx: Context, text: boolean): void {
     track(
       e,
       'retrievedText',
-      sel.map((c) => c.text),
+      ctx.evidence.map((c) => c.text),
     );
+}
+
+/** The system instruction for the evidence: chunk citations, or document citations. */
+function systemFor(system: Json | undefined, ctx: Context): string {
+  const text = typeof system === 'string' ? system : '';
+  return ctx.params.fetchFullDocuments
+    ? text.replace(CHUNK_CITATION, DOCUMENT_CITATION)
+    : text.replace(DOCUMENT_CITATION, CHUNK_CITATION);
 }
 
 function makeHandlers(engine: RagEngine): Record<string, Handler> {
@@ -199,17 +221,21 @@ function makeHandlers(engine: RagEngine): Record<string, Handler> {
       }));
       const below = hits.filter((c) => c.score < params.threshold);
       const lowest = [...below].sort((a, b) => a.score - b.score || (a.id < b.id ? -1 : 1))[0];
+      const threshold = thresholdText(params.threshold);
       if (!hits.length) e.explanation = 'No chunk contains a query term.';
       else if (!lowest)
-        e.explanation = `Exact-term hits. All of them reach the similarity threshold of ${params.threshold}.`;
+        e.explanation = `Exact-term hits. All of them reach the similarity threshold of ${threshold}.`;
       else {
         const present = new Set(tokens(lowest.text));
-        const terms = retrieval.queryTerms.filter((t) => present.has(t));
-        const count = below.length === 1 ? 'One hit scores' : `${below.length} hits score`;
+        const terms = quoted(retrieval.queryTerms.filter((t) => present.has(t)));
         e.explanation =
-          `Exact-term hits. ${count} below the similarity threshold of ${params.threshold}: ` +
-          `lexical false positives that the threshold later removes, such as ${lowest.id}, ` +
-          `which matches only ${quoted(terms)}.`;
+          below.length === 1
+            ? `Exact-term hits. One hit scores below the similarity threshold of ${threshold}: ` +
+              `${lowest.id}, a lexical false positive that matches only ${terms} and that the ` +
+              'threshold later removes.'
+            : `Exact-term hits. ${below.length} hits score below the similarity threshold of ` +
+              `${threshold}: lexical false positives that the threshold later removes, such as ` +
+              `${lowest.id}, which matches only ${terms}.`;
       }
     },
     'hybrid-03': (e, { retrieval, params }) => {
@@ -243,48 +269,62 @@ function makeHandlers(engine: RagEngine): Record<string, Handler> {
       });
       const best = params.topK === 1 ? 'the best one' : `the ${params.topK} best`;
       const by = params.rerank ? ' by reranker score' : '';
+      const threshold = thresholdText(params.threshold);
       e.explanation =
-        `Keep chunks with a score of at least ${params.threshold}, then ${best}${by}. ` +
+        `Keep chunks with a score of at least ${threshold}, then ${best}${by}. ` +
         'Ties are broken by chunk ID.' +
-        (kept.size ? '' : ` No chunk reaches ${params.threshold}, so nothing is retained.`);
+        (kept.size ? '' : ` No chunk reaches ${threshold}, so nothing is retained.`);
       track(e, 'chunkId', ids(retrieval.selected));
     },
-    'retrieve-07': (e, { retrieval }) => {
-      payload(e)['documentIds'] = documentIds(retrieval.selected);
+    'retrieve-07': (e, { parents }) => {
+      payload(e)['documents'] = parents.map((d) => ({
+        documentId: d.documentId,
+        version: d.version,
+      }));
     },
-    'retrieve-08': (e, { retrieval, docs }) => {
-      const wanted = new Set(retrieval.selected.map((c) => `${c.documentId}@${c.version}`));
-      payload(e)['documents'] = docs
-        .filter((d) => wanted.has(`${d.documentId}@${d.version}`))
-        .map((d) => ({
-          documentId: d.documentId,
-          version: d.version,
-          words: words(d.text).length,
-        }));
+    'retrieve-08': (e, { parents }) => {
+      payload(e)['documents'] = parents.map((d) => ({
+        documentId: d.documentId,
+        version: d.version,
+        words: words(d.text).length,
+        text: d.text,
+      }));
     },
     'retrieve-09': (e, ctx) => {
-      const sel = ctx.retrieval.selected;
       const after = payload(e)['prompt_after'];
       if (!after || typeof after !== 'object' || Array.isArray(after))
         throw new Error(`${e.id}: no prompt_after to derive`);
-      after['document_blocks'] = sel.map((c) => ({
-        chunkId: c.id,
-        trust: engine.trustOf(c.documentId),
-      }));
-      e.explanation = sel.length
-        ? 'Wrap each retained chunk in a document block with its ID, version, chunk ID and trust level, and add grounding instructions. The model has not seen any of it yet.'
-        : 'No chunk was retained, so the prompt gets the grounding instructions but no document blocks. The model has not seen any of it yet.';
+      after['system'] = systemFor(after['system'], ctx);
+      after['document_blocks'] = ctx.evidence.map((c) =>
+        c.document
+          ? { documentId: c.documentId, version: c.version, trust: engine.trustOf(c.documentId) }
+          : { chunkId: c.id, trust: engine.trustOf(c.documentId) },
+      );
+      e.explanation = !ctx.evidence.length
+        ? 'No chunk was retained, so the prompt gets the grounding instructions but no document blocks. The model has not seen any of it yet.'
+        : ctx.params.fetchFullDocuments
+          ? 'Wrap each fetched document in a document block with its ID, version and trust level, and add grounding instructions. The documents replace the retained chunks, so the model sees their full context. The model has not seen any of it yet.'
+          : 'Wrap each retained chunk in a document block with its ID, version, chunk ID and trust level, and add grounding instructions. The model has not seen any of it yet.';
       trackRetained(e, ctx, true);
     },
     'retrieve-10': (e, ctx) => {
-      const sel = ctx.retrieval.selected;
+      const messages = payload(e)['messages'];
+      const system = Array.isArray(messages)
+        ? messages.find(
+            (m): m is JsonObject =>
+              m !== null && typeof m === 'object' && !Array.isArray(m) && m['role'] === 'system',
+          )
+        : undefined;
+      if (system) system['content'] = systemFor(system['content'], ctx);
       setUserMessage(
         e,
-        groundedUserMessage(engine, ctx.scenario.question ?? engine.fixtures.query, sel),
+        groundedUserMessage(engine, ctx.scenario.question ?? engine.fixtures.query, ctx.evidence),
       );
-      e.explanation = sel.length
-        ? 'Retrieved text becomes model-visible only now.'
-        : 'The model receives the question and the grounding instructions without any retrieved text.';
+      e.explanation = !ctx.evidence.length
+        ? 'The model receives the question and the grounding instructions without any retrieved text.'
+        : ctx.params.fetchFullDocuments
+          ? 'The fetched documents become model-visible only now, in place of the retained chunks.'
+          : 'Retrieved text becomes model-visible only now.';
       trackRetained(e, ctx, true);
     },
     'retrieve-11': (e, ctx) => {
@@ -293,17 +333,19 @@ function makeHandlers(engine: RagEngine): Record<string, Handler> {
       if (!message || typeof message !== 'object' || Array.isArray(message))
         throw new Error(`${e.id}: no message to derive`);
       message['content'] = modelMessage(answer);
-      e.explanation = ctx.retrieval.selected.length
-        ? 'Simulated model output built from the facts supported by the retained chunks.'
-        : 'Simulated model output: without retained chunks there is no evidence, so the answer says so.';
+      e.explanation = !ctx.evidence.length
+        ? 'Simulated model output: without retained chunks there is no evidence, so the answer says so.'
+        : ctx.params.fetchFullDocuments
+          ? 'Simulated model output built from the facts supported by the fetched documents.'
+          : 'Simulated model output built from the facts supported by the retained chunks.';
       trackRetained(e, ctx, false);
     },
     'retrieve-12': (e, ctx) => {
       const answer = ctx.answer();
       Object.assign(payload(e), { answer: answer.text, sources: sourceObjects(answer.cited) });
-      e.explanation = ctx.retrieval.selected.length
-        ? 'Show the answer with clickable citations. Each statement comes from a cited chunk; what the evidence does not cover is stated, not guessed.'
-        : 'Show the answer. Nothing was retrieved, so it cites no source and says that the documents do not cover the question.';
+      e.explanation = !ctx.evidence.length
+        ? 'Show the answer. Nothing was retrieved, so it cites no source and says that the documents do not cover the question.'
+        : `Show the answer with clickable citations. Each statement comes from a cited ${ctx.params.fetchFullDocuments ? 'document' : 'chunk'}; what the evidence does not cover is stated, not guessed.`;
       trackRetained(e, ctx, false);
     },
 
@@ -393,6 +435,7 @@ export class RagDerivation {
       threshold: num(param('rag-query', 'similarity_threshold'), 0.7),
       rerank: bool(param('rag-query', 'rerank'), false),
       keywordRetrieval: bool(param('rag-query', 'keyword_retrieval'), false),
+      fetchFullDocuments: bool(param('rag-query', 'fetch_full_documents'), false),
     };
     this.handlers = makeHandlers(this.engine);
   }
@@ -407,6 +450,7 @@ export class RagDerivation {
       threshold: num(config['similarity_threshold'], d.threshold),
       rerank: bool(config['rerank'], d.rerank),
       keywordRetrieval: bool(config['keyword_retrieval'], d.keywordRetrieval),
+      fetchFullDocuments: bool(config['fetch_full_documents'], d.fetchFullDocuments),
     };
   }
 
@@ -424,6 +468,8 @@ export class RagDerivation {
     const params = this.parameters(config);
     const docs = this.engine.corpus(corpusOverrides(fixtureOverrides));
     const retrieval = this.engine.retrieve(docs, params);
+    const parents = parentDocuments(retrieval.selected, docs);
+    const evidence = params.fetchFullDocuments ? parents : retrieval.selected;
     let answer: Answer | undefined;
     let combined: { answer: Answer; explanation: string } | undefined;
     const ctx: Context = {
@@ -431,7 +477,9 @@ export class RagDerivation {
       params,
       docs,
       retrieval,
-      answer: () => (answer ??= this.engine.answer(retrieval.selected)),
+      parents,
+      evidence,
+      answer: () => (answer ??= this.engine.answer(evidence)),
       combinedAnswer: () =>
         (combined ??= combinedAnswer(this.engine, retrieval.selected, this.composition)),
     };

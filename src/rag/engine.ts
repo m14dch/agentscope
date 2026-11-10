@@ -63,6 +63,20 @@ export interface IndexedDocument {
   trust: 'official' | 'untrusted';
 }
 
+/**
+ * One piece of evidence the answer is composed from: a retained chunk, or with
+ * fetch_full_documents a parent document (05 derived_event_rules.evidence).
+ */
+export interface EvidenceItem {
+  /** The chunk ID, or <document stem>@<version> for a parent document. */
+  id: string;
+  documentId: string;
+  version: string;
+  text: string;
+  /** True for a whole parent document. */
+  document?: boolean;
+}
+
 export interface Chunk {
   id: string;
   documentId: string;
@@ -102,9 +116,9 @@ export interface Retrieval {
 
 export interface Answer {
   text: string;
-  /** Cited chunks in citation order: citation n is cited[n - 1]. */
-  cited: ScoredChunk[];
-  /** IDs of the answer facts the retained chunks support. */
+  /** Cited evidence in citation order: citation n is cited[n - 1]. */
+  cited: EvidenceItem[];
+  /** IDs of the answer facts the evidence supports. */
   supported: Set<string>;
 }
 
@@ -335,11 +349,11 @@ export class RagEngine {
    * answer_rules: the evidence-based answer and its citations. `intro` is written before the
    * answer groups (the Combined scenario's balance sentence).
    */
-  answer(selected: readonly ScoredChunk[], intro?: string): Answer {
+  answer(selected: readonly EvidenceItem[], intro?: string): Answer {
     if (!selected.length) return { text: NO_EVIDENCE_ANSWER, cited: [], supported: new Set() };
-    const marked = new Map<string, ScoredChunk>();
+    const marked = new Map<string, EvidenceItem>();
     // Placeholders are numbered by first appearance in the final text.
-    const cite = (c: ScoredChunk): string => {
+    const cite = (c: EvidenceItem): string => {
       marked.set(c.id, c);
       return `${MARK}${c.id}${MARK}`;
     };
@@ -348,10 +362,10 @@ export class RagEngine {
     const supported = new Set<string>();
     const missing: string[] = [];
     for (const group of this.fixtures.answer_groups) {
-      const runs: { subject: string; preds: { pred: string; chunk: ScoredChunk }[] }[] = [];
+      const runs: { subject: string; preds: { pred: string; chunk: EvidenceItem }[] }[] = [];
       const conflicts: string[] = [];
       for (const f of this.fixtures.answer_facts.filter((x) => x.group === group.id)) {
-        const vals = new Map<string, ScoredChunk[]>();
+        const vals = new Map<string, EvidenceItem[]>();
         for (const c of official) {
           const ev = f.evidence[c.version] ?? f.evidence['*'];
           if (ev && c.documentId === f.documentId && c.text.includes(ev.span)) {
@@ -366,24 +380,24 @@ export class RagEngine {
         }
         supported.add(f.id);
         if (vals.size === 1) {
-          const [pred, cs] = [...vals][0] as [string, ScoredChunk[]];
+          const [pred, cs] = [...vals][0] as [string, EvidenceItem[]];
           const best = [...cs].sort(
             (a, b) => compareVersions(b.version, a.version) || byId(a, b),
-          )[0] as ScoredChunk;
+          )[0] as EvidenceItem;
           const last = runs.at(-1);
           if (last && last.subject === f.subject) last.preds.push({ pred, chunk: best });
           else runs.push({ subject: f.subject, preds: [{ pred, chunk: best }] });
         } else {
           const ordered = [...vals].sort((a, b) =>
-            compareVersions((a[1][0] as ScoredChunk).version, (b[1][0] as ScoredChunk).version),
+            compareVersions((a[1][0] as EvidenceItem).version, (b[1][0] as EvidenceItem).version),
           );
           const alts = ordered
             .map(([pred, cs]) => {
-              const c = cs[0] as ScoredChunk;
+              const c = cs[0] as EvidenceItem;
               return `version ${c.version}: ${f.subject} ${alone(pred)} [${cite(c)}]`;
             })
             .join('; ');
-          const newest = (ordered.at(-1)?.[1][0] as ScoredChunk).version;
+          const newest = (ordered.at(-1)?.[1][0] as EvidenceItem).version;
           conflicts.push(
             `The indexed documents conflict on ${f.aspect} (${alts}); version ${newest} is the newest.`,
           );
@@ -401,11 +415,11 @@ export class RagEngine {
     }
     if (missing.length) parts.push(`The retrieved evidence does not cover ${joinAnd(missing)}.`);
     if (selected.some((c) => this.injectedIn(c))) parts.push(INJECTION_NOTE);
-    const cited: ScoredChunk[] = [];
+    const cited: EvidenceItem[] = [];
     const text = parts
       .join(' ')
       .replace(new RegExp(`${MARK}([^${MARK}]+)${MARK}`, 'g'), (_, id: string) => {
-        const c = marked.get(id) as ScoredChunk;
+        const c = marked.get(id) as EvidenceItem;
         if (!cited.includes(c)) cited.push(c);
         return String(cited.indexOf(c) + 1);
       });
@@ -413,19 +427,51 @@ export class RagEngine {
   }
 }
 
-/** answer_rules: '[n] <documentId> v<version>, chunk <chunkId>'. */
-export function sourceLines(cited: readonly Chunk[]): string[] {
-  return cited.map((c, i) => `[${i + 1}] ${c.documentId} v${c.version}, chunk ${c.id}`);
+/**
+ * answer_rules: '[n] <documentId> v<version>, chunk <chunkId>', or ', full document' for
+ * a parent document.
+ */
+export function sourceLines(cited: readonly EvidenceItem[]): string[] {
+  return cited.map(
+    (c, i) =>
+      `[${i + 1}] ${c.documentId} v${c.version}, ${c.document ? 'full document' : `chunk ${c.id}`}`,
+  );
 }
 
-/** The structured sources of the answer event. */
-export function sourceObjects(cited: readonly Chunk[]): JsonObject[] {
+/** The structured sources of the answer event; a parent document has no chunkId. */
+export function sourceObjects(cited: readonly EvidenceItem[]): JsonObject[] {
   return cited.map((c, i) => ({
     citation: i + 1,
-    chunkId: c.id,
+    ...(c.document ? {} : { chunkId: c.id }),
     documentId: c.documentId,
     version: c.version,
   }));
+}
+
+/**
+ * The parent documents of the retained chunks: each document version once, in the order
+ * of its first retained chunk, with its normalized text (the parent-document pattern).
+ */
+export function parentDocuments(
+  selected: readonly EvidenceItem[],
+  docs: readonly IndexedDocument[],
+): EvidenceItem[] {
+  const out: EvidenceItem[] = [];
+  for (const c of selected) {
+    if (out.some((p) => p.documentId === c.documentId && p.version === c.version)) continue;
+    const doc = docs.find((d) => d.documentId === c.documentId && d.version === c.version);
+    if (!doc) throw new RangeError(`no indexed document ${c.documentId} v${c.version}`);
+    const dot = c.documentId.lastIndexOf('.');
+    const stem = dot < 0 ? c.documentId : c.documentId.slice(0, dot);
+    out.push({
+      id: `${stem}@${c.version}`,
+      documentId: c.documentId,
+      version: c.version,
+      text: words(doc.text).join(' '),
+      document: true,
+    });
+  }
+  return out;
 }
 
 /** The model message: the answer, then its sources after 'Sources:' when there are any. */

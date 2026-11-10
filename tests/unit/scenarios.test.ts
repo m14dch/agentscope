@@ -422,6 +422,19 @@ describe('more validation rules', () => {
     ]);
   });
 
+  it('keeps both events of a pair in one optional-step entry', () => {
+    const scn = base();
+    scn.parameters = { on: { default: false } };
+    scn.optional_steps = [
+      { events: ['e1'], enabled_by: 'on' },
+      { events: ['e2'], enabled_by: 'on' },
+    ];
+    expect(validateRegistry({ base: scn }, ctx)).toEqual([
+      'base: optional step e1 and its pair e2 are in different entries',
+      'base: optional step e2 and its pair e1 are in different entries',
+    ]);
+  });
+
   it('checks boundaries, enums, correlation IDs, prediction length and scenario fields', () => {
     const scn = base();
     delete (scn as Partial<Scenario>).initial_state;

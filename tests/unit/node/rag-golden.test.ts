@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { readSpecSources } from '../../../scripts/spec-sources.ts';
 import { RagDerivation } from '../../../src/rag/derive.ts';
-import { corpusOverrides, sourceLines } from '../../../src/rag/engine.ts';
+import { corpusOverrides, parentDocuments, sourceLines } from '../../../src/rag/engine.ts';
 import type { JsonObject } from '../../../src/scenarios/types.ts';
 
 const ROOT = join(import.meta.dirname, '../../..');
@@ -27,7 +27,9 @@ type Entry =
       top_k: number;
       threshold: number;
       rerank: boolean;
+      fetch: boolean;
       selected: string[];
+      evidence: string[];
       answer: string;
       sources: string[];
     };
@@ -54,7 +56,12 @@ describe('RAG engine golden test', () => {
     const { engine } = new RagDerivation(sources);
     const variants = [...sources.rag.variants, ...(sources.comparison.combined.variants ?? [])];
     const entries = pythonResults();
-    expect(entries.length).toBeGreaterThan(1000);
+    expect(entries.length).toBeGreaterThan(2000);
+    expect(
+      entries.some(
+        (e) => 'fetch' in e && e.fetch && e.sources.some((l) => l.endsWith('full document')),
+      ),
+    ).toBe(true);
     for (const entry of entries) {
       const overrides = variants.find((v) => v.id === entry.case)?.fixture_overrides as
         JsonObject | undefined;
@@ -85,7 +92,12 @@ describe('RAG engine golden test', () => {
         r.selected.map((c) => c.id),
         where,
       ).toEqual(entry.selected);
-      const answer = engine.answer(r.selected);
+      const evidence = entry.fetch ? parentDocuments(r.selected, docs) : r.selected;
+      expect(
+        evidence.map((c) => c.id),
+        where,
+      ).toEqual(entry.evidence);
+      const answer = engine.answer(evidence);
       expect(answer.text, where).toBe(entry.answer);
       expect(sourceLines(answer.cited), where).toEqual(entry.sources);
     }

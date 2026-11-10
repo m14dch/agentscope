@@ -115,10 +115,18 @@ export class Player {
     this.emit();
   }
 
-  /** Changes parameters; the cursor stays, clamped to the new number of steps. */
+  /**
+   * Changes parameters (02 playback.action_rules.parameter_change): the cursor stays on the
+   * same event if it is still played, else on the nearest earlier event still played, else 0.
+   */
   setParameters(values: Parameters<Playback['setParameters']>[0]): number {
+    const before = this.playback.events.slice(0, this.position);
     const changed = this.playback.setParameters(values);
-    this.move(this.position);
+    const index = new Map(this.playback.events.map((e, i) => [e.id, i + 1]));
+    let target = 0;
+    for (let i = before.length - 1; i >= 0 && !target; i -= 1)
+      target = index.get(before[i]?.id ?? '') ?? 0;
+    this.move(target);
     if (this.atEnd && this.playing) this.stop();
     this.emit();
     return changed;

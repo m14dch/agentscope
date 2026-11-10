@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import sources from 'virtual:agentscope-specs';
 import { Playback, type Snapshot } from '../../src/engine/playback.ts';
+import { type Clock, Player } from '../../src/engine/player.ts';
 import { createPlayback, ragDerivation } from '../../src/rag/bundled.ts';
 import {
+  INJECTION_NOTE,
   NO_EVIDENCE_ANSWER,
   RagEngine,
   corpusOverrides,
@@ -12,6 +14,7 @@ import {
   sourceLines,
   sourceObjects,
   tokens,
+  words,
 } from '../../src/rag/engine.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
 import type {
@@ -77,6 +80,11 @@ function played(p: Playback, id: string): ScenarioEvent {
   if (!e) throw new Error(`${p.scenario.id} plays no ${id}`);
   return e;
 }
+
+/** A structured source as its source line. */
+const sourceLine = (s: JsonObject): string =>
+  `[${String(s['citation'])}] ${String(s['documentId'])} v${String(s['version'])}, ` +
+  (s['chunkId'] === undefined ? 'full document' : `chunk ${String(s['chunkId'])}`);
 
 const field = (value: Json | undefined, ...path: (string | number)[]): Json | undefined =>
   path.reduce<Json | undefined>(
@@ -273,8 +281,9 @@ describe('Combined answers (06-comparison-scenarios.yaml)', () => {
     expect(field(byId('c-08').payload, 'answer')).toBe(variant.expected_answer);
     expect(byId('c-07').explanation).toMatch(/no comparison/);
     const cited = field(byId('c-08').payload, 'sources') as JsonObject[];
-    expect(cited.map((s) => s['chunkId'])).toEqual(
-      variant.expected_sources.map((s) => s.split('chunk ')[1]),
+    expect(cited.map(sourceLine)).toEqual(variant.expected_sources);
+    expect(field(byId('c-07').payload, 'message', 'content')).toBe(
+      `${variant.expected_answer}\n\nSources:\n${variant.expected_sources.join('\n')}`,
     );
     for (const id of ['c-04', 'c-06']) {
       const prompt = String(field(byId(id).payload, 'messages', 1, 'content'));
@@ -374,11 +383,13 @@ describe('derived events', () => {
     p.setParameters({ rerank: true, fetch_full_documents: true });
     expect(p.length).toBe(15);
     expect(p.events.map((e) => e.sequence)).toEqual(p.events.map((_, i) => i + 1));
-    expect(field(played(p, 'retrieve-07').payload, 'documentIds')).toEqual([
-      'account-opening.md',
-      'everyday-account.md',
-      'savings-account.md',
-    ]);
+    // Reranked: the Savings chunk 002 is second, so its document comes second.
+    expect(field(played(p, 'retrieve-07').payload, 'documents')).toEqual(
+      ['account-opening.md', 'savings-account.md', 'everyday-account.md'].map((documentId) => ({
+        documentId,
+        version: '1.2',
+      })),
+    );
     expect(played(p, 'hybrid-03').explanation).toMatch(/^Union both candidate lists/);
     expect(played(p, 'retrieve-06').explanation).toMatch(/the 5 best by reranker score/);
 
@@ -386,6 +397,109 @@ describe('derived events', () => {
     expect(hybrid.length).toBe(13);
     hybrid.setParameters({ keyword_retrieval: false, rerank: false });
     expect(hybrid.length).toBe(10);
+  });
+
+  it('send the parent documents instead of the chunks with fetch_full_documents', () => {
+    const p = createPlayback(scenario('rag-query'));
+    const chunked = String(field(played(p, 'retrieve-12').payload, 'answer'));
+    p.setParameters({ fetch_full_documents: true });
+    const docs = engine.corpus();
+    const fetched = field(played(p, 'retrieve-08').payload, 'documents') as JsonObject[];
+    expect(fetched.map((d) => d['documentId'])).toEqual([
+      'account-opening.md',
+      'everyday-account.md',
+      'savings-account.md',
+    ]);
+    const savings = docs.find((d) => d.documentId === 'savings-account.md');
+    expect(fetched[2]?.['text']).toBe(words(savings?.text ?? '').join(' '));
+
+    const request = played(p, 'retrieve-10');
+    const [system, user] = field(request.payload, 'messages') as JsonObject[];
+    expect(system?.['content']).toContain('Cite every statement with the document ID and version.');
+    const prompt = String(user?.['content']);
+    expect(prompt).not.toContain('chunk="');
+    expect([...prompt.matchAll(/<document id="([^"]+)"/g)].map((m) => m[1])).toEqual(
+      fetched.map((d) => d['documentId']),
+    );
+    // The withdrawal rules sit in a Savings chunk that is not retained; the parent has them.
+    const withdrawals = 'further withdrawals cost CHF 2 each';
+    expect(prompt).toContain(withdrawals);
+    expect(request.explanation).toBe(
+      'The fetched documents become model-visible only now, in place of the retained chunks.',
+    );
+    expect(request.tracked_values?.['retrievedText']).toEqual(fetched.map((d) => d['text']));
+    expect(request.tracked_values?.['chunkId']).toEqual(
+      played(p, 'retrieve-06').tracked_values?.['chunkId'],
+    );
+    expect(field(played(p, 'retrieve-09').payload, 'prompt_after', 'document_blocks')).toEqual(
+      fetched.map((d) => ({ documentId: d['documentId'], version: '1.2', trust: 'official' })),
+    );
+    expect(field(played(p, 'retrieve-09').payload, 'prompt_after', 'system')).toBe(
+      system?.['content'],
+    );
+    const k = p.events.indexOf(request) + 1;
+    expect(JSON.stringify(p.snapshot(k - 1).state['model_visible_messages'])).not.toContain(
+      withdrawals,
+    );
+    expect(JSON.stringify(p.snapshot(k).state['model_visible_messages'])).toContain(withdrawals);
+
+    // The answer is grounded in the documents and cites them, not chunks.
+    const answer = played(p, 'retrieve-12');
+    const text = String(field(answer.payload, 'answer'));
+    expect(text).not.toBe(chunked);
+    expect(text).toContain('allows one free withdrawal per month');
+    expect(text).not.toContain('does not cover');
+    const sources = (field(answer.payload, 'sources') as JsonObject[]).map(sourceLine);
+    expect(sources).toEqual([
+      '[1] account-opening.md v1.2, full document',
+      '[2] everyday-account.md v1.2, full document',
+      '[3] savings-account.md v1.2, full document',
+    ]);
+    expect(field(played(p, 'retrieve-11').payload, 'message', 'content')).toBe(
+      `${text}\n\nSources:\n${sources.join('\n')}`,
+    );
+    expect(answer.explanation).toContain('comes from a cited document');
+    expect(played(p, 'retrieve-11').explanation).toBe(
+      'Simulated model output built from the facts supported by the fetched documents.',
+    );
+    // Every cited statement's evidence span is in the cited document's text.
+    expect(text.match(/\[(\d+)\]/g)?.length).toBeGreaterThan(3);
+
+    // Undoing the change restores the chunk prompt.
+    p.setParameters({ fetch_full_documents: false });
+    expect(field(played(p, 'retrieve-12').payload, 'answer')).toBe(chunked);
+  });
+
+  it('fetch the untrusted forum post whole and still ignore its instruction', () => {
+    const p = createPlayback(scenario('rag-prompt-injection'));
+    p.setParameters({ fetch_full_documents: true });
+    const prompt = String(field(played(p, 'retrieve-10').payload, 'messages', 1, 'content'));
+    expect(prompt).toContain('<document id="community-faq.md" version="1.0" trust="untrusted">');
+    const answer = String(field(played(p, 'retrieve-12').payload, 'answer'));
+    expect(answer.endsWith(INJECTION_NOTE)).toBe(true);
+    const sources = (field(played(p, 'retrieve-12').payload, 'sources') as JsonObject[]).map(
+      (s) => s['documentId'],
+    );
+    expect(sources).not.toContain('community-faq.md');
+  });
+
+  it('word keyword hit explanations in the singular and round thresholds', () => {
+    const p = createPlayback(scenario('rag-query'));
+    p.setParameters({ keyword_retrieval: true, similarity_threshold: 0.06 });
+    expect(played(p, 'hybrid-02').explanation).toBe(
+      "Exact-term hits. One hit scores below the similarity threshold of 0.06: authentication@1.2-c50o10-001, a lexical false positive that matches only 'bank' and that the threshold later removes.",
+    );
+    p.setParameters({ similarity_threshold: 0.1 + 0.2 });
+    expect(played(p, 'hybrid-02').explanation).toMatch(
+      /^Exact-term hits\. 3 hits score below the similarity threshold of 0\.3: /,
+    );
+    expect(played(p, 'retrieve-06').explanation).toMatch(
+      /^Keep chunks with a score of at least 0\.3, /,
+    );
+    p.setParameters({ similarity_threshold: 0 });
+    expect(played(p, 'hybrid-02').explanation).toBe(
+      'Exact-term hits. All of them reach the similarity threshold of 0.',
+    );
   });
 
   it('follow chunking parameters in rag-index', () => {
@@ -487,6 +601,36 @@ describe('derived events', () => {
         ).cited,
       ),
     );
+  });
+
+  it('keep the cursor on the same event when optional steps come and go', () => {
+    const clock: Clock = { setTimeout: () => undefined, clearTimeout: () => undefined };
+    const player = new Player(createPlayback(scenario('rag-query')), clock);
+    const at = (): string | undefined => player.playback.event(player.cursor)?.id;
+    player.jump(7);
+    expect(at()).toBe('retrieve-09');
+    player.setParameters({ keyword_retrieval: true });
+    expect(at()).toBe('retrieve-09');
+    expect(player.cursor).toBe(9);
+    player.jump(7);
+    expect(at()).toBe('hybrid-02');
+    // hybrid-02 is no longer played: the nearest earlier played event is retrieve-05.
+    player.setParameters({ keyword_retrieval: false });
+    expect(at()).toBe('retrieve-05');
+    player.jump(0);
+    player.setParameters({ fetch_full_documents: true });
+    expect(player.cursor).toBe(0);
+    player.jump(player.playback.length);
+    player.setParameters({ top_k: 1 });
+    expect(at()).toBe('retrieve-12');
+  });
+
+  it('meet the quality gate of 100 supported events with the events played at the defaults', () => {
+    const played = Object.values(registry).reduce((n, scn) => n + createPlayback(scn).length, 0);
+    const registered = Object.values(registry).reduce((n, scn) => n + scn.events.length, 0);
+    expect(played).toBeLessThan(registered);
+    // 08-acceptance-tests.yaml quality_gates.min_supported_events (not bundled by the app).
+    expect(played).toBeGreaterThanOrEqual(100);
   });
 
   it('leave scenarios without derived events as they are', () => {
