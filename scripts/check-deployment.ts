@@ -34,7 +34,8 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const RETRY_DELAY_MS = 10_000;
 // Stays inside the CI job's 5-minute limit, so the final report always prints.
 const DEADLINE_MS = 4 * 60_000;
-const ATTEMPT_MAX_MS = 2 * REQUEST_TIMEOUT_MS; // the page, then all references in parallel
+// The page and the manifest in parallel, then all references and listed files in parallel.
+const ATTEMPT_MAX_MS = 2 * REQUEST_TIMEOUT_MS;
 
 const fetchWithTimeout = (url: string) =>
   fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
