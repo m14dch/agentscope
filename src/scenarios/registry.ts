@@ -38,3 +38,9 @@ export function participantLabels(): Readonly<Record<string, string>> {
     ]),
   );
 }
+
+/** The bundled specifications (validated through loadRegistry). */
+export function specSources(): SpecSources {
+  loadRegistry();
+  return sources;
+}

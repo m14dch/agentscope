@@ -1,6 +1,7 @@
 import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/base.css';
+import { Shell } from './app/shell';
 import { loadRegistry, ScenarioError } from './scenarios/registry';
 
 const app = document.querySelector<HTMLElement>('#app');
@@ -17,8 +18,8 @@ function startupProblems(): string[] {
 
 const problems = startupProblems();
 
-/** Tears down the current view's listeners and timers before the next one renders. */
-let cleanup: (() => void) | undefined;
+/** The app shell, kept while the learner moves between its pages. */
+let shell: Shell | undefined;
 
 function renderProblems(root: HTMLElement): void {
   root.className = 'page';
@@ -43,30 +44,16 @@ async function render(): Promise<void> {
     renderProblems(app);
     return;
   }
-  cleanup?.();
-  cleanup = undefined;
-  const hash = location.hash;
-  const preview = /^#\/diagram\/([\w-]+)(?:\/(\d+))?(?:\/(architecture|protocol))?$/.exec(hash);
-  if (preview) {
-    const { renderPreview } = await import('./diagram/preview');
-    // The hash may have changed while the preview was loading.
-    if (location.hash !== hash) return;
-    const mode = preview[3] === 'protocol' ? 'protocol' : 'architecture';
-    cleanup = renderPreview(app, preview[1] ?? '', Number(preview[2] ?? 0), mode);
-    return;
-  }
   if (location.hash === '#/design') {
+    shell?.destroy();
+    shell = undefined;
     const { renderSpecimen } = await import('./design/specimen');
     // The hash may have changed while the specimen was loading.
     if (location.hash === '#/design') renderSpecimen(app);
     return;
   }
-  app.className = 'page';
-  app.innerHTML = `
-    <h1>AgentScope</h1>
-    <p>See how MCP, RAG and agent workflows exchange messages and context, step by step.</p>
-    <p class="small muted">In development. Everything here is simulated; nothing leaves your browser.</p>
-  `;
+  shell ??= new Shell(app);
+  shell.show(location.hash);
 }
 
 window.addEventListener('hashchange', () => void render());

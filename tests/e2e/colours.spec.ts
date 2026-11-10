@@ -126,8 +126,8 @@ function offenders(found: Found): string[] {
 for (const route of [
   './',
   './#/design',
-  './#/diagram/mcp-not-found/23/protocol',
-  './#/diagram/mcp-balance/14/architecture',
+  './#/mcp/mcp-not-found/23/protocol',
+  './#/mcp/mcp-balance/14',
 ]) {
   test(`every computed colour on ${route} is a design token`, async ({ page }) => {
     await page.goto(route);
