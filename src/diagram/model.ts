@@ -45,7 +45,7 @@ export function lineKind(e: ScenarioEvent): LineKind {
   return e.execution_type === 'IN_PROCESS' ? 'in-process' : 'simulated';
 }
 
-/** Event index (0-based) of the current step and its pair, or -1. */
+/** Whether event `index` (0-based) is before, at or after the cursor. */
 export function visibility(index: number, cursor: number): Visibility {
   if (index + 1 < cursor) return 'past';
   return index + 1 === cursor ? 'current' : 'future';
@@ -62,6 +62,7 @@ export const SIZES = {
   headerGap: 16,
   row: 36,
   labelGap: 6,
+  headRoom: 18,
   selfWidth: 28,
   selfHeight: 12,
   groupPad: 10,
@@ -114,11 +115,17 @@ export interface Arrow {
 }
 
 export interface Group {
+  /** Unique within the layout: the phase ID, then #2, #3 for runs where the phase resumes. */
+  key: string;
   phase: Phase;
-  /** The takeaway, wrapped to the group's width. */
+  /** True for a run where the phase resumes after another phase. */
+  continued: boolean;
+  /** The takeaway wrapped to the group's width; empty for a continued run. */
   takeaway: string[];
   /** Disclosure marker, phase label and step count. */
   caption: string;
+  /** Kind of the first error among the group's reached events, if any. */
+  error: ErrorKind | undefined;
   y: number;
   height: number;
   x1: number;
@@ -197,7 +204,12 @@ export function layout(input: LayoutInput): DiagramLayout {
     const xr = x.get(e.receiver) ?? 0;
     const self = e.sender === e.receiver;
     const label = arrowLabel(e);
-    const labelX = self ? xs + SIZES.selfWidth + SIZES.labelGap : Math.min(xs, xr) + SIZES.labelGap;
+    // A leftward arrow's head sits at its left end; its label starts past the head.
+    const labelX = self
+      ? xs + SIZES.selfWidth + SIZES.labelGap
+      : xr < xs
+        ? xr + SIZES.headRoom
+        : xs + SIZES.labelGap;
     right = Math.max(right, labelX + measure(label, true) + SIZES.margin);
     const vis = visibility(index, cursor);
     return {
@@ -226,48 +238,75 @@ export function layout(input: LayoutInput): DiagramLayout {
       if (i < cursor) arrows.push(arrow(e, i, y));
     });
   } else {
-    const current = scenario.events[cursor - 1]?.phase;
-    for (const phase of scenario.phases) {
-      const members = scenario.events
-        .map((e, i) => [e, i] as const)
-        .filter(([e]) => e.phase === phase.id);
+    const current = cursor >= 1 ? cursor - 1 : -1;
+    const phases = new Map(scenario.phases.map((p) => [p.id, p]));
+    // One group per consecutive run of a phase's events.
+    const runs: { phase: Phase; members: [ScenarioEvent, number][] }[] = [];
+    scenario.events.forEach((e, i) => {
+      const last = runs[runs.length - 1];
+      if (last && last.phase.id === e.phase) last.members.push([e, i]);
+      else {
+        const phase = phases.get(e.phase);
+        if (phase) runs.push({ phase, members: [[e, i]] });
+      }
+    });
+    const seen = new Map<string, number>();
+    for (const { phase, members } of runs) {
+      const n = (seen.get(phase.id) ?? 0) + 1;
+      seen.set(phase.id, n);
+      const key = n === 1 ? phase.id : `${phase.id}#${n}`;
+      const continued = n > 1;
       const xs = members.flatMap(([e]) => [x.get(e.sender) ?? 0, x.get(e.receiver) ?? 0]);
-      const x1 = Math.min(...xs, Infinity) - SIZES.minSpacing / 2 + 8;
-      const x2 = Math.max(...xs, -Infinity) + SIZES.minSpacing / 2 - 8;
-      const open = expanded.has(phase.id);
+      const left = Math.min(...xs) - SIZES.minSpacing / 2 + 8;
+      const spanRight = Math.max(...xs) + SIZES.minSpacing / 2 - 8;
+      const open = expanded.has(key);
+      const isCurrent = members.some(([, i]) => i === current);
       const start = y + SIZES.groupGap;
-      const left = Number.isFinite(x1) ? x1 : SIZES.margin;
       const textX = left + 2 * SIZES.groupPad;
-      const isCurrent = phase.id === current;
       const strong = (t: string): number => measure(t, isCurrent);
-      const takeaway = wrap(
-        phase.takeaway,
-        Math.max(SIZES.groupMinText, x2 - textX - SIZES.groupPad),
-        strong,
-      );
+      const takeaway = continued
+        ? []
+        : wrap(
+            phase.takeaway,
+            Math.max(SIZES.groupMinText, spanRight - textX - SIZES.groupPad),
+            strong,
+          );
+      const reached = members.filter(([, i]) => i < cursor);
+      const error = reached.map(([e]) => errorKind(e)).find((k) => k !== undefined);
       const steps = members.length === 1 ? '1 step' : `${members.length} steps`;
-      const caption = `${open ? '▾' : '▸'} ${phase.label} · ${steps}`;
-      // Takeaway lines, then the phase label.
+      const name = continued ? `${phase.label}, continued` : phase.label;
+      const caption = `${open ? '▾' : '▸'} ${name} · ${steps}`;
+      const errorText = error ? ` · × ${error} error` : '';
       const header = SIZES.groupPad + (takeaway.length + 1) * SIZES.headerLine + SIZES.groupPad;
       let inner = start + header;
       const shown: Arrow[] = [];
+      // Every member's label counts, so the frame keeps its width as the cursor advances.
+      let labelsRight = 0;
       if (open) {
         for (const [e, i] of members) {
           inner += SIZES.row;
-          if (i < cursor) shown.push(arrow(e, i, inner));
+          const a = arrow(e, i, inner);
+          labelsRight = Math.max(labelsRight, a.labelX + measure(a.label, true));
+          if (i < cursor) shown.push(a);
         }
         inner += SIZES.row / 2;
       }
-      const textRight = textX + Math.max(...takeaway.map(strong), measure(caption));
+      const textRight = Math.max(
+        labelsRight,
+        textX + Math.max(0, ...takeaway.map(strong), measure(caption + errorText)),
+      );
       right = Math.max(right, textRight + SIZES.margin);
       groups.push({
+        key,
         phase,
+        continued,
         takeaway,
         caption,
+        error,
         y: start,
         height: inner - start,
         x1: left,
-        x2: Math.max(Number.isFinite(x2) ? x2 : left, textRight + SIZES.groupPad),
+        x2: Math.max(spanRight, textRight + SIZES.groupPad),
         expanded: open,
         current: isCurrent,
         arrows: shown,

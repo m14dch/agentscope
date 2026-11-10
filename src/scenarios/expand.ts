@@ -124,6 +124,13 @@ export function expandVariant(base: Scenario, variant: Variant, problems: string
       parameter.default = structuredClone(value);
     } else problems.push(`${variant.id}: parameter_overrides names unknown parameter ${name}`);
   }
+  for (const [id, override] of Object.entries(variant.phase_overrides ?? {})) {
+    const phase = scn.phases.find((p) => p.id === id);
+    if (!phase) problems.push(`${variant.id}: phase_overrides names unknown phase ${id}`);
+    else if (!override.takeaway?.trim())
+      problems.push(`${variant.id}: phase_overrides ${id} has no takeaway`);
+    else phase.takeaway = override.takeaway;
+  }
   if (variant.question !== undefined) scn.question = variant.question;
   scn.title = variant.title;
   // A variant is presented by its lesson.

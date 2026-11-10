@@ -74,6 +74,8 @@ export function renderPreview(
 
   const keys = (e: KeyboardEvent): void => {
     if (e.target instanceof HTMLButtonElement) return;
+    // The focused diagram region scrolls with the arrow keys instead.
+    if (e.target === diagram) return;
     if (e.key === 'ArrowRight') player.next();
     else if (e.key === 'ArrowLeft') player.previous();
     else return;

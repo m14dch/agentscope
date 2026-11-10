@@ -47,6 +47,8 @@ export class DiagramView {
   private readonly options: DiagramOptions;
   private measure: Measure = estimate;
   private destroyed = false;
+  /** Mode and cursor the region last scrolled to. */
+  private scrolledTo = '';
 
   constructor(root: HTMLElement, player: Player, options: DiagramOptions) {
     this.root = root;
@@ -63,7 +65,10 @@ export class DiagramView {
       void document.fonts.ready.then(() => {
         if (this.destroyed) return;
         this.measure = canvasMeasure();
+        // The real font changes the layout, so the current step may need scrolling to.
+        this.scrolledTo = '';
         this.render();
+        this.root.dataset['measured'] = 'true';
       });
     }
     this.render();
@@ -80,14 +85,15 @@ export class DiagramView {
     this.render();
   }
 
-  toggleGroup(phase: string): void {
-    if (this.expanded.has(phase)) this.expanded.delete(phase);
-    else this.expanded.add(phase);
-    this.render(phase);
+  /** Expands or collapses a group by its key (data-group). */
+  toggleGroup(key: string): void {
+    if (this.expanded.has(key)) this.expanded.delete(key);
+    else this.expanded.add(key);
+    this.render();
   }
 
-  isExpanded(phase: string): boolean {
-    return this.expanded.has(phase);
+  isExpanded(key: string): boolean {
+    return this.expanded.has(key);
   }
 
   destroy(): void {
@@ -98,8 +104,17 @@ export class DiagramView {
     this.root.replaceChildren();
   }
 
-  private render(focusPhase?: string): void {
+  /**
+   * Lays the diagram out again. Focus stays on the same group (or the region); the region
+   * scrolls to the current step only when the cursor or the mode changed.
+   */
+  private render(): void {
     const scenario = this.player.playback.scenario;
+    const focused = document.activeElement;
+    const focusKey =
+      focused instanceof SVGElement && this.root.contains(focused)
+        ? focused.closest<SVGGElement>('[data-group]')?.dataset['group']
+        : undefined;
     const model = layout({
       scenario,
       labels: this.options.labels,
@@ -109,28 +124,60 @@ export class DiagramView {
       measure: this.measure,
     });
     const title = `${scenario.title}, ${this.viewMode} view, step ${this.player.cursor} of ${this.player.playback.length}`;
-    this.root.innerHTML = renderSvg(model, title, this.options.id ?? 'diagram');
-    if (focusPhase) {
-      this.root.querySelector<SVGGElement>(`[data-phase="${CSS.escape(focusPhase)}"]`)?.focus();
+    this.root.innerHTML = renderSvg(
+      model,
+      title,
+      this.options.id ?? 'diagram',
+      this.options.labels,
+    );
+    if (focusKey) {
+      const group = this.root.querySelector<SVGGElement>(`[data-group="${CSS.escape(focusKey)}"]`);
+      // A group that no longer exists hands focus to the region, not to the page.
+      (group ?? this.root).focus({ preventScroll: true });
     }
+    const position = `${this.viewMode}:${this.player.cursor}`;
+    if (position !== this.scrolledTo) {
+      this.scrolledTo = position;
+      this.scrollToCurrent();
+    }
+  }
+
+  /** Scrolls the region (never the page) so the current step or group is in view. */
+  private scrollToCurrent(): void {
     const current = this.root.querySelector<SVGGElement>('[data-current]');
-    current?.scrollIntoView({
-      block: 'nearest',
-      inline: 'nearest',
-      behavior: reducedMotion() ? 'auto' : 'smooth',
-    });
+    if (!current) return;
+    const region = this.root.getBoundingClientRect();
+    const box = current.getBoundingClientRect();
+    const margin = 24;
+    let top = this.root.scrollTop;
+    let left = this.root.scrollLeft;
+    // Reveal the far edge only if the near edge stays in view; otherwise show the start.
+    const fitsY = box.height <= region.height - 2 * margin;
+    const fitsX = box.width <= region.width - 2 * margin;
+    if (box.top < region.top + margin || (!fitsY && box.top > region.top + margin)) {
+      top -= region.top + margin - box.top;
+    } else if (box.bottom > region.bottom - margin) top += box.bottom - region.bottom + margin;
+    if (box.left < region.left + margin || (!fitsX && box.left > region.left + margin)) {
+      left -= region.left + margin - box.left;
+    } else if (box.right > region.right - margin) left += box.right - region.right + margin;
+    top = Math.max(0, top);
+    left = Math.max(0, left);
+    if (top === this.root.scrollTop && left === this.root.scrollLeft) return;
+    this.root.scrollTo({ top, left, behavior: reducedMotion() ? 'instant' : 'smooth' });
   }
 
   private readonly onClick = (event: Event): void => {
-    const group = (event.target as Element).closest<SVGGElement>('[data-phase]');
-    if (group?.dataset['phase']) this.toggleGroup(group.dataset['phase']);
+    const group = (event.target as Element).closest<SVGGElement>('[data-group]');
+    if (!group?.dataset['group']) return;
+    group.focus({ preventScroll: true });
+    this.toggleGroup(group.dataset['group']);
   };
 
   private readonly onKey = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
-    const group = (event.target as Element).closest<SVGGElement>('[data-phase]');
-    if (!group?.dataset['phase']) return;
+    const group = (event.target as Element).closest<SVGGElement>('[data-group]');
+    if (!group?.dataset['group']) return;
     event.preventDefault();
-    this.toggleGroup(group.dataset['phase']);
+    this.toggleGroup(group.dataset['group']);
   };
 }

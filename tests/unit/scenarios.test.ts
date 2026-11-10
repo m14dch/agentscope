@@ -344,6 +344,24 @@ describe('more validation rules', () => {
     ]);
   });
 
+  it('replaces the takeaways named in phase_overrides', () => {
+    const problems: string[] = [];
+    const scn = expandVariant(
+      base(),
+      {
+        id: 'v',
+        title: 'V',
+        extends: 'base',
+        lesson: 'L.',
+        phase_overrides: { p1: { takeaway: 'True here.' }, nope: { takeaway: 'X.' } },
+      },
+      problems,
+    );
+    expect(scn.phases[0]?.takeaway).toBe('True here.');
+    expect(base().phases[0]?.takeaway).toBe('One message.');
+    expect(problems).toEqual(['v: phase_overrides names unknown phase nope']);
+  });
+
   it("applies a variant's parameter_overrides to the parameter defaults", () => {
     const b = base();
     b.parameters = { top_k: { default: 5, min: 1, max: 8 } };

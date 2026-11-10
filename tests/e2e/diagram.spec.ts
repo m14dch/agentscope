@@ -20,10 +20,8 @@ const SCENARIOS = [
 
 async function open(page: Page, hash: string): Promise<void> {
   await page.goto(`./${hash}`);
-  await page.locator('svg.diagram').waitFor();
-  await page.evaluate(() => document.fonts.ready);
-  // The view lays out again once fonts are measured.
-  await page.waitForTimeout(100);
+  // The view lays out again with the real font, then marks itself measured.
+  await page.locator('[data-measured] svg.diagram').waitFor();
 }
 
 /** Pairs of overlapping text boxes inside the diagram, measured with the real font. */
@@ -54,6 +52,7 @@ async function overlaps(page: Page): Promise<string[]> {
   });
 }
 
+// The layout does not depend on the viewport, but the acceptance criteria name both widths.
 for (const [width, height, device] of [
   [1280, 900, 'desktop'],
   [820, 1100, 'tablet'],
@@ -65,7 +64,7 @@ for (const [width, height, device] of [
       expect(await overlaps(page), `${id} protocol`).toEqual([]);
       await open(page, `#/diagram/${id}/${steps}/architecture`);
       // Expand every group.
-      const groups = page.locator('[data-phase]');
+      const groups = page.locator('[data-group]');
       const count = await groups.count();
       for (let i = 0; i < count; i += 1) {
         const group = page.locator('[data-phase][aria-expanded="false"]').first();
@@ -118,18 +117,18 @@ test('groups expand and collapse with the keyboard, and stay open while stepping
   page,
 }) => {
   await open(page, '#/diagram/mcp-balance/14/architecture');
-  const group = page.locator('[data-phase="tool"]');
+  const group = page.locator('[data-group="tool"]');
   await group.focus();
   await page.keyboard.press('Enter');
   await expect(group).toHaveAttribute('aria-expanded', 'true');
   await expect(group).toBeFocused();
   await expect(page.locator('.step')).toHaveCount(2);
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.locator('[data-phase="tool"]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('[data-group="tool"]')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.step')).toHaveCount(3);
-  await page.locator('[data-phase="tool"]').focus();
+  await page.locator('[data-group="tool"]').focus();
   await page.keyboard.press(' ');
-  await expect(page.locator('[data-phase="tool"]')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('[data-group="tool"]')).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('meaning survives in greyscale: the current step and errors carry non-colour cues', async ({
@@ -163,22 +162,62 @@ test('meaning survives in greyscale: the current step and errors carry non-colou
   });
 });
 
-test('with reduced motion the current step scrolls into view instantly', async ({ page }) => {
+test('with reduced motion the diagram region scrolls to the current step instantly, not the page', async ({
+  page,
+}) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.setViewportSize({ width: 1280, height: 600 });
+  await page.setViewportSize({ width: 1280, height: 700 });
   await open(page, '#/diagram/mcp-multiple-tools/1/protocol');
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
   await page.evaluate(() => {
     location.hash = '#/diagram/mcp-multiple-tools/40/protocol';
   });
   await page.locator('[data-current][data-index="39"]').waitFor();
-  const y = await page.evaluate(() => window.scrollY);
-  expect(y).toBeGreaterThan(0);
-  const { top, bottom, height } = await page.evaluate(() => {
-    const r =
-      document.querySelector('[data-current]')?.getBoundingClientRect() ?? new DOMRect(0, -1);
-    return { top: r.top, bottom: r.bottom, height: window.innerHeight };
+  const state = await page.evaluate(() => {
+    const region = document.querySelector('.diagram-scroller');
+    const current = document.querySelector('[data-current]');
+    const r = region?.getBoundingClientRect();
+    const c = current?.getBoundingClientRect();
+    return {
+      page: window.scrollY,
+      region: region?.scrollTop ?? 0,
+      inside: !!r && !!c && c.top >= r.top && c.bottom <= r.bottom,
+    };
   });
-  expect(top).toBeGreaterThanOrEqual(0);
-  expect(bottom).toBeLessThanOrEqual(height);
+  expect(state.page).toBe(0);
+  expect(state.region).toBeGreaterThan(0);
+  expect(state.inside).toBe(true);
+});
+
+test('toggling a group keeps the scroll position and focus', async ({ page }) => {
+  // Instant scrolling, so the opening scroll has finished before measuring.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await open(page, '#/diagram/combined-balance-explanation/35/architecture');
+  const region = page.locator('.diagram-scroller');
+  const before = await region.evaluate((el) => el.scrollTop);
+  const last = page.locator('[data-group="answer"]');
+  await last.click();
+  await expect(page.locator('[data-group="answer"]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('[data-group="answer"]')).toBeFocused();
+  expect(await region.evaluate((el) => el.scrollTop)).toBe(before);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test('focus stays on the same group while stepping', async ({ page }) => {
+  await open(page, '#/diagram/mcp-balance/14/architecture');
+  await page.locator('[data-group="tool"]').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByText('Step 15 of 28')).toBeVisible();
+  await expect(page.locator('[data-group="tool"]')).toBeFocused();
+});
+
+test('arrow keys scroll the focused diagram region instead of stepping', async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 900 });
+  await open(page, '#/diagram/mcp-balance/5/protocol');
+  const region = page.locator('.diagram-scroller');
+  await region.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByText('Step 5 of 28')).toBeVisible();
+  await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
 });

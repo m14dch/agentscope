@@ -131,7 +131,23 @@ describe('architecture mode', () => {
   it('collapses each phase into one group and marks the current one', () => {
     const cursor = scn.events.findIndex((e) => e.id === 'mcp-14') + 1;
     const model = build(scn, 'architecture', cursor);
-    expect(model.groups.map((g) => g.phase.id)).toEqual(scn.phases.map((p) => p.id));
+    // The tool call resumes after its backend call: groups follow the events.
+    expect(model.groups.map((g) => g.key)).toEqual([
+      'setup',
+      'discovery',
+      'question',
+      'planning',
+      'tool',
+      'backend',
+      'tool#2',
+      'context',
+      'generation',
+      'answer',
+    ]);
+    const resumed = model.groups.find((g) => g.key === 'tool#2');
+    expect(resumed?.continued).toBe(true);
+    expect(resumed?.takeaway).toEqual([]);
+    expect(resumed?.caption).toBe('▸ MCP tool call, continued · 3 steps');
     expect(model.groups.filter((g) => g.current).map((g) => g.phase.id)).toEqual(['tool']);
     expect(model.groups.every((g) => g.arrows.length === 0)).toBe(true);
     expect(model.arrows).toHaveLength(0);
@@ -143,8 +159,57 @@ describe('architecture mode', () => {
     const model = build(scn, 'architecture', cursor, ['tool', 'answer']);
     const tool = model.groups.find((g) => g.phase.id === 'tool');
     expect(tool?.arrows.map((a) => a.event.id)).toEqual(['mcp-13', 'mcp-14']);
+    // Expansion is per group: the resumed run stays collapsed.
+    expect(model.groups.find((g) => g.key === 'tool#2')?.expanded).toBe(false);
     expect(tool?.caption.startsWith('▾ ')).toBe(true);
     expect(model.groups.find((g) => g.phase.id === 'answer')?.arrows).toEqual([]);
+  });
+});
+
+describe('architecture groups in variants', () => {
+  it('put causes before effects when every group is expanded', () => {
+    for (const scn of scenarios) {
+      const keys = new Set(build(scn, 'architecture', 0).groups.map((g) => g.key));
+      const model = build(scn, 'architecture', scn.events.length, keys);
+      const order = model.groups.flatMap((g) => g.arrows.map((a) => a.index));
+      expect(order, scn.id).toEqual(scn.events.map((_, i) => i));
+    }
+  });
+
+  it('mark a reached error on its group and skip phases without events', () => {
+    const scn = scenario('mcp-not-found');
+    const at = (id: string): number => scn.events.findIndex((e) => e.id.endsWith(`:${id}`)) + 1;
+    const before = build(scn, 'architecture', at('mcp-20'));
+    expect(before.groups.every((g) => g.error === undefined)).toBe(true);
+    const after = build(scn, 'architecture', at('mcp-23'));
+    expect(after.groups.find((g) => g.key === 'backend')?.error).toBe('transport');
+    expect(after.groups.find((g) => g.key === 'tool#2')?.error).toBe('tool execution');
+    const svg = renderSvg(after, 'T');
+    expect(svg).toContain('<tspan class="group-error"> · × transport error</tspan>');
+    const jsonrpc = build(scenario('mcp-jsonrpc-error'), 'architecture', 0);
+    expect(jsonrpc.groups.map((g) => g.key)).not.toContain('backend');
+  });
+
+  it("use the variant's own takeaways", () => {
+    const groups = build(scenario('mcp-not-found'), 'architecture', 0).groups;
+    expect(groups.find((g) => g.key === 'answer')?.phase.takeaway).toBe(
+      'The simulated answer explains that no balance is available instead of inventing one.',
+    );
+  });
+
+  it('frame their expanded labels and keep labels clear of leftward heads', () => {
+    for (const scn of scenarios) {
+      const keys = new Set(build(scn, 'architecture', 0).groups.map((g) => g.key));
+      for (const g of build(scn, 'architecture', scn.events.length, keys).groups) {
+        for (const a of g.arrows) {
+          expect(a.labelX + estimate(a.label), `${scn.id} ${a.label}`).toBeLessThanOrEqual(
+            g.x2 + 1,
+          );
+          if (!a.self && a.x2 < a.x1)
+            expect(a.labelX - a.x2).toBeGreaterThanOrEqual(SIZES.headRoom);
+        }
+      }
+    }
   });
 });
 
@@ -161,7 +226,7 @@ function boxes(
     y2: a.labelY + 3,
   }));
   for (const g of model.groups) {
-    out.push({ name: g.phase.id, x1: g.x1, x2: g.x2, y1: g.y, y2: g.y + g.height });
+    out.push({ name: g.key, x1: g.x1, x2: g.x2, y1: g.y, y2: g.y + g.height });
   }
   return out;
 }
@@ -169,12 +234,12 @@ function boxes(
 describe('no overlapping labels', () => {
   it('in any scenario, mode and expansion', () => {
     for (const scn of scenarios) {
-      const all = scn.phases.map((p) => p.id);
+      const all = build(scn, 'architecture', 0).groups.map((g) => g.key);
       for (const model of [
         build(scn, 'protocol', scn.events.length),
         build(scn, 'architecture', scn.events.length, all),
       ]) {
-        const items = boxes(model).filter((b) => !model.groups.some((g) => g.phase.id === b.name));
+        const items = boxes(model).filter((b) => !model.groups.some((g) => g.key === b.name));
         for (let i = 0; i < items.length; i += 1) {
           for (let j = i + 1; j < items.length; j += 1) {
             const a = items[i];

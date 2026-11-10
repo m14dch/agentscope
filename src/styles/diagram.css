@@ -129,6 +129,10 @@
   font-size: var(--size-small);
 }
 
+.group-error {
+  fill: var(--color-error);
+}
+
 .group:focus {
   outline: none;
 }

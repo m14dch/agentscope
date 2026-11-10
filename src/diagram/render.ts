@@ -17,7 +17,7 @@ function head(a: Arrow): 'request' | 'response' {
     : 'request';
 }
 
-function renderArrow(a: Arrow, ids: string): string {
+function renderArrow(a: Arrow, ids: string, names: Readonly<Record<string, string>>): string {
   const line = ['arrow', `arrow--${a.line}`];
   const label = ['arrow-label'];
   if (a.emphasized) {
@@ -34,12 +34,12 @@ function renderArrow(a: Arrow, ids: string): string {
     ? `<path class="${line.join(' ')}" d="M ${x1} ${y} h ${SIZES.selfWidth} v ${SIZES.selfHeight} h ${-SIZES.selfWidth + 2}" marker-end="${marker}" />`
     : `<line class="${line.join(' ')}" x1="${x1}" y1="${y}" x2="${x2 + (x2 > x1 ? -1 : 1)}" y2="${y}" marker-end="${marker}" />`;
   const e = a.event;
-  const name = `Step ${a.index + 1}: ${e.sender} to ${e.receiver}, ${a.label}`;
+  const name = `Step ${a.index + 1}: ${names[e.sender] ?? e.sender} to ${names[e.receiver] ?? e.receiver}, ${a.label}`;
   const current = a.visibility === 'current' ? ' data-current=""' : '';
   return `<g class="step" data-index="${a.index}"${current} role="listitem" aria-label="${esc(name)}">${shape}<text class="${label.join(' ')}" x="${a.labelX}" y="${a.labelY}">${esc(a.label)}</text></g>`;
 }
 
-function renderGroup(g: Group, ids: string): string {
+function renderGroup(g: Group, ids: string, names: Readonly<Record<string, string>>): string {
   const cls = ['group'];
   if (g.current) cls.push('group--current');
   const textX = g.x1 + 2 * SIZES.groupPad;
@@ -47,20 +47,31 @@ function renderGroup(g: Group, ids: string): string {
     .map((t, i) => `<tspan x="${textX}" dy="${i === 0 ? 0 : SIZES.headerLine}">${esc(t)}</tspan>`)
     .join('');
   const firstLine = g.y + SIZES.groupPad + 12;
-  const labelY = firstLine + g.takeaway.length * SIZES.headerLine;
+  const captionY = firstLine + g.takeaway.length * SIZES.headerLine;
   const bar = g.current
     ? `<rect class="group-bar" x="${g.x1}" y="${g.y}" width="3" height="${g.height}" />`
     : '';
   const current = g.current ? ' data-current=""' : '';
-  const name = `${g.phase.label}: ${g.phase.takeaway}`;
-  return `<g class="${cls.join(' ')}" data-phase="${esc(g.phase.id)}"${current} role="button" tabindex="0" aria-expanded="${g.expanded}" aria-label="${esc(name)}">
-<rect class="group-frame" x="${g.x1}" y="${g.y}" width="${g.x2 - g.x1}" height="${g.height}" />${bar}
-<text class="group-takeaway" x="${textX}" y="${firstLine}">${lines}</text>
-<text class="group-label" x="${textX}" y="${labelY}">${esc(g.caption)}</text>
-</g><g role="list" aria-label="${esc(g.phase.label)} steps">${g.arrows.map((a) => renderArrow(a, ids)).join('')}</g>`;
+  const error = g.error ? `<tspan class="group-error"> · × ${esc(g.error)} error</tspan>` : '';
+  const takeaway = g.takeaway.length
+    ? `<text class="group-takeaway" x="${textX}" y="${firstLine}">${lines}</text>`
+    : '';
+  const name = `${g.continued ? `${g.phase.label}, continued` : `${g.phase.label}: ${g.phase.takeaway}`}${g.error ? `, × ${g.error} error` : ''}`;
+  const steps = g.arrows.length
+    ? `<g role="list" aria-label="${esc(g.phase.label)} steps">${g.arrows.map((a) => renderArrow(a, ids, names)).join('')}</g>`
+    : '';
+  return `<g class="${cls.join(' ')}" data-group="${esc(g.key)}" data-phase="${esc(g.phase.id)}"${current} role="button" tabindex="0" aria-expanded="${g.expanded}" aria-label="${esc(name)}">
+<rect class="group-frame" x="${g.x1}" y="${g.y}" width="${g.x2 - g.x1}" height="${g.height}" />${bar}${takeaway}
+<text class="group-label" x="${textX}" y="${captionY}">${esc(g.caption)}${error}</text>
+</g>${steps}`;
 }
 
-export function renderSvg(layout: DiagramLayout, title: string, ids = 'diagram'): string {
+export function renderSvg(
+  layout: DiagramLayout,
+  title: string,
+  ids = 'diagram',
+  names: Readonly<Record<string, string>> = {},
+): string {
   const participants = layout.lifelines
     .map((l) => {
       const tspans = l.lines
@@ -71,8 +82,8 @@ export function renderSvg(layout: DiagramLayout, title: string, ids = 'diagram')
     })
     .join('');
   const body = layout.groups.length
-    ? layout.groups.map((g) => renderGroup(g, ids)).join('')
-    : `<g role="list" aria-label="Steps">${layout.arrows.map((a) => renderArrow(a, ids)).join('')}</g>`;
+    ? layout.groups.map((g) => renderGroup(g, ids, names)).join('')
+    : `<g role="list" aria-label="Steps">${layout.arrows.map((a) => renderArrow(a, ids, names)).join('')}</g>`;
   return `<svg class="diagram" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}" role="group" aria-label="${esc(title)}">
 <defs>
 <marker id="${ids}-request" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head--request" d="M 0 0 L 10 5 L 0 10 z" /></marker>
