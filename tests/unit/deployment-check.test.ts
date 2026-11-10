@@ -15,10 +15,19 @@ const HTML = `<!doctype html><html><head>
   <link rel="icon" href='favicon.svg'>
 </head><body><a href="https://example.com/">not an asset</a></body></html>`;
 
-function fakeFetch(responses: Record<string, number>, html = HTML) {
+const SITE = 'https://m14dch.github.io/agentscope/';
+const MANIFEST_URL = `${SITE}asset-manifest.json`;
+const MANIFEST = JSON.stringify({
+  version: 'abc123',
+  hash: '0123456789abcdef',
+  files: ['assets/index-abc.js', 'assets/font.woff2', 'index.html'],
+});
+
+/** Answers with the given statuses (404 otherwise): the manifest for its URL, else the page. */
+function fakeFetch(responses: Record<string, number>, html = HTML, manifest = MANIFEST) {
   return async (url: string) => ({
     status: responses[url] ?? 404,
-    text: async () => html,
+    text: async () => (url === MANIFEST_URL ? manifest : html),
   });
 }
 
@@ -69,6 +78,10 @@ describe('checkDeployment', () => {
     'https://m14dch.github.io/agentscope/assets/index-abc.js': 200,
     'https://m14dch.github.io/agentscope/assets/index-def.css': 200,
     'https://m14dch.github.io/agentscope/favicon.svg': 200,
+    [MANIFEST_URL]: 200,
+    [`${SITE}sw.js`]: 200,
+    [`${SITE}assets/font.woff2`]: 200,
+    [`${SITE}index.html`]: 200,
   };
 
   it('passes a healthy deployment', async () => {
@@ -82,6 +95,7 @@ describe('checkDeployment', () => {
   it('reports a stale deployment', async () => {
     expect(await checkDeployment(PAGE, fakeFetch(ok), 'def456')).toEqual([
       'page version is abc123, expected def456',
+      'asset manifest version is abc123, expected def456',
     ]);
   });
 
@@ -116,6 +130,29 @@ describe('checkDeployment', () => {
     expect(await checkDeployment(PAGE, fakeFetch(ok, html))).toEqual([
       'https://m14dch.github.io/assets/a.js is outside the base path /agentscope/',
       "https://cdn.example/x.css is outside the site's origin",
+    ]);
+  });
+
+  it('reports a missing or invalid manifest, a missing service worker or listed file', async () => {
+    expect(await checkDeployment(PAGE, fakeFetch({ ...ok, [MANIFEST_URL]: 404 }))).toEqual([
+      `${MANIFEST_URL} returned 404`,
+    ]);
+    expect(await checkDeployment(PAGE, fakeFetch(ok, HTML, '{"files": 3}'))).toEqual([
+      `${MANIFEST_URL} is not a valid asset manifest`,
+    ]);
+    expect(await checkDeployment(PAGE, fakeFetch({ ...ok, [`${SITE}sw.js`]: 404 }))).toEqual([
+      `${SITE}sw.js returned 404`,
+    ]);
+    expect(
+      await checkDeployment(PAGE, fakeFetch({ ...ok, [`${SITE}assets/font.woff2`]: 404 })),
+    ).toEqual([`${SITE}assets/font.woff2 returned 404`]);
+  });
+
+  it('reports a stale manifest and listed files outside the base path', async () => {
+    const manifest = JSON.stringify({ version: 'old', files: ['../elsewhere.js'] });
+    expect(await checkDeployment(PAGE, fakeFetch(ok, HTML, manifest), 'abc123')).toEqual([
+      'asset manifest version is old, expected abc123',
+      'https://m14dch.github.io/elsewhere.js is outside the base path /agentscope/',
     ]);
   });
 });
