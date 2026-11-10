@@ -8,6 +8,7 @@ schema.json, and recomputes all RAG reference results from the fixtures.
 Usage:
     python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json
     python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json --dump-registry out.json
+    python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json --dump-rag out.json
 
 Download schema.json from the URL in 04-mcp-scenarios.yaml protocol.schema.
 Requires PyYAML and jsonschema.
@@ -127,6 +128,8 @@ def expand_variant(base, var):
             phases[pid]["takeaway"] = override["takeaway"]
     if "question" in var:
         scn["question"] = var["question"]
+    if "fixture_overrides" in var:
+        scn["fixture_overrides"] = copy.deepcopy(var["fixture_overrides"])
     scn["title"] = var["title"]
     if not str(var.get("lesson", "")).strip():
         err(var["id"], "variant has no lesson")
@@ -150,7 +153,7 @@ def compose(comp, registry):
         else:
             events += copy.deepcopy(step["insert"])
     scn = {k: copy.deepcopy(comp[k]) for k in ("title", "question", "learning_question", "headline", "participants",
-                                                "phases", "initial_state") if k in comp}
+                                                "phases", "initial_state", "derived_events") if k in comp}
     scn["events"] = events
     return finalize(scn, comp["id"], True)
 
@@ -250,9 +253,30 @@ def check_scenario(scn, ctx):
         if e["protocol"] == "MCP":
             check_mcp(e, by_id, ctx, where)
     check_visibility(scn)
+    check_derived(scn, by_id)
     for k in ("question",):
         if k in scn and not isinstance(scn[k], str):
             err(sid, "question must be a string")
+
+
+def check_derived(scn, by_id):
+    """derived_events and optional_steps name the scenario's events (03 scenario_format.optional_fields)."""
+    sid = scn["id"]
+    local = {eid.split(":", 1)[1] if eid.startswith(f"{sid}:") else eid for eid in by_id}
+    for eid in scn.get("derived_events", []):
+        if eid not in local:
+            err(sid, f"derived_events names unknown event {eid}")
+    steps = scn.get("optional_steps", [])
+    if not isinstance(steps, list):
+        err(sid, "optional_steps must be a list")
+        return
+    for step in steps:
+        param = scn.get("parameters", {}).get(step.get("enabled_by"))
+        if not param or not isinstance(param.get("default"), bool):
+            err(sid, f"optional step enabled_by {step.get('enabled_by')} is not a boolean parameter")
+        for eid in step.get("events", []):
+            if eid not in local:
+                err(sid, f"optional_steps names unknown event {eid}")
 
 
 def check_mcp(e, by_id, ctx, where):
@@ -395,7 +419,7 @@ def rag_engine(rag):
 
     facts = fx["answer_facts"]
     groups = fx["answer_groups"]
-    injected = rag["variants"][-1]["untrusted_document_instruction"]
+    injected = [d["injected_instruction"] for d in fx["untrusted_documents"] if "injected_instruction" in d]
 
     def join(items):
         return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
@@ -455,7 +479,7 @@ def rag_engine(rag):
             parts += conflicts
         if missing:
             parts.append(f"The retrieved evidence does not cover {join(missing)}.")
-        if any(injected in c["text"] for c in sel):
+        if any(i in c["text"] for c in sel for i in injected):
             parts.append("Note: a retrieved document contained instructions addressed to the assistant; they were treated as data and ignored.")
         cites = []
 
@@ -557,6 +581,11 @@ def check_rag(rag, comp, registry, ui):
             ev = {e["id"]: e for e in registry["rag-hybrid"]["events"]}
             if ev.get("rag-hybrid:hybrid-02", {}).get("payload", {}).get("hits") != hits:
                 err("rag-hybrid/hybrid-02", "keyword hits differ")
+            above = [c for c in ranked if c["score"] >= rp["similarity_threshold"]]
+            candidates = [{"chunkId": c["id"], "score": c["score"], "keywordScore": c["keyword"],
+                           "rerankScore": c["rerank"]} for c in sorted(above, key=lambda c: (-c["rerank"], c["id"]))]
+            if ev.get("rag-hybrid:hybrid-03", {}).get("payload", {}).get("candidates") != candidates:
+                err("rag-hybrid/hybrid-03", "reranked candidates differ")
         if name == "rag-query":
             if qv != ref["query_embedding"]:
                 err("reference_results.rag-query", "query embedding differs")
@@ -589,19 +618,18 @@ def check_rag(rag, comp, registry, ui):
                 err("rag-index/index-07", "vectors differ from computed vectors")
 
     # Combined: answer, sources and every derived payload.
-    intro = "Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have an Everyday account."
+    composition = comp["answer_composition"]
+    intro = composition["intro"]
     cases = [("combined", comp, comp)] + [(v["id"], v, comp) for v in comp.get("variants", [])]
     for label, case, base in cases:
         if not str(case.get("lesson" if case is not base else "headline", "")).strip():
             err(label, "missing lesson" if case is not base else "missing headline")
         _, ranked, sel = R["retrieve"](R["corpus"](**corpus_kwargs(case if case is not base else None)))
         a, cites, sup = R["answer"](sel, intro=intro)
-        if {"everyday-fee", "everyday-access", "savings-fee-interest", "savings-access"} <= sup:
-            a += (" Whether the Savings account would be better depends on how you use your money: it would avoid the "
-                  "CHF 5 monthly fee and earn 0.50% annual interest, but it has no debit card, so it suits money you "
-                  "rarely need rather than everyday card payments.")
-        elif "savings-fee-interest" not in sup:
-            a += " Without the Savings account terms I can't say whether another account type would offer better conditions."
+        applies = next((c for c in composition["comparisons"]
+                        if set(c.get("requires", [])) <= sup and not set(c.get("lacks", [])) & sup), None)
+        if applies:
+            a += " " + applies["sentence"]
         if a != case["expected_answer"] or R["source_lines"](cites) != case["expected_sources"]:
             err(label, "combined answer or sources differ from recomputation")
         if case is not base and case.get("expected_selected") != [c["id"] for c in sel]:
@@ -624,11 +652,38 @@ def check_rag(rag, comp, registry, ui):
                 err(label, "c-08 answer or sources differ")
 
 
+def dump_rag(rag, comp):
+    """Rankings, selections and answers over a grid of parameters for every corpus a scenario
+    or variant uses (golden test of the TypeScript RAG engine)."""
+    R = rag_engine(rag)
+    chunking = next(sc for sc in rag["scenarios"] if sc["id"] == "rag-index")["parameters"]
+    cases = [("rag-query", None)] + [(v["id"], v) for v in rag["variants"] + comp.get("variants", [])]
+    out = []
+    for name, variant in cases:
+        docs = R["corpus"](**corpus_kwargs(variant))
+        for size in chunking["chunk_size_words"]["options"]:
+            for ov in chunking["overlap_words"]["options"]:
+                ranking = None
+                for top_k in (1, 5, 8):
+                    for thr in (0, 0.7, 0.95):
+                        for rerank in (False, True):
+                            _, ranked, sel = R["retrieve"](docs, size=size, ov=ov, top_k=top_k, thr=thr, rerank=rerank)
+                            if ranking is None:
+                                ranking = [[c["id"], c["score"], c["keyword"], c["rerank"], c["embedding"]] for c in ranked]
+                                out.append({"case": name, "size": size, "overlap": ov, "ranking": ranking})
+                            a, cites, _ = R["answer"](sel)
+                            out.append({"case": name, "size": size, "overlap": ov, "top_k": top_k, "threshold": thr,
+                                        "rerank": rerank, "selected": [c["id"] for c in sel], "answer": a,
+                                        "sources": R["source_lines"](cites)})
+    return out
+
+
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mcp-schema", required=True, help="schema.json of the pinned MCP revision")
     ap.add_argument("--dump-registry", metavar="PATH", help="write the expanded registry as JSON (golden test)")
+    ap.add_argument("--dump-rag", metavar="PATH", help="write RAG results over a parameter grid as JSON (golden test)")
     args = ap.parse_args()
     product, arch, engine = load("00-product.yaml"), load("01-architecture.yaml"), load("03-simulation-engine.yaml")
     mcp, rag, cmp_ = load("04-mcp-scenarios.yaml"), load("05-rag-scenarios.yaml"), load("06-comparison-scenarios.yaml")
@@ -682,6 +737,8 @@ def main():
     total = sum(len(s["events"]) for s in registry.values())
     if args.dump_registry:
         Path(args.dump_registry).write_text(json.dumps(registry, ensure_ascii=False, indent=1))
+    if args.dump_rag:
+        Path(args.dump_rag).write_text(json.dumps(dump_rag(rag, comb), ensure_ascii=False))
     if errors:
         print("\n".join(errors))
         print(f"\n{len(errors)} problem(s) in {len(registry)} expanded scenarios")

@@ -173,7 +173,7 @@ combined:
   - copy:
       scenario: rag-query
       from: retrieve-02
-      to: retrieve-06
+      to: retrieve-05
       phase_map:
         embedding: retrieval
         retrieval: retrieval
@@ -182,6 +182,10 @@ combined:
           operation: Embed account-conditions query
           explanation: Embed the retrieval query derived from the question. The balance part of the question
             is not sent to retrieval.
+  - copy:
+      scenario: rag-query
+      from: retrieve-06
+      to: retrieve-06
   - insert:
     - id: c-03
       phase: context
@@ -503,6 +507,39 @@ combined:
         - account-opening@1.2-c50o10-002
         - savings-account@1.2-c50o10-001
   expanded_event_count: 35
+  derived_events:
+  - retrieve-05
+  - retrieve-06
+  - c-03
+  - c-04
+  - c-06
+  - c-07
+  - c-08
+  answer_composition:
+    rule: 'The answer is the intro, then the RAG answer of 05-rag-scenarios.yaml answer_rules for the retained
+      chunks, then the sentence of the first comparison whose required facts are all supported and whose
+      lacking facts are all unsupported. Without one, no sentence is added. The explanation of the model''s
+      answer (c-07) is that comparison''s explanation, or the default explanation.'
+    intro: 'Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have an Everyday
+      account.'
+    comparisons:
+    - requires:
+      - everyday-fee
+      - everyday-access
+      - savings-fee-interest
+      - savings-access
+      sentence: 'Whether the Savings account would be better depends on how you use your money: it would
+        avoid the CHF 5 monthly fee and earn 0.50% annual interest, but it has no debit card, so it suits
+        money you rarely need rather than everyday card payments.'
+      explanation: 'Simulated model output: balance from the tool, terms from cited chunks, and a qualified
+        comparison.'
+    - lacks:
+      - savings-fee-interest
+      sentence: Without the Savings account terms I can't say whether another account type would offer
+        better conditions.
+      explanation: 'Simulated model output: balance from the tool and terms from cited chunks; without the
+        Savings terms it makes no comparison.'
+    explanation: 'Simulated model output: balance from the tool and terms from cited chunks.'
   required_boundaries:
   - RAG retrieval does not invoke the banking balance API
   - MCP supplies the simulated current balance from the bank fixture. RAG supplies published account terms.
