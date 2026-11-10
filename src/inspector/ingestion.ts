@@ -7,6 +7,7 @@
 import {
   type EmbeddingWorking,
   type IndexedDocument,
+  pyRound,
   type RagDocument,
   words,
 } from '../rag/engine.ts';
@@ -28,16 +29,19 @@ export interface ChunkView {
   version: string;
   startWord: number;
   words: string[];
-  /** Per word: whether it also belongs to a neighbouring chunk. */
-  overlap: boolean[];
   /** From index-07, once that step is reached. */
   vector?: number[];
 }
 
 export interface DocumentView extends SourceDocument {
   chunks: ChunkView[];
-  /** Per word: whether two chunks hold it. */
-  overlap: boolean[];
+}
+
+/** Words of the document (indices from, to - 1) that the selected chunk shares with a neighbour. */
+export interface SharedRange {
+  neighbour: ChunkView;
+  from: number;
+  to: number;
 }
 
 export interface IngestionModel {
@@ -98,7 +102,6 @@ export function ingestionModel(
         version: String(c['version']),
         startWord: Number(c['startWord']),
         words: text ? text.split(' ') : [],
-        overlap: [],
       };
       const vector = embeddings.get(id);
       if (vectors && vector) view.vector = vector;
@@ -107,14 +110,7 @@ export function ingestionModel(
   );
   const documents = sources.flatMap((doc): DocumentView[] => {
     const own = chunks.filter((c) => c.documentId === doc.documentId && c.version === doc.version);
-    if (!own.length) return [];
-    const holders = new Array<number>(doc.words.length).fill(0);
-    for (const c of own)
-      for (let i = c.startWord; i < c.startWord + c.words.length; i += 1)
-        holders[i] = (holders[i] ?? 0) + 1;
-    const overlap = holders.map((n) => n > 1);
-    for (const c of own) c.overlap = c.words.map((_, i) => overlap[c.startWord + i] ?? false);
-    return [{ ...doc, chunks: own, overlap }];
+    return own.length ? [{ ...doc, chunks: own }] : [];
   });
   return {
     documents,
@@ -139,6 +135,28 @@ export function selectedChunk(
   const start = selection?.documentId === document.documentId ? selection.startWord : 0;
   const chunk = document.chunks.filter((c) => c.startWord <= start).at(-1) ?? document.chunks[0];
   return chunk ? { document, chunk } : undefined;
+}
+
+/**
+ * The words the chunk shares with its previous and its next chunk in the document
+ * (02 rag_ingestion.overlap), in document word indices; none without overlap.
+ */
+export function sharedRanges(document: DocumentView, chunk: ChunkView): SharedRange[] {
+  const i = document.chunks.findIndex((c) => c.id === chunk.id);
+  if (i < 0) return [];
+  const end = (c: ChunkView): number => c.startWord + c.words.length;
+  return [document.chunks[i - 1], document.chunks[i + 1]].flatMap((n): SharedRange[] => {
+    if (!n) return [];
+    const from = Math.max(n.startWord, chunk.startWord);
+    const to = Math.min(end(n), end(chunk));
+    return to > from ? [{ neighbour: n, from, to }] : [];
+  });
+}
+
+/** One sentence per shared range, so overlap does not depend on weight alone. */
+export function sharedText(ranges: readonly SharedRange[]): string {
+  if (!ranges.length) return 'The selected chunk shares no words with its neighbours.';
+  return ranges.map((r) => `Words ${r.from}–${r.to - 1} are also in ${r.neighbour.id}.`).join(' ');
 }
 
 /** Runs of consecutive words that share the same marks, so the text needs few elements. */
@@ -168,6 +186,8 @@ export interface IngestionContext {
   note: string;
   /** Moves the cursor to a step (1-based). */
   jump: (step: number) => void;
+  /** Takes focus when the panel disappears while holding it (02 rag_ingestion.focus). */
+  leave: () => void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -178,12 +198,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   const node = document.createElement(tag);
   if (cls) node.className = cls;
   node.append(...children);
-  return node;
-}
-
-/** Hidden from assistive technology: the number beside it says the same. */
-function hidden<T extends HTMLElement>(node: T): T {
-  node.setAttribute('aria-hidden', 'true');
   return node;
 }
 
@@ -242,11 +256,12 @@ export class IngestionPanel {
     const active = document.activeElement;
     const restore =
       active instanceof HTMLElement && this.root.contains(active)
-        ? active.closest<HTMLElement>('[data-focus]')?.dataset['focus']
+        ? (active.closest<HTMLElement>('[data-focus]')?.dataset['focus'] ?? '')
         : undefined;
     this.root.hidden = !picked;
     if (!model || !picked) {
       this.root.replaceChildren();
+      if (restore !== undefined) this.context.leave();
       return;
     }
     this.root.replaceChildren(
@@ -289,13 +304,14 @@ export class IngestionPanel {
     const label = el('label', 'small muted', 'Document');
     label.htmlFor = menu.id;
     const end = chunk.startWord + chunk.words.length;
+    const shared = sharedRanges(doc, chunk);
     return el(
       'div',
       'ingestion-column',
       el('div', 'ingestion-field', label, menu),
       el('p', 'small muted', `${doc.documentId} v${doc.version} · ${doc.words.length} words`),
       markedText('ingestion-text', doc.words, (i) => ({
-        overlap: doc.overlap[i] ?? false,
+        overlap: shared.some((r) => i >= r.from && i < r.to),
         selected: i >= chunk.startWord && i < end,
       })),
     );
@@ -306,6 +322,10 @@ export class IngestionPanel {
     const summary =
       `${n} ${n === 1 ? 'chunk' : 'chunks'} of up to ${model.chunkSize} words` +
       (model.overlap ? `, each sharing ${model.overlap} words with the next` : ', none shared');
+    const shared = sharedRanges(doc, chunk);
+    // The selected chunk marks every word it shares; a neighbour, the words shared with it.
+    const marked = (c: ChunkView, j: number): boolean =>
+      shared.some((r) => (c.id === chunk.id || r.neighbour.id === c.id) && j >= r.from && j < r.to);
     const items = doc.chunks.map((c, i) => {
       const selected = c.id === chunk.id;
       const button = focusKey(el('button', 'chunk-select', c.id), `chunk:${i}`);
@@ -320,7 +340,7 @@ export class IngestionPanel {
         button,
         el('span', 'small muted', ` ${range(c)}`),
         markedText('ingestion-text', c.words, (k) => ({
-          overlap: c.overlap[k] ?? false,
+          overlap: marked(c, c.startWord + k),
           selected: false,
         })),
       );
@@ -329,6 +349,7 @@ export class IngestionPanel {
       'div',
       'ingestion-column',
       el('p', 'small muted', summary),
+      el('p', 'small shared-note', sharedText(shared)),
       el('ol', 'chunk-list', ...items),
     );
   }
@@ -377,7 +398,6 @@ export class IngestionPanel {
             th.scope = 'col';
             return th;
           }),
-          hidden(el('th', 'muted', '0 to 1')),
         ),
       ),
     );
@@ -394,9 +414,6 @@ export class IngestionPanel {
             )
             .join(', ')
         : 'none';
-      const dot = el('span', 'vector-dot');
-      dot.style.setProperty('--value', String(Math.min(Math.max(value, 0), 1)));
-      const scale = hidden(el('span', 'vector-scale', dot));
       body.append(
         el(
           'tr',
@@ -405,7 +422,6 @@ export class IngestionPanel {
           el('td', d.hits.length ? undefined : 'muted', words),
           el('td', 'num', sumText(d.sum)),
           el('td', 'num vector-value', value.toFixed(4)),
-          hidden(el('td', 'vector-scale-cell', scale)),
         ),
       );
     });
@@ -417,7 +433,7 @@ export class IngestionPanel {
       el(
         'p',
         'small muted',
-        `Each sum starts at 0.1. Each value is its sum divided by the length of the sums, ${Number(working.length.toFixed(4))}, rounded to 4 decimals.`,
+        `Each sum starts at 0.1. Each value is its sum divided by the length of the vector of sums, ${pyRound(working.length, 4)}, rounded to 4 decimals.`,
       ),
     );
   }

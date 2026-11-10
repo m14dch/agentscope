@@ -5,6 +5,8 @@ import {
   ingestionModel,
   runs,
   selectedChunk,
+  sharedRanges,
+  sharedText,
   sourceDocuments,
 } from '../../src/inspector/ingestion.ts';
 import { createPlayback, ragDerivation } from '../../src/rag/bundled.ts';
@@ -63,24 +65,46 @@ describe('ingestion panel model', () => {
     expect([model(player).chunkSize, model(player).overlap]).toEqual([50, 10]);
   });
 
-  it('marks exactly the words two chunks share, in the document and in each chunk', () => {
+  it('finds the words the selected chunk shares with its previous and next chunk', () => {
     const player = new Player(createPlayback(scenario));
     player.jump(CHUNKED);
     const everyday = model(player).documents[0];
     if (!everyday) throw new Error('no document');
     expect(everyday.words.length).toBe(79);
-    // Chunks at words 0–49 and 40–78 share words 40–49.
-    const shared = everyday.overlap.flatMap((o, i) => (o ? [i] : []));
-    expect(shared).toEqual([40, 41, 42, 43, 44, 45, 46, 47, 48, 49]);
     const [first, second] = everyday.chunks;
-    expect(first?.overlap.filter(Boolean).length).toBe(10);
-    expect(first?.overlap.slice(40)).toEqual(new Array(10).fill(true));
-    expect(second?.overlap.slice(0, 10)).toEqual(new Array(10).fill(true));
-    expect(second?.overlap.slice(10).some(Boolean)).toBe(false);
-    expect(everyday.words.slice(40, 50)).toEqual(second?.words.slice(0, 10));
+    if (!first || !second) throw new Error('no chunks');
+    // Chunks at words 0–49 and 40–78 share words 40–49.
+    const ranges = sharedRanges(everyday, first);
+    expect(ranges.map((r) => [r.neighbour.id, r.from, r.to])).toEqual([
+      ['everyday-account@1.2-c50o10-002', 40, 50],
+    ]);
+    expect(sharedText(ranges)).toBe('Words 40–49 are also in everyday-account@1.2-c50o10-002.');
+    expect(sharedRanges(everyday, second).map((r) => [r.neighbour.id, r.from, r.to])).toEqual([
+      ['everyday-account@1.2-c50o10-001', 40, 50],
+    ]);
+    expect(everyday.words.slice(40, 50)).toEqual(second.words.slice(0, 10));
 
-    player.setParameters({ overlap_words: 0 });
-    expect(model(player).documents.every((d) => d.overlap.every((o) => !o))).toBe(true);
+    // At 25 words with 20 shared, only the immediate neighbours count, not every chunk
+    // that holds a word: the third chunk (words 10–34) shares 15–34 and 10–29.
+    player.setParameters({ chunk_size_words: 25, overlap_words: 20 });
+    const dense = model(player).documents[0];
+    if (!dense) throw new Error('no document');
+    const third = dense.chunks[2];
+    if (!third) throw new Error('no chunk');
+    expect(third.startWord).toBe(10);
+    expect(sharedRanges(dense, third).map((r) => [r.neighbour.startWord, r.from, r.to])).toEqual([
+      [5, 10, 30],
+      [15, 15, 35],
+    ]);
+    const last = dense.chunks.at(-1);
+    if (!last) throw new Error('no chunk');
+    expect(sharedRanges(dense, last)).toHaveLength(1);
+
+    player.setParameters({ chunk_size_words: 50, overlap_words: 0 });
+    const none = model(player).documents[0];
+    if (!none?.chunks[0]) throw new Error('no chunk');
+    expect(sharedRanges(none, none.chunks[0])).toEqual([]);
+    expect(sharedText([])).toBe('The selected chunk shares no words with its neighbours.');
   });
 
   it('recomputes chunks and vectors at once when the parameters change, on the same event', () => {

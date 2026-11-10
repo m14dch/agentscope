@@ -78,12 +78,35 @@ test.describe('rag-walkthrough', () => {
     await expect(product).toContainText('6.1');
     await expect(product).toContainText('0.6186');
 
-    // Overlap words are marked in place: words 40–49 of the Everyday document.
+    // The words the selected chunk shares with its neighbour are marked in place, in the
+    // document and in both chunks, and stated in words.
+    const shared = 'Statements are available every month in online banking. Domestic transfers';
     const documentText = panel(page).locator('.ingestion-text').first();
-    await expect(documentText.locator('.overlap')).toHaveText(
-      'Statements are available every month in online banking. Domestic transfers',
-    );
+    await expect(documentText.locator('.overlap')).toHaveText(shared);
     await expect(documentText.locator('.chunk-mark')).toHaveCount(2);
+    const chunkTexts = panel(page).locator('.chunk-list .ingestion-text');
+    await expect(chunkTexts.nth(0).locator('.overlap')).toHaveText(shared);
+    await expect(chunkTexts.nth(1).locator('.overlap')).toHaveText(shared);
+    await expect(panel(page).locator('.shared-note')).toHaveText(
+      'Words 40–49 are also in everyday-account@1.2-c50o10-002.',
+    );
+  });
+
+  test('dense overlap marks only what the selected chunk shares with its neighbours', async ({
+    page,
+  }) => {
+    await open(page, '#/rag/rag-index/10');
+    await page.getByRole('button', { name: 'Chunk size 25 words' }).click();
+    await page.getByRole('button', { name: 'Overlap 20 words' }).click();
+    // The first chunk (words 0–24) shares words 5–24 with the second only.
+    await expect(panel(page).locator('.shared-note')).toHaveText(
+      'Words 5–24 are also in everyday-account@1.2-c25o20-002.',
+    );
+    const documentText = panel(page).locator('.ingestion-text').first();
+    const marked = (await documentText.locator('.overlap').allTextContents()).join('');
+    expect(marked.trim().split(/\s+/)).toHaveLength(20);
+    // Only the selected chunk and its neighbour carry marks in the list.
+    await expect(panel(page).locator('.chunk-list li:has(.overlap)')).toHaveCount(2);
   });
 
   test('chunk size and overlap recompute chunks and vectors at once, on the same step', async ({
@@ -140,6 +163,37 @@ test.describe('rag-walkthrough', () => {
     await expect(size).toBeFocused();
     // The selection follows to the chunk that holds word 40: the only 100-word chunk.
     await expect(panel(page).locator('.chunk-id')).toHaveText('everyday-account@1.2-c100o10-001');
+  });
+
+  test('focus moves to the step slider when the panel disappears while holding it', async ({
+    page,
+  }) => {
+    await open(page, '#/rag/rag-index/5');
+    const chunk = panel(page).getByRole('button', { name: 'everyday-account@1.2-c50o10-002' });
+    await chunk.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.locator('.status')).toHaveText('Step 4 of 10 · Chunk');
+    await expect(panel(page)).toBeHidden();
+    await expect(page.getByRole('slider', { name: 'Step' })).toBeFocused();
+  });
+
+  test('a selected chunk ID that the new parameters no longer play is cleared', async ({
+    page,
+  }) => {
+    await open(page, '#/rag/rag-index/5/protocol');
+    await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Select chunkId "everyday-account@1.2-c50o10-001"' })
+      .click();
+    await expect(page.locator('.step .label-mark')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Chunk size 25 words' }).click();
+    await expect(page.locator('.step .label-mark')).toHaveCount(0);
+    await expect(page.locator('.select-value[aria-pressed="true"]')).toHaveCount(0);
+    // Payload highlights show again: every tracked chunk ID of the step is marked.
+    await page.getByRole('tab', { name: 'Payload', exact: true }).click();
+    await expect(
+      page.locator('.tab-panel .json-mark').filter({ hasText: 'c25o10-001' }).first(),
+    ).toBeVisible();
   });
 
   // Run retrieval, change topK to 4, inspect the changed prompt, answer and citations:
