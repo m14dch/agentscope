@@ -123,12 +123,19 @@ function offenders(found: Found): string[] {
     .map(([value, where]) => `${value}: ${where.slice(0, 3).join(', ')}`);
 }
 
-for (const route of ['./', './#/design']) {
+for (const route of [
+  './',
+  './#/design',
+  './#/diagram/mcp-not-found/23/protocol',
+  './#/diagram/mcp-balance/14/architecture',
+]) {
   test(`every computed colour on ${route} is a design token`, async ({ page }) => {
     await page.goto(route);
     await page.locator('#app > *').first().waitFor();
     // Expand folded content so it is checked too, then move the pointer away (no hover).
-    for (const fold of await page.locator('[aria-expanded="false"]').all()) await fold.click();
+    // Query again after each click: expanding can re-render the content.
+    const folded = page.locator('[aria-expanded="false"]');
+    for (let i = 0; i < 50 && (await folded.count()) > 0; i += 1) await folded.first().click();
     await page.mouse.move(0, 0);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     expect(offenders(await computedColours(page, false))).toEqual([]);

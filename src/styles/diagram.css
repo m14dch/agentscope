@@ -71,3 +71,69 @@
 .arrow-label--past {
   fill: var(--color-ink-muted);
 }
+
+/* An error that is also the current step: the error colour wins, the weight stays. */
+.arrow-label--current.arrow-label--error {
+  fill: var(--color-error);
+}
+
+/* Labels may cross lifelines; a paper halo keeps them legible. */
+.arrow-label,
+.participant,
+.group-takeaway,
+.group-label {
+  paint-order: stroke;
+  stroke: var(--color-paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.diagram-scroller {
+  overflow: auto;
+  max-width: 100%;
+}
+
+.diagram {
+  display: block;
+  font-family: var(--font-text);
+}
+
+/* Architecture mode: one group per phase, headed by its takeaway. */
+.group {
+  cursor: pointer;
+}
+
+.group-frame {
+  fill: none;
+  /* The whole group is clickable, not only its outline. */
+  pointer-events: visible;
+  stroke: var(--color-rule);
+  stroke-width: var(--line-hair);
+}
+
+.group-bar {
+  fill: var(--color-accent);
+}
+
+.group-takeaway {
+  fill: var(--color-ink);
+  font-size: var(--size-small);
+}
+
+.group--current .group-takeaway {
+  font-weight: var(--weight-strong);
+}
+
+.group-label {
+  fill: var(--color-ink-muted);
+  font-size: var(--size-small);
+}
+
+.group:focus {
+  outline: none;
+}
+
+.group:focus-visible .group-frame {
+  stroke: var(--color-ink);
+  stroke-width: var(--line-focus);
+}
