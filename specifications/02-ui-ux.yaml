@@ -22,6 +22,14 @@ design:
   - Supporting colours are introduced only when a need appears (handover 4.1). White
     reading surfaces, information and success are not used yet; white on cream (1.05:1)
     would add a near-invisible box that carries no information.
+  - 'Retained chunks keep the accent in the score plot and the projection (issue #15),
+    although handover 4.2 reserves Peach Red for the current step: inside a retrieval chart
+    the retained chunks are what to look at now, and the charts sit below the timeline, apart
+    from the diagram''s current arrow, so the two never compete. The accent is never the only
+    signal there: retained points are filled and their rows say "retained" with the rank in
+    words. Nothing is retained, and nothing is in the accent, before the step that applies
+    top K and the threshold. A lineage selection marks a chunk''s label with the selection
+    background and ink underline, never its dot, so no accent mark sits on selection.'
   governing_rule: Maximise the signal-to-noise ratio. Viewers already process protocols,
     payloads, context and trust boundaries; anything that carries no information is
     noise and is removed.
@@ -89,8 +97,8 @@ design:
     selected value; dotted ink-muted marks a control that folds or expands content.'
   - Every arrow carries a short text label (for example "MCP · tools/call").
   - Scores are dots on a 0–1 scale with the threshold as one labelled line; retained
-    chunks use the accent. No bars from an arbitrary origin; no gridlines unless they
-    answer a question.
+    chunks use the accent, filled, and say "retained" in words (handover_decisions). No
+    bars from an arbitrary origin; no gridlines unless they answer a question.
   - The 2D projection is a plain scatter plot with points labelled directly and axes
     named by meaning.
   - Charts fit the available width with text at its real size. Only sequence diagrams
@@ -136,7 +144,9 @@ layout:
   - 'Top bar: navigation, scenario, architecture/protocol toggle'
   - 'Main: resizable sequence diagram + payload inspector'
   - 'Bottom: execution timeline + a collapsible model-context panel, collapsed at start,
-    and in rag-index the ingestion panel (rag_ingestion). Lineage lives in the inspector''s
+    in rag-index the ingestion panel (rag_ingestion), in rag-query and its variants the
+    retrieval panel (rag_retrieval) and, in rag-stale and rag-conflict, the version panel
+    (rag_controls.version_panel). Lineage lives in the inspector''s
     Lineage tab and in the diagram (lineage_selection), not in a panel of its own'
   - 'Header: one persistent statement that everything is simulated and nothing leaves
     the browser'
@@ -395,12 +405,25 @@ rag_controls:
     - 10
     - 20
     default: 10
-  version_panel: In rag-stale and rag-conflict, show source and indexed document versions
-    side by side.
+  version_panel: 'In rag-stale and rag-conflict, show source and indexed document versions
+    side by side: below the timeline from step 0, a section "Source and indexed versions"
+    lists every official document with its source version (05 fixtures.documents) and the
+    versions the index holds, or "not indexed". For each document whose indexed versions
+    differ from or add to its source version, the source text and each other indexed text
+    stand side by side (two columns from 64rem, stacked below), with the words that differ
+    in weight 600 and one sentence stating the difference in words, for example "Version
+    1.0 says ''CHF 7 per month'' where version 1.2 says ''CHF 5 per month''."'
   placement: 'A row of labelled option groups below the playback controls, shown from step
-    0 in the scenarios that have the parameters (chunk size and overlap in rag-index). A
-    change recomputes the derived events at once (controls.action_rules.parameter_change);
+    0 in the scenarios that have the parameters (chunk size and overlap in rag-index; top K,
+    threshold, reranking, keyword retrieval and fetch full documents in rag-query and its
+    variants). A change recomputes the derived events at once (controls.action_rules.parameter_change);
     the values are not part of the route and return to their defaults with a new scenario.'
+  control_kinds: 'Options (chunk size, overlap) and top K are groups of pressed buttons, one
+    per value (top K 1 to 8). The threshold is a slider from min to max in steps of 0.01
+    whose value is shown beside it with 2 decimals (Python rounding, as 05 writes thresholds).
+    Reranking, keyword retrieval and fetch full documents are toggle buttons (pressed when on).
+    Each control keeps keyboard focus while the scenario recomputes; the slider moves with
+    the arrow keys, which then do not step the scenario (controls.keyboard_scope).'
 rag_ingestion:
   shown_in: rag-index, below the timeline, from the step that returns the chunks (index-05);
     its chunk IDs and vectors are read from the played index-05 and index-07 events, so the
@@ -424,6 +447,51 @@ rag_ingestion:
     index-07 it names the step that computes the vector.'
   embedding_note: Above the vector, the principle of 05-rag-scenarios.yaml that the demo
     embedding stands in for a learned model, as written there (two plain sentences).
+rag_retrieval:
+  shown_in: 'Scenarios that derive retrieve-05 (rag-query and its variants), below the
+    timeline, from the step that returns the scored chunks (retrieve-05). Scores, the
+    selection, the prompt and the answer are read from the played events (retrieve-05,
+    hybrid-02, hybrid-03, retrieve-06, retrieve-09, retrieve-10, retrieve-12), so the screen
+    always equals them; chunk text and vectors come from the index the scenario searches
+    (05 derived_event_rules.inputs at the current parameters), as retrieve-05''s technical
+    note says.'
+  sections: Scores and projection side by side from 64rem, stacked below; then the prompt;
+    then the answer. A section appears from the step that produces its content; until
+    then it is absent, not empty.
+  scores: 'A dot plot (labels_and_charts): one row per chunk in retrieve-05''s order, labelled
+    with its chunk ID, its dot at the cosine score on a 0–1 axis with the score written beside
+    it (4 decimals), and the threshold as one vertical line labelled "threshold <value>" (2
+    decimals). From retrieve-06 each row states its outcome in words: "retained, rank <n>" (the
+    order in which the prompt carries it) or retrieve-06''s discard reason; retained dots are
+    filled in the accent, the others hollow. Before retrieve-06 a line names the step that
+    applies top K and the threshold. Once hybrid-02 is reached each hit shows its keyword
+    score, and once hybrid-03 is reached each candidate shows its reranker score. A chunk of
+    an untrusted document says "untrusted" in its row.'
+  projection: 'A plain scatter plot of 05 fixtures.projection_2d (x = cost − rules, y = product
+    − technical, both from −1 to 1, equal scales): the axes are named by meaning at their
+    ends (rules ← → cost, technical ↓ ↑ product), every chunk point and the question''s point
+    (retrieve-03) are labelled directly, labels that would overlap move down beside a short
+    leader line, and retained points are filled in the accent. One sentence below states that
+    the projection is fixed and conceptual and that scores are computed in all dimensions.
+    It fits the available width with text at its real size.'
+  prompt: 'From retrieve-09, "Prompt before and after retrieval": retrieve-09 prompt_before
+    and the grounded messages of retrieve-10 side by side (two columns from 64rem, stacked
+    below), each message with its role. Until retrieve-10 a line says the prompt is assembled
+    and the model has not seen it; from retrieve-10 it names the step that sent it. Each
+    document block is set apart with its ID, version, chunk and trust; an untrusted block
+    starts with the words "Untrusted document" in weight 600, and the instruction injected
+    into it (05 fixtures.untrusted_documents injected_instruction) is set in weight 600 and
+    followed by "(instruction inside a document: treated as data)".'
+  answer: 'From retrieve-12, the answer (labelled simulated, learning.simulated_behaviour) with
+    each [n] as a button, then the source lines exactly as 05 answer_rules writes them. A
+    citation opens its evidence below the answer, next to the source document: the document''s
+    normalized text with the chunk''s words marked with the selection background and an ink
+    underline, beside the chunk''s text and metadata; a parent document (fetch_full_documents)
+    opens as the whole document. One citation is open at a time; activating it again closes
+    it. The open citation is pressed and keeps focus while the panel rebuilds; a citation that
+    no longer exists after a parameter change closes.'
+  focus: When the panel disappears (stepping back before retrieve-05) while it holds focus,
+    focus moves to the step slider, as in rag_ingestion.
 accessibility:
 - Keyboard operable controls
 - Visible focus
