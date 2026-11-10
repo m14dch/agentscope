@@ -1185,6 +1185,7 @@ variants:
       tracked_values:
         customerId: '123'
       explanation: The ledger has no active account for customer 123.
+      operation: Return no account
   - op: replace
     event: mcp-21
     with:
@@ -1369,6 +1370,8 @@ variants:
             version: 1.0.0
       tracked_values:
         customerId: '123'
+      explanation: 'The MCP server returns a tool execution error: isError is true, and the content names
+        no credential.'
   - op: patch
     event: mcp-24
     set:
@@ -1664,6 +1667,9 @@ variants:
       takeaway: The agent sends the whole conversation, now including the failure, back to the model.
     answer:
       takeaway: The simulated answer says the balance could not be retrieved instead of guessing it.
+    discovery:
+      takeaway: The agent reuses its cached tool list instead of asking the server again; the server's
+        tools have changed since.
 - id: mcp-multiple-tools
   title: Customer profile followed by balance
   lesson: The model can ask for several tools in turn; every result returns through the agent before the
@@ -2065,6 +2071,9 @@ variants:
       tracked_values:
         customerId: '123'
         balance: 12500.75
+  phase_overrides:
+    backend:
+      takeaway: The MCP server reads customer data from the bank's REST API with its own credentials.
 requirements:
 - Show the HTTP envelope separately from the JSON-RPC logical message
 - Every MCP request carries _meta with protocolVersion and clientCapabilities, and the MCP-Protocol-Version
