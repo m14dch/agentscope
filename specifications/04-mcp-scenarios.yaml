@@ -1289,6 +1289,16 @@ variants:
         Bank support if you think this is wrong.
       tracked_values:
         customerId: '123'
+  phase_overrides:
+    backend:
+      takeaway: 'The bank''s REST API answers 404: there is no active account, so there is no balance
+        to read.'
+    context:
+      takeaway: The agent stores the error as a tool message; the model has not seen it yet.
+    generation:
+      takeaway: The agent sends the whole conversation, now including the error, back to the model.
+    answer:
+      takeaway: The simulated answer explains that no balance is available instead of inventing one.
 - id: mcp-unauthorized
   title: Backend authentication failure
   lesson: When the MCP server's own backend credential fails, the tool reports an error without exposing
@@ -1414,6 +1424,16 @@ variants:
         try again later.
       tracked_values:
         customerId: '123'
+  phase_overrides:
+    backend:
+      takeaway: The REST API rejects the MCP server's own credential with 401; the user never held that
+        credential.
+    context:
+      takeaway: The agent stores the error as a tool message; the model has not seen it yet.
+    generation:
+      takeaway: The agent sends the whole conversation, now including the error, back to the model.
+    answer:
+      takeaway: The simulated answer says the balance is unavailable and reveals nothing about the credential.
 - id: mcp-jsonrpc-error
   title: Unknown tool from a stale tool cache (JSON-RPC protocol error)
   lesson: An unknown tool is a protocol error, not a failing tool; a stale tool cache can cause it.
@@ -1634,6 +1654,16 @@ variants:
         try again.
       tracked_values:
         customerId: '123'
+  phase_overrides:
+    tool:
+      takeaway: The MCP server rejects the call as a protocol error because it does not know the tool;
+        no backend is called.
+    context:
+      takeaway: The agent stores the failure as a tool message; the model has not seen it yet.
+    generation:
+      takeaway: The agent sends the whole conversation, now including the failure, back to the model.
+    answer:
+      takeaway: The simulated answer says the balance could not be retrieved instead of guessing it.
 - id: mcp-multiple-tools
   title: Customer profile followed by balance
   lesson: The model can ask for several tools in turn; every result returns through the agent before the

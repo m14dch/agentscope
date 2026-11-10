@@ -1501,6 +1501,14 @@ variants:
     similarity_threshold: 0.99
   lesson: No chunk reaches 0.99 at the default chunking, so the prompt contains no documents and the answer
     says so.
+  phase_overrides:
+    context:
+      takeaway: No chunk passed the threshold, so the prompt carries no evidence.
+    generation:
+      takeaway: The model receives the question without evidence; its simulated answer can draw on no
+        document.
+    answer:
+      takeaway: The answer says the documents do not cover the question instead of guessing.
 - id: rag-conflict
   title: Conflicting documentation versions
   extends: rag-query

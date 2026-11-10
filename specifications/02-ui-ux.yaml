@@ -136,7 +136,7 @@ diagram:
     response: open arrowhead
     current_and_pair: accent line, 2 px, and the label in weight 600, so the current step
       stays distinct in greyscale
-    error: error line; the label starts with × and names the kind (tool, protocol, transport)
+    error: error line; the label starts with × and names the kind from error_events
   labels: 'Each arrow carries its operation as a direct text label, prefixed with the
     protocol for messages that cross a protocol boundary: MCP, HTTP, LLM API and DB (for
     example MCP · tools/call). The prefix is left out when the operation already starts
@@ -175,11 +175,19 @@ modes:
   architecture: 'Conceptual level: collapse each scenario phase into one expandable group
     headed by its takeaway (the phase label is secondary). Shows the learning question,
     the headline and plain explanations.'
-  architecture_groups: 'A group spans the lifelines its events touch. The group holding
-    the current step is the current group: an accent bar and its takeaway in weight 600.
-    A group expands or collapses on click, Enter or Space; expanded, it shows its events
-    up to the cursor with protocol-mode styling. Expansion is kept while the learner
+  architecture_groups: 'Groups follow the events in order: one group per consecutive run
+    of a phase''s events, so a phase that resumes after another (the MCP tool call around
+    its backend call) appears again, captioned as continued and without repeating its
+    takeaway. A phase without events has no group. A group spans at least the lifelines
+    its events touch and widens only to fit its takeaway. The group holding the current
+    step is the current group: an accent bar and its takeaway in weight 600. A group whose
+    reached events include an error adds × and the error kind to its caption, in the error
+    colour. A group expands or collapses on click, Enter or Space; expanded, it shows its
+    events up to the cursor with protocol-mode styling. Expansion is kept while the learner
     steps through the scenario.'
+  scrolling: Only a cursor change scrolls the diagram; toggling a group or laying out
+    again keeps the scroll position. Keyboard focus stays on the same group or region
+    across steps.
   protocol: 'Technical level: show all individual events with exact logical messages;
     the inspector holds payloads, boundaries and errors.'
   default_mode: architecture

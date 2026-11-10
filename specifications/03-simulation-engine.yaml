@@ -165,6 +165,8 @@ variant_format:
     parameter_overrides: Optional parameter values
     operations: Optional ordered list of edit operations
     lesson: Required. One sentence stating what the variant teaches
+    phase_overrides: 'Optional {<phase id>: {takeaway}}. Replaces the takeaway of a base
+      phase whose takeaway is not true for the variant.'
   operations:
     patch: '{op: patch, event, set: {dotted.path: value}}. Replaces the value at each
       path; numeric path segments index arrays.'
@@ -179,7 +181,8 @@ variant_format:
   - Prefix every event ID and pair_id with '<variant id>:'
   - Take the scenario ID and title from the variant, the question if given, and the
     headline from the variant's lesson; parameter_overrides replace the defaults of the
-    named parameters; keep every other base field
+    named parameters; phase_overrides replace the named phases'' takeaways; keep every
+    other base field
   - Validate the expanded scenario
 composition_format:
   description: Used by the Combined scenario (06-comparison-scenarios.yaml).
