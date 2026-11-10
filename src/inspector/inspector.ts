@@ -43,6 +43,14 @@ export interface InspectorContext {
   earlierRevision?: EarlierRevision | undefined;
 }
 
+/** Each error kind's key in 07-security-protocols.yaml error_taxonomy. */
+const TAXONOMY_KEY: Record<ErrorKind, string> = {
+  'tool execution': 'tool_execution',
+  protocol: 'protocol',
+  transport: 'transport',
+  model: 'model',
+};
+
 /** The error line of a step (02 inspector.error_line); undefined unless it is an error arrow. */
 export function errorLine(
   event: ScenarioEvent,
@@ -50,7 +58,7 @@ export function errorLine(
 ): { kind: ErrorKind; label: string; definition: string } | undefined {
   const kind = errorKind(event);
   if (!kind) return undefined;
-  return { kind, label: `× ${kind} error`, definition: taxonomy[kind.replace(' ', '_')] ?? '' };
+  return { kind, label: `× ${kind} error`, definition: taxonomy[TAXONOMY_KEY[kind]] ?? '' };
 }
 
 /** Whether a step offers the earlier-revision comparison (02 inspector.earlier_revision). */
@@ -418,7 +426,11 @@ export class Inspector {
   private earlierMessage(m: EarlierMessage, revision: string): HTMLElement {
     const from = this.context.labels[m.sender] ?? m.sender;
     const to = this.context.labels[m.receiver] ?? m.receiver;
-    const operation = m.operation.startsWith('HTTP') ? m.operation : `MCP · ${m.operation}`;
+    // A JSON-RPC body makes it an MCP message; a bare response is plain HTTP.
+    const operation = operationLabel({
+      protocol: m.payload === null ? 'HTTP' : 'MCP',
+      operation: m.operation,
+    });
     const body =
       m.payload === null
         ? el('p', 'small muted', 'No body')

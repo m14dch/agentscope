@@ -233,7 +233,7 @@ test('mcp-errors: each error variant names the correct kind', async ({ page }) =
   await expect(page.locator('svg.diagram .group-error')).toHaveText(' · × protocol error');
 });
 
-test('every MCP variant shows its lesson and plays to its last step', async ({ page }) => {
+test('the MCP tab lists exactly the five variants', () => {
   expect(mcp.variants.map((v) => v.id)).toEqual([
     'mcp-resources',
     'mcp-not-found',
@@ -241,16 +241,17 @@ test('every MCP variant shows its lesson and plays to its last step', async ({ p
     'mcp-jsonrpc-error',
     'mcp-multiple-tools',
   ]);
-  for (const v of mcp.variants) {
-    await open(page, `#/mcp/${v.id}/0`);
-    await expect(page.locator('.lesson .headline'), v.id).toHaveText(v.lesson);
-    await playThrough(page);
-    await expect(page.locator('.lesson .headline'), v.id).toHaveText(v.lesson);
-  }
-  // Both successful extensions still end at the simulated balance.
-  for (const id of ['mcp-resources', 'mcp-multiple-tools']) {
-    await open(page, `#/mcp/${id}/0`);
-    await jump(page, await stepCount(page));
-    await expect(inspector(page), id).toContainText('CHF 12,500.75');
-  }
 });
+
+for (const v of mcp.variants) {
+  test(`${v.id} shows its lesson and plays to its last step`, async ({ page }) => {
+    await open(page, `#/mcp/${v.id}/0`);
+    await expect(page.locator('.lesson .headline')).toHaveText(v.lesson);
+    await playThrough(page);
+    await expect(page.locator('.lesson .headline')).toHaveText(v.lesson);
+    // Both successful extensions still end at the simulated balance.
+    if (v.id === 'mcp-resources' || v.id === 'mcp-multiple-tools') {
+      await expect(inspector(page)).toContainText('CHF 12,500.75');
+    }
+  });
+}

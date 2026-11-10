@@ -32,7 +32,7 @@ const PREFIX: Partial<Record<ScenarioEvent['protocol'], string>> = {
 };
 
 /** The operation, prefixed with its protocol (02 diagram.labels), without any error mark. */
-export function operationLabel(e: ScenarioEvent): string {
+export function operationLabel(e: Pick<ScenarioEvent, 'protocol' | 'operation'>): string {
   const prefix = PREFIX[e.protocol];
   return prefix && !e.operation.startsWith(prefix) ? `${prefix} · ${e.operation}` : e.operation;
 }
