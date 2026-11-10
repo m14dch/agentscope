@@ -131,6 +131,10 @@ for (const route of [
   './#/mcp/mcp-balance/2/protocol',
   // The ingestion panel with a selected chunk, overlap and the vector's dots.
   './#/rag/rag-index/10',
+  // The retrieval panel: retained dots, the projection, the prompt with an untrusted block,
+  // the answer with citations, and the version panel.
+  './#/rag/rag-prompt-injection/10',
+  './#/rag/rag-stale/10',
 ]) {
   test(`every computed colour on ${route} is a design token`, async ({ page }) => {
     await page.goto(route);
