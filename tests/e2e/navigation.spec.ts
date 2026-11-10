@@ -216,6 +216,28 @@ test('after choosing a tab or a scenario, focus moves to the new page heading', 
   await page.getByRole('link', { name: 'RAG' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('.lesson h2')).toBeFocused();
+  // Choosing from the picker.
+  await page.locator('.picker summary').focus();
+  await page.keyboard.press('Enter');
+  await page
+    .locator('.picker li')
+    .filter({ hasText: 'No sufficiently relevant' })
+    .getByRole('link')
+    .press('Enter');
+  await expect(page).toHaveURL(/#\/rag\/rag-no-match\/0$/);
+  await expect(page.locator('.lesson h2')).toBeFocused();
+  // Back, and links inside the page.
+  await page.goBack();
+  await expect(page.locator('.lesson h2')).toBeFocused();
+  await page.goto('./#/compare');
+  await page
+    .getByRole('link', { name: 'What is the current balance of my bank account?' })
+    .press('Enter');
+  await expect(page.locator('.lesson h2')).toBeFocused();
+  await page.goto('./#/rag/nope');
+  await page.getByRole('link', { name: 'Go to RAG' }).press('Enter');
+  await expect(page.locator('.lesson h2')).toBeFocused();
+  // Escape closes the picker and returns to its summary.
   await page.locator('.picker summary').focus();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Escape');

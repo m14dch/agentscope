@@ -93,6 +93,8 @@ export class Shell {
   private readonly header: HTMLElement;
   private readonly content: HTMLElement;
   private current: ScenarioView | undefined;
+  /** Removes the document listeners of the current header. */
+  private headerListeners: AbortController | undefined;
   /** Whether a page has been shown; the first one does not take focus. */
   private shown = false;
   private route: Route | undefined;
@@ -110,23 +112,24 @@ export class Shell {
     this.current?.dispose();
     this.current = undefined;
     window.removeEventListener('keydown', this.onKey);
+    this.headerListeners?.abort();
     this.root.replaceChildren();
     this.root.className = '';
   }
 
   /** Shows the page for a location hash. */
   show(hash: string): void {
-    // A link in the header was used: its page replaces the header, so focus moves to the
-    // new page's heading instead of falling back to the document.
+    // When the focused element is replaced by the new page (a header link, a link in the
+    // page, Back), focus moves to the new page's heading instead of the document.
     const active = document.activeElement;
-    const moveFocus =
-      this.shown && (!active || active === document.body || this.header.contains(active));
-    this.shown = true;
     this.render(hash);
-    if (moveFocus)
+    const lost = !active || active === document.body || !active.isConnected;
+    if (this.shown && lost) {
       this.content
         .querySelector<HTMLElement>('h2, [role="alert"] a')
         ?.focus({ preventScroll: true });
+    }
+    this.shown = true;
   }
 
   private render(hash: string): void {
@@ -184,6 +187,8 @@ export class Shell {
   }
 
   private renderHeader(tab: Tab, scenario: Scenario | undefined): void {
+    this.headerListeners?.abort();
+    this.headerListeners = new AbortController();
     const nav = el(
       'nav',
       { class: 'tabs', 'aria-label': 'Modules' },
@@ -224,11 +229,13 @@ export class Shell {
       details.open = false;
       details.querySelector('summary')?.focus();
     });
-    const outside = (e: PointerEvent): void => {
-      if (!details.isConnected) document.removeEventListener('pointerdown', outside);
-      else if (details.open && !details.contains(e.target as Node)) details.open = false;
-    };
-    document.addEventListener('pointerdown', outside);
+    document.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (details.open && !details.contains(e.target as Node)) details.open = false;
+      },
+      { signal: (this.headerListeners ??= new AbortController()).signal },
+    );
     return details;
   }
 
