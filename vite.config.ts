@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 import { normalizeBase } from './src/base.ts';
 import { scenariosPlugin } from './scripts/vite-scenarios.ts';
+import { offlinePlugin } from './scripts/vite-offline.ts';
 
 /**
  * Public base path of the deployed site. GitHub Pages serves this project
@@ -24,6 +25,8 @@ export default defineConfig({
         { tag: 'meta', attrs: { name: 'agentscope-version', content: VERSION }, injectTo: 'head' },
       ],
     },
+    // Writes dist/asset-manifest.json and dist/sw.js, which precaches the whole build.
+    offlinePlugin(fileURLToPath(new URL('./src/offline/sw.js', import.meta.url)), VERSION),
   ],
   build: {
     target: 'es2023',
