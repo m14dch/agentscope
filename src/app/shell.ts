@@ -13,11 +13,20 @@ import {
   sourceDocuments,
 } from '../inspector/ingestion.ts';
 import { type Boundary, Inspector, occurrences, type Selection } from '../inspector/inspector.ts';
+import {
+  projection,
+  renderVersions,
+  RetrievalPanel,
+  retrievalModel,
+  type SearchedIndex,
+  thresholdLabel,
+  versionRows,
+} from '../inspector/retrieval.ts';
 import { DiagramView } from '../diagram/view.ts';
 import { loadRegistry, participantLabels, specSources } from '../scenarios/registry.ts';
 import { createPlayback, ragDerivation } from '../rag/bundled.ts';
-import { corpusOverrides } from '../rag/engine.ts';
-import type { Json, Scenario, ScenarioEvent } from '../scenarios/types.ts';
+import { type Chunk, corpusOverrides, type RagFixtures } from '../rag/engine.ts';
+import type { Json, ParameterSpec, Scenario, ScenarioEvent } from '../scenarios/types.ts';
 import { fromDefaultStep, toDefaultStep } from '../engine/steps.ts';
 import {
   formatRoute,
@@ -34,24 +43,44 @@ import '../styles/diagram.css';
 import '../styles/shell.css';
 import '../styles/inspector.css';
 import '../styles/ingestion.css';
+import '../styles/retrieval.css';
 
 const SIMULATED = 'Everything here is simulated. Nothing leaves your browser.';
 /** The approved wordmark for the light paper (02 layout brand); the app is light only. */
 const WORDMARK = 'brand/agentscope-silver-light.svg';
 
+/** A parameter control (02 rag_controls.control_kinds). */
+type ParameterControl =
+  /** One pressed button per value: the parameter's options, else min to max. */
+  | { kind: 'options'; name: string; label: string; unit: string }
+  /** A slider from min to max with its value beside it. */
+  | { kind: 'range'; name: string; label: string; step: number }
+  /** A toggle button, pressed when on. */
+  | { kind: 'toggle'; name: string; label: string };
+
 /**
- * Parameters offered as controls, per scenario, with their labels (02 rag_controls).
- * Parameters are not part of the route. The retrieval controls of rag-query (issue #15)
- * join here.
+ * Parameters offered as controls, with their labels (02 rag_controls); a scenario offers
+ * those it has. Parameters are not part of the route.
  */
-const PARAMETER_CONTROLS: Readonly<
-  Record<string, readonly { name: string; label: string; unit: string }[]>
-> = {
-  'rag-index': [
-    { name: 'chunk_size_words', label: 'Chunk size', unit: 'words' },
-    { name: 'overlap_words', label: 'Overlap', unit: 'words' },
-  ],
-};
+const PARAMETER_CONTROLS: readonly ParameterControl[] = [
+  { kind: 'options', name: 'chunk_size_words', label: 'Chunk size', unit: 'words' },
+  { kind: 'options', name: 'overlap_words', label: 'Overlap', unit: 'words' },
+  { kind: 'options', name: 'top_k', label: 'Top K', unit: 'chunks' },
+  // 02 rag_controls.similarity_threshold.step
+  { kind: 'range', name: 'similarity_threshold', label: 'Threshold', step: 0.01 },
+  { kind: 'toggle', name: 'rerank', label: 'Reranking' },
+  { kind: 'toggle', name: 'keyword_retrieval', label: 'Keyword retrieval' },
+  { kind: 'toggle', name: 'fetch_full_documents', label: 'Fetch full documents' },
+];
+
+/** The values an option control offers: the parameter's options, else min to max. */
+function optionValues(spec: ParameterSpec | undefined): Json[] {
+  if (!spec) return [];
+  if (spec.options) return spec.options;
+  const { min, max } = spec;
+  if (min === undefined || max === undefined || !Number.isInteger(spec.default)) return [];
+  return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+}
 
 /** The principle that the demo embedding stands in for a learned model (05 principles). */
 function embeddingNote(principles: Json | undefined): string {
@@ -380,22 +409,60 @@ export class Shell {
     );
 
     const parameterButtons: HTMLButtonElement[] = [];
-    const offered = (PARAMETER_CONTROLS[scenario.id] ?? []).filter(
-      (c) => scenario.parameters?.[c.name]?.options,
-    );
+    const sliders: { input: HTMLInputElement; output: HTMLOutputElement; name: string }[] = [];
+    const offered = PARAMETER_CONTROLS.filter((c) => scenario.parameters?.[c.name]);
     const parameters = el('div', {
       class: 'parameters',
       role: 'group',
       'aria-label': 'Parameters',
     });
-    for (const { name, label, unit } of offered) {
-      const options = scenario.parameters?.[name]?.options ?? [];
+    for (const control of offered) {
+      const { name, label } = control;
+      const spec = scenario.parameters?.[name];
+      if (control.kind === 'toggle') {
+        const b = button(label, () =>
+          this.setParameter(name, player.playback.retrievalConfig[name] !== true),
+        );
+        b.dataset['parameter'] = name;
+        b.dataset['value'] = 'true';
+        parameterButtons.push(b);
+        parameters.append(el('span', { class: 'parameter' }, b));
+        continue;
+      }
+      if (control.kind === 'range') {
+        const id = `parameter-${name}`;
+        const input = el('input', {
+          id,
+          type: 'range',
+          min: String(spec?.min ?? 0),
+          max: String(spec?.max ?? 1),
+          step: String(control.step),
+          class: 'parameter-range',
+        });
+        const output = el('output', { for: id, class: 'small parameter-value' });
+        input.addEventListener('input', () => {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) this.setParameter(name, value);
+        });
+        sliders.push({ input, output, name });
+        parameters.append(
+          el(
+            'span',
+            { class: 'parameter' },
+            el('label', { for: id, class: 'small muted' }, label),
+            input,
+            output,
+          ),
+        );
+        continue;
+      }
+      const { unit } = control;
       const group = el('div', {
         class: 'segmented',
         role: 'group',
         'aria-label': `${label} in ${unit}`,
       });
-      for (const value of options) {
+      for (const value of optionValues(spec)) {
         const b = button(String(value), () => this.setParameter(name, value), {
           'aria-label': `${label} ${String(value)} ${unit}`,
         });
@@ -476,6 +543,18 @@ export class Shell {
           () => slider.focus({ preventScroll: true }),
         )
       : undefined;
+    // The version panel (02 rag_controls.version_panel) and the retrieval panel (02 rag_retrieval).
+    const versions = scenario.fixture_overrides?.['indexed_versions']
+      ? this.versionPanel(scenario)
+      : undefined;
+    const retrieval = scenario.derived_events?.includes('retrieve-12')
+      ? this.retrievalPanel(
+          scenario,
+          player,
+          (k) => this.go(() => player.jump(k)),
+          () => slider.focus({ preventScroll: true }),
+        )
+      : undefined;
 
     const view = new DiagramView(diagram, player, { labels: this.labels, mode: route.mode });
     const state: ScenarioView = {
@@ -508,7 +587,19 @@ export class Shell {
         const current = JSON.stringify(config[b.dataset['parameter'] ?? '']);
         b.setAttribute('aria-pressed', String(b.dataset['value'] === current));
       }
+      for (const { input, output, name } of sliders) {
+        const value = Number(config[name]);
+        const text = thresholdLabel(value);
+        // Leave the slider alone while it already shows the value, so dragging is not disturbed.
+        if (Number(input.value) !== value) input.value = String(value);
+        input.setAttribute('aria-valuetext', text);
+        output.textContent = text;
+      }
       ingestion?.panel.update(ingestionModel(player.playback.events, k, ingestion.sources));
+      retrieval?.panel.update(
+        retrievalModel(player.playback.events, k, retrieval.index()),
+        state.selection,
+      );
       for (const b of this.header.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
         b.setAttribute('aria-pressed', String(b.dataset['mode'] === view.mode));
       }
@@ -544,6 +635,7 @@ export class Shell {
     });
     state.dispose = (): void => {
       unsubscribe();
+      retrieval?.panel.destroy();
       view.destroy();
       player.dispose();
     };
@@ -555,6 +647,8 @@ export class Shell {
       workspace,
       timeline,
       ...(ingestion ? [ingestion.panel.root] : []),
+      ...(versions ? [versions] : []),
+      ...(retrieval ? [retrieval.panel.root] : []),
     );
     state.render();
     return state;
@@ -665,6 +759,53 @@ export class Shell {
       leave,
     });
     return { panel, sources };
+  }
+
+  /** The source and indexed versions of a variant with an older index. */
+  private versionPanel(scenario: Scenario): HTMLElement {
+    const { engine } = ragDerivation();
+    return renderVersions(
+      versionRows(
+        engine.fixtures.documents,
+        engine.fixtures.previous_versions,
+        engine.corpus(corpusOverrides(scenario.fixture_overrides)),
+      ),
+    );
+  }
+
+  /**
+   * The retrieval panel over the index the scenario searches (02 rag_retrieval); its chunks
+   * follow the current chunking parameters.
+   */
+  private retrievalPanel(
+    scenario: Scenario,
+    player: Player,
+    jump: (step: number) => void,
+    leave: () => void,
+  ): { panel: RetrievalPanel; index: () => SearchedIndex } {
+    const derivation = ragDerivation();
+    const { engine } = derivation;
+    const fixtures = this.sources.rag['fixtures'] as unknown as RagFixtures & {
+      projection_2d: { x: string; y: string };
+    };
+    const project = projection(fixtures.projection_2d, engine.fixtures.embedding.dimensions);
+    const docs = engine.corpus(corpusOverrides(scenario.fixture_overrides));
+    const cache = new Map<string, Chunk[]>();
+    const index = (): SearchedIndex => {
+      const p = derivation.parameters(player.playback.retrievalConfig);
+      const key = `${p.chunkSize}/${p.overlap}`;
+      let chunks = cache.get(key);
+      if (!chunks) {
+        chunks = engine.chunks(docs, p.chunkSize, p.overlap);
+        cache.set(key, chunks);
+      }
+      return { docs, chunks, trustOf: (id) => engine.trustOf(id), project };
+    };
+    const instructions = engine.fixtures.untrusted_documents.flatMap((d) =>
+      d.injected_instruction ? [d.injected_instruction] : [],
+    );
+    const panel = new RetrievalPanel({ index, instructions, jump, leave });
+    return { panel, index };
   }
 
   /**
