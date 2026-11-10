@@ -163,6 +163,8 @@ export const INJECTION_NOTE =
  */
 export function pyRound(x: number, digits: number): number {
   if (!Number.isFinite(x)) throw new RangeError(`cannot round ${x}`);
+  if (!Number.isInteger(digits) || digits < 0 || digits > 20)
+    throw new RangeError(`cannot round to ${digits} digits`);
   const sign = x < 0 ? -1 : 1;
   // Exact for the magnitudes used here: a double's decimal expansion near 1 has < 60 digits.
   const [int = '0', frac = ''] = Math.abs(x).toFixed(80).split('.');
@@ -171,6 +173,7 @@ export function pyRound(x: number, digits: number): number {
   let units = BigInt(int + kept);
   const half = '5'.padEnd(rest.length, '0');
   if (rest > half || (rest === half && units % 2n === 1n)) units += 1n;
+  if (digits === 0) return sign * Number(units);
   const text = units.toString().padStart(digits + 1, '0');
   return sign * Number(`${text.slice(0, -digits)}.${text.slice(-digits)}`);
 }

@@ -13,6 +13,7 @@ import {
   corpusOverrides,
   modelMessage,
   normalize,
+  pyRound,
   round4,
   sourceLines,
   sourceObjects,
@@ -108,6 +109,11 @@ describe('engine primitives', () => {
     expect(round4(-0.03125)).toBe(-0.0312);
     expect(round4(0)).toBe(0);
     expect(round4(2.5)).toBe(2.5);
+    expect([pyRound(2.5, 0), pyRound(3.5, 0), pyRound(-0.5, 0), pyRound(7.49, 0)]).toEqual([
+      2, 4, -0, 7,
+    ]);
+    expect(() => pyRound(1, -1)).toThrow(RangeError);
+    expect(() => pyRound(1, 1.5)).toThrow(RangeError);
   });
 
   it("writes thresholds as validate_specs.py's threshold_text does", () => {
