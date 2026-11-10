@@ -1,0 +1,149 @@
+/* Parameter controls (02 rag_controls.placement) and the ingestion panel (02 rag_ingestion). */
+.parameters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.parameter {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.ingestion {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: var(--line-hair) solid var(--color-rule);
+}
+
+.ingestion h3 {
+  margin-bottom: var(--space-1);
+}
+
+.ingestion-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+@media (min-width: 64rem) {
+  .ingestion-columns {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 4fr) minmax(0, 4fr);
+  }
+}
+
+.ingestion-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: var(--space-1);
+}
+
+.ingestion-field select {
+  font: inherit;
+  font-size: var(--size-small);
+  color: var(--color-ink);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-rule);
+  border-radius: 0;
+  max-width: 100%;
+}
+
+.ingestion-text {
+  margin-top: var(--space-1);
+  max-width: 40rem;
+}
+
+/* Words the selected chunk shares with a neighbour: weight, not colour, and a sentence
+   that states the ranges (02 rag_ingestion.overlap). */
+.overlap {
+  font-weight: var(--weight-strong);
+}
+
+/* The selected chunk: selection background plus an ink underline (02 design). */
+.chunk-mark,
+.chunk-select[aria-pressed='true'] {
+  background: var(--color-selection);
+  text-decoration: underline;
+  text-decoration-color: var(--color-ink);
+  text-underline-offset: 0.2em;
+}
+
+.chunk-list {
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chunk-list li + li {
+  margin-top: var(--space-2);
+}
+
+.chunk-select,
+.chunk-id {
+  font-family: var(--font-code);
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+  overflow-wrap: anywhere;
+}
+
+.chunk-id {
+  margin: 0 0 var(--space-1);
+  font-weight: var(--weight-strong);
+}
+
+.chunk-meta {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0 var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.chunk-meta dd {
+  font-family: var(--font-code);
+  overflow-wrap: anywhere;
+}
+
+.vector {
+  margin-top: var(--space-2);
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.vector caption {
+  text-align: left;
+  padding-bottom: var(--space-1);
+}
+
+.vector th,
+.vector td {
+  padding: 0.25rem var(--space-1) 0.25rem 0;
+  text-align: left;
+  vertical-align: baseline;
+  font-weight: var(--weight-regular);
+}
+
+.vector thead th {
+  color: var(--color-ink-muted);
+  border-bottom: var(--line-hair) solid var(--color-rule);
+}
+
+.vector tbody th {
+  font-family: var(--font-code);
+}
+
+.vector .num {
+  text-align: right;
+  font-family: var(--font-code);
+}
+
+.vector td:nth-child(2) {
+  overflow-wrap: anywhere;
+}
+
+.shared-note {
+  margin-top: var(--space-1);
+}

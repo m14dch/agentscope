@@ -101,5 +101,5 @@ describe('RAG engine golden test', () => {
       expect(answer.text, where).toBe(entry.answer);
       expect(sourceLines(answer.cited), where).toEqual(entry.sources);
     }
-  });
+  }, 30_000); // Runs a Python grid of 2000+ cases; 5 s is too tight under parallel load.
 });

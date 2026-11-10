@@ -87,6 +87,25 @@ export interface Chunk {
   embedding: number[];
 }
 
+/** embedding.vector: every dimension starts at this value (smoothing keeps vectors nonzero). */
+export const SMOOTHING = 0.1;
+
+/** A lexicon word found in a text, for one dimension. */
+export interface LexiconHit {
+  word: string;
+  count: number;
+  /** The word's weight in this dimension. */
+  weight: number;
+}
+
+/** How a text's demo embedding comes about (RagEngine.embedding). */
+export interface EmbeddingWorking {
+  dimensions: { name: string; hits: LexiconHit[]; sum: number }[];
+  /** Length of the vector of sums, which each sum is divided by. */
+  length: number;
+  vector: number[];
+}
+
 export interface ScoredChunk extends Chunk {
   /** Cosine similarity with the query vector, rounded to 4 decimals. */
   score: number;
@@ -139,21 +158,29 @@ export const INJECTION_NOTE =
   'Note: a retrieved document contained instructions addressed to the assistant; they were treated as data and ignored.';
 
 /**
- * Python's round(x, 4): the exact decimal value of the double, rounded half to even.
- * Math.round(x * 1e4) / 1e4 differs on some inputs.
+ * Python's round(x, digits): the exact decimal value of the double, rounded half to even.
+ * Math.round(x * 10 ** digits) / 10 ** digits and toFixed differ on some inputs.
  */
-export function round4(x: number): number {
+export function pyRound(x: number, digits: number): number {
   if (!Number.isFinite(x)) throw new RangeError(`cannot round ${x}`);
+  if (!Number.isInteger(digits) || digits < 0 || digits > 20)
+    throw new RangeError(`cannot round to ${digits} digits`);
   const sign = x < 0 ? -1 : 1;
   // Exact for the magnitudes used here: a double's decimal expansion near 1 has < 60 digits.
   const [int = '0', frac = ''] = Math.abs(x).toFixed(80).split('.');
-  const kept = frac.slice(0, 4);
-  const rest = frac.slice(4);
+  const kept = frac.slice(0, digits);
+  const rest = frac.slice(digits);
   let units = BigInt(int + kept);
   const half = '5'.padEnd(rest.length, '0');
   if (rest > half || (rest === half && units % 2n === 1n)) units += 1n;
-  const digits = units.toString().padStart(5, '0');
-  return sign * Number(`${digits.slice(0, -4)}.${digits.slice(-4)}`);
+  if (digits === 0) return sign * Number(units);
+  const text = units.toString().padStart(digits + 1, '0');
+  return sign * Number(`${text.slice(0, -digits)}.${text.slice(-digits)}`);
+}
+
+/** Python's round(x, 4). */
+export function round4(x: number): number {
+  return pyRound(x, 4);
 }
 
 /** chunking.normalize: drop leading heading markers on each line, then join lines. */
@@ -231,14 +258,44 @@ export class RagEngine {
 
   /** embedding.vector: 0.1 smoothing plus lexicon weights, L2-normalized, 4 decimals. */
   embed(text: string): number[] {
+    const sums = this.sums(text);
+    const length = Math.sqrt(sums.reduce((s, x) => s + x * x, 0));
+    return sums.map((x) => round4(x / length));
+  }
+
+  /** Per dimension: 0.1 plus the weights of the lexicon words in the text; counts them in `found`. */
+  private sums(text: string, found?: Map<string, number>): number[] {
     const n = this.fixtures.embedding.dimensions.length;
-    const v = new Array<number>(n).fill(0.1);
+    const sums = new Array<number>(n).fill(SMOOTHING);
     for (const t of tokens(text)) {
       const w = this.lexicon.get(t);
-      if (w) for (let i = 0; i < n; i += 1) v[i] = (v[i] as number) + (w[i] as number);
+      if (!w) continue;
+      found?.set(t, (found.get(t) ?? 0) + 1);
+      for (let i = 0; i < n; i += 1) sums[i] = (sums[i] as number) + (w[i] as number);
     }
-    const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
-    return v.map((x) => round4(x / norm));
+    return sums;
+  }
+
+  /**
+   * embedding.vector with its working, for the ingestion view: per dimension the lexicon
+   * words found in the text (with counts and weights) and the sum before normalizing, the
+   * vector's length, and the vector itself (equal to embed).
+   */
+  embedding(text: string): EmbeddingWorking {
+    const found = new Map<string, number>();
+    const sums = this.sums(text, found);
+    const length = Math.sqrt(sums.reduce((s, x) => s + x * x, 0));
+    return {
+      dimensions: this.fixtures.embedding.dimensions.map((name, i) => ({
+        name,
+        hits: [...found]
+          .filter(([word]) => (this.lexicon.get(word)?.[i] ?? 0) > 0)
+          .map(([word, count]) => ({ word, count, weight: this.lexicon.get(word)?.[i] ?? 0 })),
+        sum: sums[i] as number,
+      })),
+      length,
+      vector: sums.map((x) => round4(x / length)),
+    };
   }
 
   /** embedding.score: cosine similarity, 4 decimals. */

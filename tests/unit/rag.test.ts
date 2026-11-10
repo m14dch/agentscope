@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
+import acceptanceYaml from '../../specifications/08-acceptance-tests.yaml?raw';
 import sources from 'virtual:agentscope-specs';
 import { Playback, type Snapshot } from '../../src/engine/playback.ts';
 import { type Clock, Player } from '../../src/engine/player.ts';
 import { createPlayback, ragDerivation } from '../../src/rag/bundled.ts';
+import { thresholdText } from '../../src/rag/derive.ts';
 import {
   INJECTION_NOTE,
   NO_EVIDENCE_ANSWER,
@@ -10,6 +13,7 @@ import {
   corpusOverrides,
   modelMessage,
   normalize,
+  pyRound,
   round4,
   sourceLines,
   sourceObjects,
@@ -105,6 +109,24 @@ describe('engine primitives', () => {
     expect(round4(-0.03125)).toBe(-0.0312);
     expect(round4(0)).toBe(0);
     expect(round4(2.5)).toBe(2.5);
+    expect([pyRound(2.5, 0), pyRound(3.5, 0), pyRound(-0.5, 0), pyRound(7.49, 0)]).toEqual([
+      2, 4, -0, 7,
+    ]);
+    expect(() => pyRound(1, -1)).toThrow(RangeError);
+    expect(() => pyRound(1, 1.5)).toThrow(RangeError);
+  });
+
+  it("writes thresholds as validate_specs.py's threshold_text does", () => {
+    // str(round(x, 2)) without a trailing '.0': 0 and 1 read '0' and '1' in both.
+    expect([0, 1, 0.7, 0.05, 0.125, 0.995, 0.355].map(thresholdText)).toEqual([
+      '0',
+      '1',
+      '0.7',
+      '0.05',
+      '0.12',
+      '0.99',
+      '0.35',
+    ]);
   });
 
   it('normalizes headings and lines and tokenizes runs of [a-z0-9]', () => {
@@ -462,8 +484,18 @@ describe('derived events', () => {
     expect(played(p, 'retrieve-11').explanation).toBe(
       'Simulated model output built from the facts supported by the fetched documents.',
     );
-    // Every cited statement's evidence span is in the cited document's text.
-    expect(text.match(/\[(\d+)\]/g)?.length).toBeGreaterThan(3);
+    // Every stated fact's evidence span is in the text of a document the answer cites.
+    const citedIds = sources.map((line) => line.split(' ')[1]);
+    const stated = engine.fixtures.answer_facts.flatMap((f) => {
+      const ev = f.evidence['1.2'] ?? f.evidence['*'];
+      return ev && text.includes(ev.predicate) ? [{ documentId: f.documentId, span: ev.span }] : [];
+    });
+    expect(stated.length).toBeGreaterThan(3);
+    for (const { documentId, span } of stated) {
+      expect(citedIds).toContain(documentId);
+      const doc = fetched.find((d) => d['documentId'] === documentId);
+      expect(String(doc?.['text'])).toContain(span);
+    }
 
     // Undoing the change restores the chunk prompt.
     p.setParameters({ fetch_full_documents: false });
@@ -625,12 +657,17 @@ describe('derived events', () => {
     expect(at()).toBe('retrieve-12');
   });
 
-  it('meet the quality gate of 100 supported events with the events played at the defaults', () => {
+  it('meet the quality gate of supported events with the events played at the defaults', () => {
     const played = Object.values(registry).reduce((n, scn) => n + createPlayback(scn).length, 0);
     const registered = Object.values(registry).reduce((n, scn) => n + scn.events.length, 0);
     expect(played).toBeLessThan(registered);
     // 08-acceptance-tests.yaml quality_gates.min_supported_events (not bundled by the app).
-    expect(played).toBeGreaterThanOrEqual(100);
+    const acceptance = parse(acceptanceYaml) as {
+      quality_gates: { min_supported_events: number };
+    };
+    const min = acceptance.quality_gates.min_supported_events;
+    expect(min).toBeGreaterThan(0);
+    expect(played).toBeGreaterThanOrEqual(min);
   });
 
   it('leave scenarios without derived events as they are', () => {

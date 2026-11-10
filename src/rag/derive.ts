@@ -17,6 +17,7 @@ import {
   corpusOverrides,
   modelMessage,
   parentDocuments,
+  pyRound,
   sourceObjects,
   tokens,
   words,
@@ -88,7 +89,8 @@ const ids = (chunks: readonly ScoredChunk[]): string[] => chunks.map((c) => c.id
 const documentIds = (chunks: readonly ScoredChunk[]): string[] =>
   [...new Set(chunks.map((c) => c.documentId))].sort();
 /** Thresholds in explanations are rounded to 2 decimals (05 derived_event_rules.inputs). */
-export const thresholdText = (x: number): string => String(Number(x.toFixed(2)));
+/** Python's str(round(x, 2)) without a trailing '.0', as validate_specs.py writes it. */
+export const thresholdText = (x: number): string => String(pyRound(x, 2));
 
 /** The grounding instruction without chunk IDs, when the evidence is whole documents. */
 const CHUNK_CITATION = 'document ID, version and chunk ID';

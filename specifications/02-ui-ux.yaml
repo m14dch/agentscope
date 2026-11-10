@@ -124,15 +124,20 @@ navigation:
     scenario shows an error naming it, with a link to the tab. Stepping replaces the
     history entry; changing tab or scenario adds one. Parameters are not part of the route,
     so a step number refers to the events played at the scenario''s default parameters.'
+  route_steps: 'While the parameters differ from the defaults, the address shows the step at
+    which the current event is played at the defaults; if it is not played there, the step of
+    the nearest earlier current event that is, else 0. A step read from the address names the
+    event played at that step at the defaults; the cursor goes to that event, or if it is not
+    played now to the nearest earlier default event that is, else to 0.'
   scenario_picker: One menu per tab listing its scenarios by title; each variant shows
     its lesson on a second line. The current scenario is marked.
 layout:
   desktop:
   - 'Top bar: navigation, scenario, architecture/protocol toggle'
   - 'Main: resizable sequence diagram + payload inspector'
-  - 'Bottom: execution timeline + a collapsible model-context panel, collapsed at start.
-    Lineage lives in the inspector''s Lineage tab and in the diagram (lineage_selection),
-    not in a panel of its own'
+  - 'Bottom: execution timeline + a collapsible model-context panel, collapsed at start,
+    and in rag-index the ingestion panel (rag_ingestion). Lineage lives in the inspector''s
+    Lineage tab and in the diagram (lineage_selection), not in a panel of its own'
   - 'Header: one persistent statement that everything is simulated and nothing leaves
     the browser'
   - 'Above the diagram: the scenario''s learning question and headline'
@@ -392,6 +397,33 @@ rag_controls:
     default: 10
   version_panel: In rag-stale and rag-conflict, show source and indexed document versions
     side by side.
+  placement: 'A row of labelled option groups below the playback controls, shown from step
+    0 in the scenarios that have the parameters (chunk size and overlap in rag-index). A
+    change recomputes the derived events at once (controls.action_rules.parameter_change);
+    the values are not part of the route and return to their defaults with a new scenario.'
+rag_ingestion:
+  shown_in: rag-index, below the timeline, from the step that returns the chunks (index-05);
+    its chunk IDs and vectors are read from the played index-05 and index-07 events, so the
+    screen always equals them.
+  layout: 'Three columns from 64rem, stacked below: the source document (chosen with a
+    Document menu), its chunks, and the selected chunk. The first chunk is selected at start;
+    after a parameter change the selection moves to the chunk of the same document that holds
+    the previously selected chunk''s first word.'
+  overlap: 'The words the selected chunk shares with its previous and its next chunk are
+    set in weight 600 in place: in the document, in the selected chunk''s text and in the
+    neighbour''s text. One line beside the chunk list states each shared range in words, for
+    example "Words 40–49 are also in everyday-account@1.2-c50o10-002.", so overlap depends
+    neither on colour nor on weight alone. The selected chunk''s words in the document and its
+    entry in the list have the selection background and an ink underline.'
+  focus: When the panel disappears (stepping back before index-05) while it holds focus, focus
+    moves to the step slider.
+  chunk: 'The selected chunk''s metadata (the record fields of index-08 plus its chunk ID
+    and word count), then, from index-07 on, one row per named dimension: the lexicon words
+    found with their counts, the sum before normalizing (0.1 plus their weights), and the
+    value; below them, the length of the vector of sums that each sum is divided by. Before
+    index-07 it names the step that computes the vector.'
+  embedding_note: Above the vector, the principle of 05-rag-scenarios.yaml that the demo
+    embedding stands in for a learned model, as written there (two plain sentences).
 accessibility:
 - Keyboard operable controls
 - Visible focus

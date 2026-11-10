@@ -6,11 +6,19 @@
 import { Player, SPEEDS, type Speed } from '../engine/player.ts';
 import type { Mode } from '../diagram/model.ts';
 import { contextModel, hasContext, renderContext } from '../inspector/context.ts';
+import {
+  IngestionPanel,
+  ingestionModel,
+  type SourceDocument,
+  sourceDocuments,
+} from '../inspector/ingestion.ts';
 import { type Boundary, Inspector, occurrences, type Selection } from '../inspector/inspector.ts';
 import { DiagramView } from '../diagram/view.ts';
 import { loadRegistry, participantLabels, specSources } from '../scenarios/registry.ts';
-import { createPlayback } from '../rag/bundled.ts';
-import type { Scenario } from '../scenarios/types.ts';
+import { createPlayback, ragDerivation } from '../rag/bundled.ts';
+import { corpusOverrides } from '../rag/engine.ts';
+import type { Json, Scenario, ScenarioEvent } from '../scenarios/types.ts';
+import { fromDefaultStep, toDefaultStep } from '../engine/steps.ts';
 import {
   formatRoute,
   parseRoute,
@@ -24,8 +32,31 @@ import { offlineIndicator } from './offline.ts';
 import '../styles/diagram.css';
 import '../styles/shell.css';
 import '../styles/inspector.css';
+import '../styles/ingestion.css';
 
 const SIMULATED = 'Everything here is simulated. Nothing leaves your browser.';
+
+/**
+ * Parameters offered as controls, per scenario, with their labels (02 rag_controls).
+ * Parameters are not part of the route. The retrieval controls of rag-query (issue #15)
+ * join here.
+ */
+const PARAMETER_CONTROLS: Readonly<
+  Record<string, readonly { name: string; label: string; unit: string }[]>
+> = {
+  'rag-index': [
+    { name: 'chunk_size_words', label: 'Chunk size', unit: 'words' },
+    { name: 'overlap_words', label: 'Overlap', unit: 'words' },
+  ],
+};
+
+/** The principle that the demo embedding stands in for a learned model (05 principles). */
+function embeddingNote(principles: Json | undefined): string {
+  const all = Array.isArray(principles) ? principles.map(String) : [];
+  const note = all.find((p) => p.startsWith('The demo embedding')) ?? '';
+  // Principles are written as list items without a closing period; here it is a sentence.
+  return note && !note.endsWith('.') ? `${note}.` : note;
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -80,6 +111,8 @@ function decode(text: string): string {
 
 interface ScenarioView {
   scenario: Scenario;
+  /** The events played at the default parameters, which number the route's steps. */
+  defaults: readonly ScenarioEvent[];
   player: Player;
   view: DiagramView;
   /** Index of the event whose prediction prompt is showing, if any. */
@@ -166,10 +199,14 @@ export class Shell {
     if (!scenario) return;
     if (this.current?.scenario.id === scenario.id) {
       // Same scenario: follow the step and mode in the link.
-      this.current.player.jump(route.step);
+      const c = this.current;
+      c.player.jump(fromDefaultStep(c.defaults, c.player.playback.events, route.step));
       this.current.view.setMode(route.mode);
       this.current.prompt = undefined;
-      this.route = { ...route, step: this.current.player.cursor };
+      this.route = {
+        ...route,
+        step: toDefaultStep(c.defaults, c.player.playback.events, c.player.cursor),
+      };
       this.current.render();
       return;
     }
@@ -190,7 +227,9 @@ export class Shell {
   private syncUrl(): void {
     const c = this.current;
     if (!c || !this.route) return;
-    this.route = { ...this.route, step: c.player.cursor, mode: c.view.mode };
+    // The address numbers steps as played at the defaults (02 navigation.route_steps).
+    const step = toDefaultStep(c.defaults, c.player.playback.events, c.player.cursor);
+    this.route = { ...this.route, step, mode: c.view.mode };
     const hash = formatRoute(this.route);
     if (location.hash !== hash) history.replaceState(null, '', hash);
   }
@@ -331,6 +370,36 @@ export class Shell {
       speeds,
     );
 
+    const parameterButtons: HTMLButtonElement[] = [];
+    const offered = (PARAMETER_CONTROLS[scenario.id] ?? []).filter(
+      (c) => scenario.parameters?.[c.name]?.options,
+    );
+    const parameters = el('div', {
+      class: 'parameters',
+      role: 'group',
+      'aria-label': 'Parameters',
+    });
+    for (const { name, label, unit } of offered) {
+      const options = scenario.parameters?.[name]?.options ?? [];
+      const group = el('div', {
+        class: 'segmented',
+        role: 'group',
+        'aria-label': `${label} in ${unit}`,
+      });
+      for (const value of options) {
+        const b = button(String(value), () => this.setParameter(name, value), {
+          'aria-label': `${label} ${String(value)} ${unit}`,
+        });
+        b.dataset['parameter'] = name;
+        b.dataset['value'] = JSON.stringify(value);
+        parameterButtons.push(b);
+        group.append(b);
+      }
+      parameters.append(
+        el('span', { class: 'parameter' }, el('span', { class: 'small muted' }, label), group),
+      );
+    }
+
     const diagram = el('div', {
       class: 'diagram-pane',
       role: 'region',
@@ -390,10 +459,19 @@ export class Shell {
       { 'aria-expanded': 'false', 'aria-controls': 'context-panel', class: 'panel-toggle' },
     );
     if (hasContext(scenario.initial_state)) timeline.append(contextToggle, contextBody);
+    // The ingestion panel (02 rag_ingestion), below the timeline so nothing above it moves.
+    const ingestion = scenario.derived_events?.includes('index-05')
+      ? this.ingestionPanel(
+          scenario,
+          (k) => this.go(() => player.jump(k)),
+          () => slider.focus({ preventScroll: true }),
+        )
+      : undefined;
 
     const view = new DiagramView(diagram, player, { labels: this.labels, mode: route.mode });
     const state: ScenarioView = {
       scenario,
+      defaults: player.playback.events,
       player,
       view,
       prompt: undefined,
@@ -409,12 +487,19 @@ export class Shell {
       const phase = event ? scenario.phases.find((p) => p.id === event.phase) : undefined;
       const where = phase ? `Step ${k} of ${n} · ${phase.label}` : `Step ${k} of ${n}`;
       status.textContent = where;
+      slider.max = String(n);
       slider.value = String(k);
       slider.setAttribute('aria-valuetext', where);
       play.textContent = player.status === 'playing' ? 'Pause' : 'Play';
       for (const b of speeds.querySelectorAll<HTMLButtonElement>('button')) {
         b.setAttribute('aria-pressed', String(Number(b.dataset['speed']) === player.speed));
       }
+      const config = player.playback.retrievalConfig;
+      for (const b of parameterButtons) {
+        const current = JSON.stringify(config[b.dataset['parameter'] ?? '']);
+        b.setAttribute('aria-pressed', String(b.dataset['value'] === current));
+      }
+      ingestion?.panel.update(ingestionModel(player.playback.events, k, ingestion.sources));
       for (const b of this.header.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
         b.setAttribute('aria-pressed', String(b.dataset['mode'] === view.mode));
       }
@@ -454,7 +539,14 @@ export class Shell {
       player.dispose();
     };
 
-    this.content.replaceChildren(lesson, controls, workspace, timeline);
+    this.content.replaceChildren(
+      lesson,
+      controls,
+      ...(offered.length ? [parameters] : []),
+      workspace,
+      timeline,
+      ...(ingestion ? [ingestion.panel.root] : []),
+    );
     state.render();
     return state;
   }
@@ -543,6 +635,46 @@ export class Shell {
       e.preventDefault();
       set(share + step);
     });
+  }
+
+  /** The ingestion panel over the documents the scenario indexes (02 rag_ingestion). */
+  private ingestionPanel(
+    scenario: Scenario,
+    jump: (step: number) => void,
+    leave: () => void,
+  ): { panel: IngestionPanel; sources: SourceDocument[] } {
+    const { engine } = ragDerivation();
+    const sources = sourceDocuments(engine.corpus(corpusOverrides(scenario.fixture_overrides)), [
+      ...engine.fixtures.documents,
+      ...engine.fixtures.untrusted_documents,
+    ]);
+    const panel = new IngestionPanel({
+      sources,
+      embedding: (text) => engine.embedding(text),
+      note: embeddingNote(this.sources.rag['principles']),
+      jump,
+      leave,
+    });
+    return { panel, sources };
+  }
+
+  /**
+   * Changes a parameter (02 controls.action_rules.parameter_change): the player keeps the
+   * cursor on the same event, and the lineage marks follow the recomputed events; a selected
+   * value that no longer occurs is cleared.
+   */
+  private setParameter(name: string, value: Json): void {
+    const c = this.current;
+    if (!c) return;
+    c.prompt = undefined;
+    c.player.setParameters({ [name]: value });
+    if (c.selection) {
+      const found = occurrences(c.player.playback.events, c.selection);
+      // A value no longer played (a chunk ID of other parameters) is no longer selected.
+      if (!found.length) c.selection = undefined;
+      c.view.setSelected(new Set(found));
+    }
+    c.render();
   }
 
   /** Selects a lineage value or clears the selection (02 lineage_selection). */
