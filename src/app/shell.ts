@@ -17,7 +17,8 @@ import { DiagramView } from '../diagram/view.ts';
 import { loadRegistry, participantLabels, specSources } from '../scenarios/registry.ts';
 import { createPlayback, ragDerivation } from '../rag/bundled.ts';
 import { corpusOverrides } from '../rag/engine.ts';
-import type { Json, Scenario } from '../scenarios/types.ts';
+import type { Json, Scenario, ScenarioEvent } from '../scenarios/types.ts';
+import { fromDefaultStep, toDefaultStep } from '../engine/steps.ts';
 import {
   formatRoute,
   parseRoute,
@@ -109,6 +110,8 @@ function decode(text: string): string {
 
 interface ScenarioView {
   scenario: Scenario;
+  /** The events played at the default parameters, which number the route's steps. */
+  defaults: readonly ScenarioEvent[];
   player: Player;
   view: DiagramView;
   /** Index of the event whose prediction prompt is showing, if any. */
@@ -195,10 +198,14 @@ export class Shell {
     if (!scenario) return;
     if (this.current?.scenario.id === scenario.id) {
       // Same scenario: follow the step and mode in the link.
-      this.current.player.jump(route.step);
+      const c = this.current;
+      c.player.jump(fromDefaultStep(c.defaults, c.player.playback.events, route.step));
       this.current.view.setMode(route.mode);
       this.current.prompt = undefined;
-      this.route = { ...route, step: this.current.player.cursor };
+      this.route = {
+        ...route,
+        step: toDefaultStep(c.defaults, c.player.playback.events, c.player.cursor),
+      };
       this.current.render();
       return;
     }
@@ -219,7 +226,9 @@ export class Shell {
   private syncUrl(): void {
     const c = this.current;
     if (!c || !this.route) return;
-    this.route = { ...this.route, step: c.player.cursor, mode: c.view.mode };
+    // The address numbers steps as played at the defaults (02 navigation.route_steps).
+    const step = toDefaultStep(c.defaults, c.player.playback.events, c.player.cursor);
+    this.route = { ...this.route, step, mode: c.view.mode };
     const hash = formatRoute(this.route);
     if (location.hash !== hash) history.replaceState(null, '', hash);
   }
@@ -448,12 +457,17 @@ export class Shell {
     if (hasContext(scenario.initial_state)) timeline.append(contextToggle, contextBody);
     // The ingestion panel (02 rag_ingestion), below the timeline so nothing above it moves.
     const ingestion = scenario.derived_events?.includes('index-05')
-      ? this.ingestionPanel(scenario, (k) => this.go(() => player.jump(k)))
+      ? this.ingestionPanel(
+          scenario,
+          (k) => this.go(() => player.jump(k)),
+          () => slider.focus({ preventScroll: true }),
+        )
       : undefined;
 
     const view = new DiagramView(diagram, player, { labels: this.labels, mode: route.mode });
     const state: ScenarioView = {
       scenario,
+      defaults: player.playback.events,
       player,
       view,
       prompt: undefined,
@@ -623,6 +637,7 @@ export class Shell {
   private ingestionPanel(
     scenario: Scenario,
     jump: (step: number) => void,
+    leave: () => void,
   ): { panel: IngestionPanel; sources: SourceDocument[] } {
     const { engine } = ragDerivation();
     const sources = sourceDocuments(engine.corpus(corpusOverrides(scenario.fixture_overrides)), [
@@ -634,13 +649,15 @@ export class Shell {
       embedding: (text) => engine.embedding(text),
       note: embeddingNote(this.sources.rag['principles']),
       jump,
+      leave,
     });
     return { panel, sources };
   }
 
   /**
    * Changes a parameter (02 controls.action_rules.parameter_change): the player keeps the
-   * cursor on the same event, and the lineage marks follow the recomputed events.
+   * cursor on the same event, and the lineage marks follow the recomputed events; a selected
+   * value that no longer occurs is cleared.
    */
   private setParameter(name: string, value: Json): void {
     const c = this.current;
@@ -648,7 +665,10 @@ export class Shell {
     c.prompt = undefined;
     c.player.setParameters({ [name]: value });
     if (c.selection) {
-      c.view.setSelected(new Set(occurrences(c.player.playback.events, c.selection)));
+      const found = occurrences(c.player.playback.events, c.selection);
+      // A value no longer played (a chunk ID of other parameters) is no longer selected.
+      if (!found.length) c.selection = undefined;
+      c.view.setSelected(new Set(found));
     }
     c.render();
   }
