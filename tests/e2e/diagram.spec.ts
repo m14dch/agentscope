@@ -9,12 +9,12 @@ const SCENARIOS = [
   ['mcp-multiple-tools', 40],
   ['mcp-resources', 34],
   ['rag-index', 10],
-  ['rag-query', 12],
-  ['rag-stale', 12],
-  ['rag-no-match', 12],
-  ['rag-conflict', 12],
-  ['rag-hybrid', 15],
-  ['rag-prompt-injection', 12],
+  ['rag-query', 10],
+  ['rag-stale', 10],
+  ['rag-no-match', 10],
+  ['rag-conflict', 10],
+  ['rag-hybrid', 13],
+  ['rag-prompt-injection', 10],
   ['combined-balance-explanation', 35],
 ] as const;
 

@@ -1,0 +1,497 @@
+import { describe, expect, it } from 'vitest';
+import sources from 'virtual:agentscope-specs';
+import { Playback, type Snapshot } from '../../src/engine/playback.ts';
+import { createPlayback, ragDerivation } from '../../src/rag/bundled.ts';
+import {
+  NO_EVIDENCE_ANSWER,
+  RagEngine,
+  corpusOverrides,
+  modelMessage,
+  normalize,
+  round4,
+  sourceLines,
+  sourceObjects,
+  tokens,
+} from '../../src/rag/engine.ts';
+import { loadRegistry } from '../../src/scenarios/registry.ts';
+import type {
+  Json,
+  JsonObject,
+  Scenario,
+  ScenarioEvent,
+  Variant,
+} from '../../src/scenarios/types.ts';
+import { contextFrom, validateRegistry } from '../../src/scenarios/validate.ts';
+
+const registry = loadRegistry();
+const rag = ragDerivation();
+const engine = rag.engine;
+
+interface Reference {
+  parameters: {
+    chunk_size_words: number;
+    overlap_words: number;
+    top_k: number;
+    similarity_threshold: number;
+    rerank?: boolean;
+  };
+  selected: { chunkId: string; score: number; rerankScore?: number }[];
+  answer: string;
+  sources: string[];
+  ranking?: { chunkId: string; score: number; embedding: number[] }[];
+  query_embedding?: number[];
+  keyword_query_terms?: string[];
+  keyword_hits?: { chunkId: string; keywordScore: number; score: number }[];
+}
+
+const references = Object.entries(
+  (sources.rag as unknown as { reference_results: Record<string, Reference | string> })
+    .reference_results,
+).filter((entry): entry is [string, Reference] => entry[0] !== 'note');
+
+interface CombinedCase {
+  id: string;
+  fixture_overrides?: JsonObject;
+  expected_selected?: string[];
+  expected_answer: string;
+  expected_sources: string[];
+}
+const combined = sources.comparison.combined as unknown as CombinedCase & {
+  variants: CombinedCase[];
+};
+
+function scenario(id: string): Scenario {
+  const scn = registry[id];
+  if (!scn) throw new Error(`no scenario ${id}`);
+  return scn;
+}
+
+const all = (p: Playback): Snapshot[] =>
+  Array.from({ length: p.length + 1 }, (_, k) => p.snapshot(k));
+const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
+const local = (p: Playback, e: ScenarioEvent): string => e.id.replace(`${p.scenario.id}:`, '');
+
+/** The played event with this local ID. */
+function played(p: Playback, id: string): ScenarioEvent {
+  const e = p.events.find((x) => local(p, x) === id);
+  if (!e) throw new Error(`${p.scenario.id} plays no ${id}`);
+  return e;
+}
+
+const field = (value: Json | undefined, ...path: (string | number)[]): Json | undefined =>
+  path.reduce<Json | undefined>(
+    (node, key) =>
+      node !== null && typeof node === 'object'
+        ? (node as Record<string, Json>)[key as string]
+        : undefined,
+    value,
+  );
+
+describe('engine primitives', () => {
+  it("rounds like Python's round(x, 4): exact decimal value, ties to even", () => {
+    expect(round4(0.03125)).toBe(0.0312); // Math.round would give 0.0313
+    expect(round4(0.15625)).toBe(0.1562);
+    expect(round4(0.09375)).toBe(0.0938);
+    expect(round4(1.00005)).toBe(1.0001); // the double is slightly above the tie
+    expect(round4(0.123449999)).toBe(0.1234);
+    expect(round4(-0.03125)).toBe(-0.0312);
+    expect(round4(0)).toBe(0);
+    expect(round4(2.5)).toBe(2.5);
+  });
+
+  it('normalizes headings and lines and tokenizes runs of [a-z0-9]', () => {
+    expect(normalize('# Title\nOne line.\n## Sub  heading\nTwo')).toBe(
+      'Title One line. Sub  heading Two',
+    );
+    expect(tokens('GET /customers/{customerId}: HTTP 404, balances:read')).toEqual([
+      'get',
+      'customers',
+      'customerid',
+      'http',
+      '404',
+      'balances',
+      'read',
+    ]);
+  });
+
+  it('chunks word windows with overlap and stable IDs, stopping at the last word', () => {
+    const doc = {
+      documentId: 'a.b.md',
+      version: '2.0',
+      text: Array.from({ length: 12 }, (_, i) => `w${i}`).join(' '),
+      trust: 'official' as const,
+    };
+    const chunks = engine.chunks([doc], 5, 2);
+    expect(chunks.map((c) => [c.id, c.startWord, c.text])).toEqual([
+      ['a.b@2.0-c5o2-001', 0, 'w0 w1 w2 w3 w4'],
+      ['a.b@2.0-c5o2-002', 3, 'w3 w4 w5 w6 w7'],
+      ['a.b@2.0-c5o2-003', 6, 'w6 w7 w8 w9 w10'],
+      ['a.b@2.0-c5o2-004', 9, 'w9 w10 w11'],
+    ]);
+    expect(engine.chunks([{ ...doc, text: 'w0 w1 w2 w3 w4' }], 5, 2)).toHaveLength(1);
+    expect(() => engine.chunks([doc], 5, 5)).toThrow(RangeError);
+  });
+
+  it('embeds with 0.1 smoothing and L2 normalization', () => {
+    // No lexicon word: the smoothed vector is uniform.
+    expect(engine.embed('nothing here')).toEqual([0.5, 0.5, 0.5, 0.5]);
+    const v = engine.embed('account fee');
+    expect(Math.hypot(...v)).toBeCloseTo(1, 3);
+    expect(v[0]).toBe(v[1]);
+    expect(RagEngine.cosine(v, v)).toBe(1);
+    expect(RagEngine.cosine([1, 0], [0, 1])).toBe(0);
+  });
+
+  it('derives previous versions, adds untrusted documents and excludes documents', () => {
+    const stale = engine.corpus({ versions: ['1.0'] });
+    expect(stale.map((d) => `${d.documentId}@${d.version}`)).toEqual([
+      'everyday-account.md@1.0',
+      'savings-account.md@1.0',
+    ]);
+    expect(stale[0]?.text).toContain('CHF 7 per month');
+    const injected = engine.corpus({ extra: ['community-faq.md'], exclude: ['balance-api.md'] });
+    expect(injected.map((d) => d.documentId)).toEqual([
+      'everyday-account.md',
+      'savings-account.md',
+      'account-opening.md',
+      'authentication.md',
+      'release-notes.md',
+      'community-faq.md',
+    ]);
+    expect(injected.at(-1)?.trust).toBe('untrusted');
+    expect(() => engine.corpus({ extra: ['nope.md'] })).toThrow(/unknown untrusted document/);
+  });
+
+  it('answers exactly that nothing was found without retained chunks', () => {
+    const answer = engine.answer([]);
+    expect(answer).toMatchObject({ text: NO_EVIDENCE_ANSWER, cited: [] });
+    expect(modelMessage(answer)).toBe(NO_EVIDENCE_ANSWER);
+  });
+});
+
+describe('reference results (05-rag-scenarios.yaml)', () => {
+  it.each(references)('%s: selection, scores, answer and sources', (name, ref) => {
+    const variant = sources.rag.variants.find((v: Variant) => v.id === name);
+    const p = ref.parameters;
+    const r = engine.retrieve(engine.corpus(corpusOverrides(variant?.fixture_overrides)), {
+      chunkSize: p.chunk_size_words,
+      overlap: p.overlap_words,
+      topK: p.top_k,
+      threshold: p.similarity_threshold,
+      rerank: p.rerank ?? false,
+    });
+    expect(
+      r.selected.map((c) => ({
+        chunkId: c.id,
+        score: c.score,
+        ...(p.rerank ? { rerankScore: c.rerank } : {}),
+      })),
+    ).toEqual(ref.selected);
+    const answer = engine.answer(r.selected);
+    expect(answer.text).toBe(ref.answer);
+    expect(sourceLines(answer.cited)).toEqual(ref.sources);
+    // Every citation resolves to a source fixture.
+    for (const c of answer.cited) {
+      const doc = engine
+        .corpus(corpusOverrides(variant?.fixture_overrides))
+        .find((d) => d.documentId === c.documentId && d.version === c.version);
+      expect(doc?.text, c.id).toBeDefined();
+    }
+    if (ref.ranking) {
+      expect(r.queryVector).toEqual(ref.query_embedding);
+      expect(
+        r.ranked.map((c) => ({ chunkId: c.id, score: c.score, embedding: c.embedding })),
+      ).toEqual(ref.ranking);
+    }
+    if (ref.keyword_hits) {
+      expect(r.queryTerms).toEqual(ref.keyword_query_terms);
+      expect(
+        [...r.ranked]
+          .sort((a, b) => (a.id < b.id ? -1 : 1))
+          .filter((c) => c.keyword > 0)
+          .map((c) => ({ chunkId: c.id, keywordScore: c.keyword, score: c.score })),
+      ).toEqual(ref.keyword_hits);
+    }
+  });
+
+  it.each(references)('%s: the played events carry the reference result', (name, ref) => {
+    const variant = registry[name];
+    const p = createPlayback(variant ?? scenario('rag-query'));
+    if (!variant)
+      p.setParameters({
+        top_k: ref.parameters.top_k,
+        similarity_threshold: ref.parameters.similarity_threshold,
+      });
+    expect(field(played(p, 'retrieve-06').payload, 'retained')).toEqual(
+      ref.selected.map((s) => s.chunkId),
+    );
+    const answer = played(p, 'retrieve-12').payload;
+    expect(field(answer, 'answer')).toBe(ref.answer);
+    const sourcesOf = (field(answer, 'sources') as JsonObject[]).map(
+      (s) =>
+        `[${String(s['citation'])}] ${String(s['documentId'])} v${String(s['version'])}, chunk ${String(s['chunkId'])}`,
+    );
+    expect(sourcesOf).toEqual(ref.sources);
+    const message = String(field(played(p, 'retrieve-11').payload, 'message', 'content'));
+    expect(message).toBe(
+      ref.sources.length ? `${ref.answer}\n\nSources:\n${ref.sources.join('\n')}` : ref.answer,
+    );
+    // The model sees the text of exactly the retained chunks, at retrieve-10 and not before.
+    const prompt = String(field(played(p, 'retrieve-10').payload, 'messages', 1, 'content'));
+    const blocks = [...prompt.matchAll(/chunk="([^"]+)"/g)].map((m) => m[1]);
+    expect(blocks).toEqual(ref.selected.map((s) => s.chunkId));
+    const k = p.events.indexOf(played(p, 'retrieve-10')) + 1;
+    expect(plain(p.snapshot(k).state['model_visible_messages'])).toEqual(
+      plain(played(p, 'retrieve-10').payload),
+    );
+    expect(plain(p.snapshot(k - 1).state['model_visible_messages'])).toEqual([]);
+  });
+});
+
+describe('Combined answers (06-comparison-scenarios.yaml)', () => {
+  it('reproduces the Combined answer and sources in the played events', () => {
+    const p = createPlayback(scenario(combined.id));
+    const answer = played(p, 'c-08').payload;
+    expect(field(answer, 'answer')).toBe(combined.expected_answer);
+    expect(sourceLines([])).toEqual([]);
+    const lines = (field(answer, 'sources') as JsonObject[]).map(
+      (s) =>
+        `[${String(s['citation'])}] ${String(s['documentId'])} v${String(s['version'])}, chunk ${String(s['chunkId'])}`,
+    );
+    expect(lines).toEqual(combined.expected_sources);
+    expect(field(played(p, 'c-07').payload, 'message', 'content')).toBe(
+      `${combined.expected_answer}\n\nSources:\n${combined.expected_sources.join('\n')}`,
+    );
+  });
+
+  it.each(combined.variants)('reproduces $id', (variant) => {
+    const events = rag.derive(scenario(combined.id), {}, variant.fixture_overrides);
+    const byId = (id: string) =>
+      events.find((e) => e.id === `${combined.id}:${id}`) as ScenarioEvent;
+    expect(field(byId('retrieve-06').payload, 'retained')).toEqual(variant.expected_selected);
+    expect(field(byId('c-03').payload, 'document_blocks')).toEqual(variant.expected_selected);
+    expect(field(byId('c-08').payload, 'answer')).toBe(variant.expected_answer);
+    expect(byId('c-07').explanation).toMatch(/no comparison/);
+    const cited = field(byId('c-08').payload, 'sources') as JsonObject[];
+    expect(cited.map((s) => s['chunkId'])).toEqual(
+      variant.expected_sources.map((s) => s.split('chunk ')[1]),
+    );
+    for (const id of ['c-04', 'c-06']) {
+      const prompt = String(field(byId(id).payload, 'messages', 1, 'content'));
+      expect(prompt).not.toContain('savings-account.md');
+    }
+  });
+});
+
+describe('derived events', () => {
+  const defaults = (scn: Scenario): Record<string, Json> =>
+    Object.fromEntries(Object.entries(scn.parameters ?? {}).map(([k, v]) => [k, v.default]));
+
+  it.each(['rag-index', 'rag-query', 'combined-balance-explanation'])(
+    '%s: the YAML shows the derived events at the default parameters',
+    (id) => {
+      const scn = scenario(id);
+      const optional = new Map(
+        (scn.optional_steps ?? []).flatMap((s) => s.events.map((e) => [e, s.enabled_by])),
+      );
+      const configs = [
+        defaults(scn),
+        ...[...new Set(optional.values())].map((p) => ({ ...defaults(scn), [p]: true })),
+      ];
+      const derived = new Set(scn.derived_events);
+      expect(derived.size).toBeGreaterThan(0);
+      for (const e of scn.events) {
+        const lid = e.id.replace(`${id}:`, '');
+        if (!derived.has(lid)) continue;
+        const by = optional.get(lid);
+        const config = by ? configs.find((c) => c[by] === true) : configs[0];
+        const out = rag.derive(scn, config ?? {}).find((x) => x.id === e.id);
+        expect(out, e.id).toEqual(e);
+        // Same key order too, so the inspector shows the same structure.
+        expect(JSON.stringify(out), e.id).toBe(JSON.stringify(e));
+      }
+    },
+  );
+
+  it('regenerates payloads, explanations and tracked values of variants (rag-no-match)', () => {
+    const p = createPlayback(scenario('rag-no-match'));
+    const filter = played(p, 'retrieve-06');
+    expect(filter.payload).toMatchObject({
+      top_k: 1,
+      similarity_threshold: 0.99,
+      retained: [],
+    });
+    expect(filter.explanation).toBe(
+      'Keep chunks with a score of at least 0.99, then the best one. Ties are broken by chunk ID. No chunk reaches 0.99, so nothing is retained.',
+    );
+    expect(filter.tracked_values).toBeUndefined();
+    const reasons = (field(filter.payload, 'discarded') as JsonObject[]).map((d) => d['reason']);
+    expect(new Set(reasons)).toEqual(new Set(['below threshold']));
+    expect(field(played(p, 'retrieve-09').payload, 'prompt_after', 'document_blocks')).toEqual([]);
+    expect(played(p, 'retrieve-09').tracked_values).toBeUndefined();
+    expect(String(field(played(p, 'retrieve-10').payload, 'messages', 1, 'content'))).toMatch(
+      /Retrieved documents:\n\(none\)$/,
+    );
+    expect(played(p, 'retrieve-12').payload).toEqual({ answer: NO_EVIDENCE_ANSWER, sources: [] });
+    const last = p.snapshot(p.length);
+    expect(last.state['retrieval']).toEqual({ retained: [] });
+    expect(last.lineage['chunkId']?.map((x) => x.event)).toEqual(['rag-no-match:retrieve-05']);
+  });
+
+  it('indexes the variant corpus: stale versions, conflicts and untrusted chunks', () => {
+    const stale = createPlayback(scenario('rag-stale'));
+    const matches = field(played(stale, 'retrieve-05').payload, 'matches') as JsonObject[];
+    expect(new Set(matches.map((m) => m['version']))).toEqual(new Set(['1.0']));
+    expect(played(stale, 'retrieve-05').tracked_values?.['chunkId']).toEqual(
+      matches.map((m) => m['chunkId']),
+    );
+
+    const conflict = createPlayback(scenario('rag-conflict'));
+    expect(field(played(conflict, 'retrieve-12').payload, 'answer')).toContain(
+      'The indexed documents conflict on',
+    );
+
+    const injection = createPlayback(scenario('rag-prompt-injection'));
+    const blocks = field(
+      played(injection, 'retrieve-09').payload,
+      'prompt_after',
+      'document_blocks',
+    ) as JsonObject[];
+    expect(blocks[1]).toEqual({ chunkId: 'community-faq@1.0-c50o10-001', trust: 'untrusted' });
+    expect(
+      String(field(played(injection, 'retrieve-10').payload, 'messages', 1, 'content')),
+    ).toContain('chunk="community-faq@1.0-c50o10-001" trust="untrusted"');
+  });
+
+  it('adds the keyword, rerank and fetch steps only while their parameter is on', () => {
+    const p = createPlayback(scenario('rag-query'));
+    const ids = (): string[] => p.events.map((e) => local(p, e));
+    expect(ids()).not.toContain('hybrid-01');
+    expect(ids()).not.toContain('retrieve-07');
+    expect(p.length).toBe(10);
+    p.setParameters({ keyword_retrieval: true });
+    expect(ids().slice(4, 7)).toEqual(['retrieve-05', 'hybrid-01', 'hybrid-02']);
+    p.setParameters({ rerank: true, fetch_full_documents: true });
+    expect(p.length).toBe(15);
+    expect(p.events.map((e) => e.sequence)).toEqual(p.events.map((_, i) => i + 1));
+    expect(field(played(p, 'retrieve-07').payload, 'documentIds')).toEqual([
+      'account-opening.md',
+      'everyday-account.md',
+      'savings-account.md',
+    ]);
+    expect(played(p, 'hybrid-03').explanation).toMatch(/^Union both candidate lists/);
+    expect(played(p, 'retrieve-06').explanation).toMatch(/the 5 best by reranker score/);
+
+    const hybrid = createPlayback(scenario('rag-hybrid'));
+    expect(hybrid.length).toBe(13);
+    hybrid.setParameters({ keyword_retrieval: false, rerank: false });
+    expect(hybrid.length).toBe(10);
+  });
+
+  it('follow chunking parameters in rag-index', () => {
+    const p = createPlayback(scenario('rag-index'));
+    p.setParameters({ chunk_size_words: 25, overlap_words: 0 });
+    const chunks = field(played(p, 'index-05').payload, 'chunks') as JsonObject[];
+    expect(chunks[0]?.['chunkId']).toBe('everyday-account@1.2-c25o0-001');
+    expect(played(p, 'index-04').payload).toMatchObject({ chunk_size_words: 25, overlap_words: 0 });
+    expect(played(p, 'index-05').explanation).toBe(
+      `${chunks.length} chunks, each pointing back to its source document.`,
+    );
+    expect(field(played(p, 'index-09').payload, 'upserted')).toBe(chunks.length);
+    expect(p.snapshot(p.length).state['rag_index']).toMatchObject({
+      indexed_chunks: chunks.length,
+    });
+    expect(
+      (field(played(p, 'index-07').payload, 'embeddings') as JsonObject[]).map((e) => e['chunkId']),
+    ).toEqual(chunks.map((c) => c['chunkId']));
+  });
+
+  it('pass validation and replay for every parameter combination', () => {
+    const ctx = contextFrom(sources);
+    const grid = (scn: Scenario): Record<string, Json>[] =>
+      Object.entries(scn.parameters ?? {}).reduce<Record<string, Json>[]>(
+        (configs, [name, spec]) => {
+          const values: Json[] =
+            spec.options ??
+            (typeof spec.default === 'boolean'
+              ? [false, true]
+              : name === 'top_k'
+                ? [1, 4, 8]
+                : [0, 0.7, 0.95, 1]);
+          return configs.flatMap((c) => values.map((v) => ({ ...c, [name]: v })));
+        },
+        [{}],
+      );
+    let checked = 0;
+    for (const scn of Object.values(registry).filter((s) => s.derived_events)) {
+      const p = createPlayback(scn);
+      for (const config of grid(scn)) {
+        p.setParameters(config);
+        // The played events; the lists naming optional steps refer to the registry's events.
+        const played: Scenario = { ...scn, events: [...p.events] };
+        delete played.derived_events;
+        delete played.optional_steps;
+        expect(
+          validateRegistry({ [scn.id]: played }, ctx),
+          `${scn.id} ${JSON.stringify(config)}`,
+        ).toEqual([]);
+        expect(() => p.snapshot(p.length)).not.toThrow();
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThan(500);
+  });
+
+  it('yield identical snapshots after a parameter change is undone', () => {
+    for (const [id, change] of [
+      [
+        'rag-query',
+        { top_k: 2, similarity_threshold: 0.92, rerank: true, fetch_full_documents: true },
+      ],
+      ['rag-hybrid', { keyword_retrieval: false }],
+      ['rag-index', { chunk_size_words: 100, overlap_words: 20 }],
+      ['rag-prompt-injection', { top_k: 8 }],
+    ] as const) {
+      const p = createPlayback(scenario(id));
+      const original = { ...p.retrievalConfig };
+      const before = plain(all(p));
+      const changed = p.setParameters(change);
+      expect(changed, id).toBeLessThanOrEqual(p.length);
+      expect(plain(all(p)), id).not.toEqual(before);
+      p.setParameters(original);
+      expect(plain(all(p)), id).toEqual(before);
+      // A second playback from scratch agrees: same scenario and parameters, same results.
+      expect(plain(all(createPlayback(scenario(id)))), id).toEqual(before);
+    }
+  });
+
+  it('keep snapshots before the first changed event', () => {
+    const p = createPlayback(scenario('rag-query'));
+    const before = all(p);
+    const changed = p.setParameters({ top_k: 4 });
+    expect(local(p, p.event(changed) as ScenarioEvent)).toBe('retrieve-06');
+    const after = all(p);
+    expect(after[changed - 1]?.state).toBe(before[changed - 1]?.state);
+    expect(after[changed]?.state).not.toEqual(before[changed]?.state);
+    // topK 4 drops the Savings chunk, as reference_results rag-query-top-k-4 says.
+    expect(field(played(p, 'retrieve-12').payload, 'sources')).toEqual(
+      sourceObjects(
+        engine.answer(
+          engine.retrieve(engine.corpus(), {
+            chunkSize: 50,
+            overlap: 10,
+            topK: 4,
+            threshold: 0.7,
+            rerank: false,
+          }).selected,
+        ).cited,
+      ),
+    );
+  });
+
+  it('leave scenarios without derived events as they are', () => {
+    const scn = scenario('mcp-balance');
+    expect(rag.derive(scn, {})).toBe(scn.events);
+    expect(plain(createPlayback(scn).events)).toEqual(plain(scn.events));
+  });
+});

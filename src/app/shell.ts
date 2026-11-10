@@ -3,13 +3,13 @@
  * tabs, the scenario picker, the mode switch, the learning question, the playback controls,
  * the diagram beside the step's message, and the step timeline.
  */
-import { Playback } from '../engine/playback.ts';
 import { Player, SPEEDS, type Speed } from '../engine/player.ts';
 import type { Mode } from '../diagram/model.ts';
 import { contextModel, hasContext, renderContext } from '../inspector/context.ts';
 import { type Boundary, Inspector, occurrences, type Selection } from '../inspector/inspector.ts';
 import { DiagramView } from '../diagram/view.ts';
 import { loadRegistry, participantLabels, specSources } from '../scenarios/registry.ts';
+import { createPlayback } from '../rag/bundled.ts';
 import type { Scenario } from '../scenarios/types.ts';
 import {
   formatRoute,
@@ -298,7 +298,7 @@ export class Shell {
   }
 
   private renderScenario(scenario: Scenario, route: Route): ScenarioView {
-    const player = new Player(new Playback(scenario));
+    const player = new Player(createPlayback(scenario));
     player.jump(route.step);
 
     const lesson = el(
