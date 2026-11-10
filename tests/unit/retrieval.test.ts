@@ -3,8 +3,11 @@ import { Player } from '../../src/engine/player.ts';
 import {
   answerParts,
   evidence,
+  layoutAt,
   projectedPoints,
   projectionLayout,
+  type ProjectionLayout,
+  sharedLabel,
   segmentCrosses,
   segmentsMeet,
   pointLabel,
@@ -18,9 +21,9 @@ import {
   wordDiff,
 } from '../../src/inspector/retrieval.ts';
 import { createPlayback, ragDerivation } from '../../src/rag/bundled.ts';
-import { corpusOverrides } from '../../src/rag/engine.ts';
+import { corpusOverrides, RagEngine } from '../../src/rag/engine.ts';
 import { loadRegistry, specSources } from '../../src/scenarios/registry.ts';
-import type { Json, Scenario } from '../../src/scenarios/types.ts';
+import type { Json, Scenario, ScenarioEvent } from '../../src/scenarios/types.ts';
 import type { Box } from '../../src/inspector/retrieval.ts';
 
 const registry = loadRegistry();
@@ -181,6 +184,49 @@ describe('retrieval panel model', () => {
 });
 
 describe('retrieval panel helpers', () => {
+  it("keeps a '$' in the question and the documents literal in the assembled prompt", () => {
+    const event = (id: string, payload: Json, extra: Partial<ScenarioEvent> = {}) =>
+      ({ id: `s:${id}`, payload, ...extra }) as ScenarioEvent;
+    const events = [
+      event('retrieve-05', { matches: [] }),
+      event(
+        'retrieve-09',
+        {
+          prompt_before: [{ role: 'user', content: "Costs $& or $1, $' and $$?" }],
+          prompt_after: {
+            system: 'S',
+            user_template: 'Question: <question>\n\n<document blocks>',
+            document_blocks: [{ chunkId: 'fees@1.2-c50o10-001', trust: 'official' }],
+          },
+        },
+        { tracked_values: { retrievedText: ['Pay $` or $<document blocks> now, $$ 5.'] } },
+      ),
+    ];
+    const stub: SearchedIndex = {
+      docs: [],
+      chunks: [],
+      trustOf: () => 'official',
+      project: () => ({ x: 0, y: 0 }),
+    };
+    expect(retrievalModel(events, 2, stub)?.prompt?.after[1]?.content).toBe(
+      "Question: Costs $& or $1, $' and $$?\n\n" +
+        '<document id="" version="" chunk="fees@1.2-c50o10-001" trust="official">\n' +
+        'Pay $` or $<document blocks> now, $$ 5.\n</document>',
+    );
+  });
+
+  it("keeps a '$' in a previous version's replacement literal, as Python does", () => {
+    const [pv] = engine.fixtures.previous_versions;
+    if (!pv) throw new Error('no previous version');
+    const changed = new RagEngine({
+      ...engine.fixtures,
+      previous_versions: [{ ...pv, replace: { from: pv.replace.from, to: 'CHF $& per $$' } }],
+    });
+    const doc = changed.corpus({ versions: [pv.version] }).find((d) => d.documentId === pv.id);
+    expect(doc?.text).toContain('CHF $& per $$');
+    expect(doc?.text).not.toContain(pv.replace.from);
+  });
+
   it('splits an answer into text and citations', () => {
     expect(answerParts('a [1]; b [12].')).toEqual(['a ', 1, '; b ', 12, '.']);
   });
@@ -259,6 +305,54 @@ describe('retrieval panel helpers', () => {
       if (width >= 720) expect(layout.width).toBeLessThanOrEqual(width);
     },
   );
+
+  it('draws the candidate layout with the shortest leaders at the largest side that fits', () => {
+    const leaderCost = (l: ProjectionLayout): number =>
+      l.labels.reduce((n, x) => n + (x.leader ? (x.leader[3] - x.leader[1]) ** 2 : 0), 0);
+    for (const s of answered) {
+      const points = projectedPoints(modelAt(s.id, 6) as RetrievalModel);
+      for (const width of [720, 1344]) {
+        const layout = projectionLayout(points, width);
+        const side = layout.axes.x[2] - layout.axes.x[0];
+        const free = width - side;
+        // Every horizontal position of the plot at that side (in 5 % steps) costs as much or more.
+        for (let share = 0; share <= 1; share += 0.05) {
+          const other = layoutAt(points, side, Math.round(free * share), width);
+          if (other.cost < 1e6)
+            expect(leaderCost(layout), `${s.id} ${width} ${share}`).toBeLessThanOrEqual(other.cost);
+        }
+      }
+    }
+  });
+
+  it('gives the versions of one chunk with identical vectors one shared label', () => {
+    const model = modelAt('rag-conflict', 6) as RetrievalModel;
+    const points = projectedPoints(model);
+    const shared = points.filter((p) => p.also?.length);
+    // The four chunks whose versions differ only outside the lexicon (05 previous_versions).
+    expect(shared.map((p) => p.label)).toEqual([
+      'everyday-account@1.0/1.2 · 002',
+      'everyday-account@1.0/1.2 · 001',
+      'savings-account@1.0/1.2 · 001',
+      'savings-account@1.0/1.2 · 002',
+    ]);
+    // Every chunk is still a point: the shared ones plus the others.
+    const ids = points.flatMap((p) => (p.id ? [p.id, ...(p.also ?? [])] : []));
+    expect(ids.sort()).toEqual(model.rows.map((r) => r.chunkId).sort());
+    for (const p of shared) {
+      const members = [p.id, ...(p.also ?? [])].map(
+        (id) => model.rows.find((r) => r.chunkId === id) as RetrievalModel['rows'][number],
+      );
+      expect(
+        new Set(members.map((r) => `${r.point.x},${r.point.y},${String(r.outcome?.retained)}`))
+          .size,
+      ).toBe(1);
+    }
+    expect(sharedLabel(['savings-account@1.0-c50o10-001', 'savings-account@1.2-c50o10-001'])).toBe(
+      'savings-account@1.0/1.2 · 001',
+    );
+    expect(sharedLabel(['a@1.2-c50o10-001', 'b@1.2-c50o10-003'])).toBe('a@1.2 · 001, b@1.2 · 003');
+  });
 
   it('finds where segments meet', () => {
     expect(segmentsMeet([0, 0, 10, 10], [0, 10, 10, 0])).toBe(true);

@@ -149,8 +149,8 @@ function trackRetained(e: ScenarioEvent, ctx: Context, text: boolean): void {
 function systemFor(system: Json | undefined, ctx: Context): string {
   const text = typeof system === 'string' ? system : '';
   return ctx.params.fetchFullDocuments
-    ? text.replace(CHUNK_CITATION, DOCUMENT_CITATION)
-    : text.replace(DOCUMENT_CITATION, CHUNK_CITATION);
+    ? text.replace(CHUNK_CITATION, () => DOCUMENT_CITATION)
+    : text.replace(DOCUMENT_CITATION, () => CHUNK_CITATION);
 }
 
 function makeHandlers(engine: RagEngine): Record<string, Handler> {

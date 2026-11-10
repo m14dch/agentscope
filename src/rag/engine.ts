@@ -338,7 +338,8 @@ export class RagEngine {
           out.push({
             documentId: d.id,
             version: v,
-            text: d.text.replaceAll(pv.replace.from, pv.replace.to),
+            // A function replacement: a '$' in the text is literal, as in Python's str.replace.
+            text: d.text.replaceAll(pv.replace.from, () => pv.replace.to),
             trust: 'official',
           });
       }
