@@ -273,7 +273,7 @@ inspector:
     dotted like other folds. Opened, it shows the summary and each message of 04-mcp-scenarios.yaml
     protocol.earlier_revision_handshake (sender → receiver, operation, request or status
     line, headers, payload), each labelled with that revision. It starts collapsed and
-    is the only place the earlier revision appears.'
+    is the only place the earlier messages are shown.'
   tabs:
   - Payload
   - Transport
