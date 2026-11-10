@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Playback } from '../../src/engine/playback.ts';
 import { contextModel, hasContext } from '../../src/inspector/context.ts';
+import { createPlayback } from '../../src/rag/bundled.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
 import type { Scenario } from '../../src/scenarios/types.ts';
 
@@ -88,6 +89,48 @@ describe('labels the review asked for', () => {
     ]);
     expect(model.memory.every((m) => m.unseen)).toBe(true);
     expect(model.messages).toBeUndefined();
+  });
+
+  it('labels tool data and document evidence by source (02 context_panel.provenance)', () => {
+    const scn = scenario('combined-balance-explanation');
+    const p = createPlayback(scn);
+    const k = p.events.findIndex((e) => e.id.endsWith(':c-06')) + 1;
+    const model = contextModel(p.events, p.snapshot(k), p.snapshot(k - 1));
+    expect(model.memory.map((m) => [m.description, m.source])).toEqual([
+      ['User question received', undefined],
+      ['Retained chunks held for the prompt', 'documents'],
+      ['Prompt assembled with evidence and tool names', undefined],
+      ['Tool result received', 'tool'],
+      ['Tool message stored in conversation', 'tool'],
+    ]);
+    const [system, user, call, tool] = model.messages ?? [];
+    expect(system?.documents).toEqual([]);
+    expect(user?.text).toBe(
+      'Question: What is my current account balance, and would another account type offer better conditions?\n\nRetrieved documents:',
+    );
+    expect(user?.documents.map((d) => [d.documentId, d.version, d.chunkId, d.untrusted])).toEqual([
+      ['account-opening.md', '1.2', 'account-opening@1.2-c50o10-001', false],
+      ['everyday-account.md', '1.2', 'everyday-account@1.2-c50o10-002', false],
+      ['everyday-account.md', '1.2', 'everyday-account@1.2-c50o10-001', false],
+      ['account-opening.md', '1.2', 'account-opening@1.2-c50o10-002', false],
+      ['savings-account.md', '1.2', 'savings-account@1.2-c50o10-001', false],
+    ]);
+    expect(user?.documents[0]?.text).toMatch(/^Opening an account Anyone aged 18/);
+    expect(call?.tool).toBeUndefined();
+    expect(tool).toMatchObject({ role: 'tool', tool: 'get_customer_balance', documents: [] });
+    expect(tool?.text).toContain('12500.75');
+  });
+
+  it('labels an untrusted document block in the model-visible context', () => {
+    const scn = scenario('rag-prompt-injection');
+    const p = createPlayback(scn);
+    const k = p.events.findIndex((e) => e.id.endsWith(':retrieve-10')) + 1;
+    const user = contextModel(p.events, p.snapshot(k), undefined).messages?.find(
+      (m) => m.role === 'user',
+    );
+    expect(user?.documents.filter((d) => d.untrusted).map((d) => d.documentId)).toEqual([
+      'community-faq.md',
+    ]);
   });
 
   it('does not label an entry with nothing to send', () => {

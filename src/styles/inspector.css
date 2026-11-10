@@ -172,6 +172,25 @@
   margin-bottom: var(--space-1);
 }
 
+/* Tool data and document evidence are named by a label, never by colour (02 context_panel.provenance). */
+.source-label {
+  font-weight: var(--weight-strong);
+}
+
+.context-documents {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-2);
+  list-style: none;
+}
+
+.context-documents > li {
+  margin-bottom: var(--space-1);
+}
+
+.context-documents p {
+  margin: 0;
+}
+
 /* New since the previous step: the selection background, nothing else. */
 .context-added {
   background: var(--color-selection);
