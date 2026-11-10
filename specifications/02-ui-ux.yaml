@@ -137,23 +137,49 @@ diagram:
     current_and_pair: accent line, 2 px, and the label in weight 600, so the current step
       stays distinct in greyscale
     error: error line; the label starts with × and names the kind (tool, protocol, transport)
+  labels: 'Each arrow carries its operation as a direct text label, prefixed with the
+    protocol for messages that cross a protocol boundary: MCP, HTTP, LLM API and DB (for
+    example MCP · tools/call). The prefix is left out when the operation already starts
+    with it (HTTP 200 OK). In-process, RAG-internal and UI steps show the operation only.'
+  layout:
+    lifeline_spacing: At least 110 px; wider gaps only where an arrow label needs the room,
+      up to 240 px. On narrow screens the diagram scrolls horizontally.
+    rows: One row per event in order, so labels never share a row. The label sits above
+      its arrow, starting at the arrow's left end; a label longer than its arrow extends
+      to the right and the diagram widens to fit it.
+    self_arrows: An event whose sender is its receiver loops to the right of its lifeline,
+      with the label to the right of the loop.
+    participant_labels: Registry labels at the top of each lifeline, wrapped to the lifeline
+      spacing.
   visibility:
     past: line keeps its kind's style; label in ink-muted
     current: emphasized
-    future: hidden in protocol mode
+    future: hidden in protocol mode; rows keep their space so the layout does not move
+      as the cursor advances
   pair_highlighting: true
-  auto_scroll_to_current: true
+  auto_scroll_to_current: Keep the current step (or current group) in view; scroll
+    smoothly, or instantly with reduced motion
   accessible_without_color: true
   rendering: SVG lifelines, arrows and labels generated from ordered event data. The
     header states once that everything is simulated; arrows carry no per-arrow simulation
     label.
-  error_events: An event is an error when its HTTP status is 4xx/5xx, its payload has
-    a JSON-RPC error object, or its MCP result has isError true. Each kind gets its
-    own label (07-security-protocols.yaml error_taxonomy).
+  error_events: 'An error arrow marks where a failure occurs on the wire, with its kind
+    from 07-security-protocols.yaml error_taxonomy: protocol error when the payload is a
+    JSON-RPC response with an error object; tool execution error when an MCP result has
+    isError true; transport error for any other HTTP response with status 4xx or 5xx;
+    model error for an LLM API response with status 4xx or 5xx. The label reads × <kind>
+    error · <operation>. Steps that only hand the failure on inside the agent are not
+    error arrows; their explanation says what happens.'
+
 modes:
   architecture: 'Conceptual level: collapse each scenario phase into one expandable group
     headed by its takeaway (the phase label is secondary). Shows the learning question,
     the headline and plain explanations.'
+  architecture_groups: 'A group spans the lifelines its events touch. The group holding
+    the current step is the current group: an accent bar and its takeaway in weight 600.
+    A group expands or collapses on click, Enter or Space; expanded, it shows its events
+    up to the cursor with protocol-mode styling. Expansion is kept while the learner
+    steps through the scenario.'
   protocol: 'Technical level: show all individual events with exact logical messages;
     the inspector holds payloads, boundaries and errors.'
   default_mode: architecture
