@@ -11,7 +11,8 @@ design:
     ink-muted and one darker peach for small text, both needed for contrast.
   - Diagrams sit on the light reading surface; the dark olive surface is not used (owner
     decision), so one set of colour rules applies everywhere.
-  - Peach Red marks the current step; Naples Yellow marks what the learner selected or
+  - Peach Red marks the current step (one exception, retained chunks in the retrieval
+    charts, is recorded in the last decision below); Naples Yellow marks what the learner selected or
     tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
     label naming the kind.
   - The RAG question changes to the handover's question and the communication layer
@@ -24,8 +25,10 @@ design:
     would add a near-invisible box that carries no information.
   - 'Retained chunks keep the accent in the score plot and the projection (issue #15),
     although handover 4.2 reserves Peach Red for the current step: inside a retrieval chart
-    the retained chunks are what to look at now, and the charts sit below the timeline, apart
-    from the diagram''s current arrow, so the two never compete. The accent is never the only
+    the retained chunks are what to look at now. The charts sit below the timeline, apart from
+    the diagram''s current arrow and the current group''s accent bar above it, and they show
+    the outcome of the current step itself (the selection made at the step that applies top K
+    and the threshold), so the accent in both places points at the same thing. The accent is never the only
     signal there: retained points are filled and their rows say "retained" with the rank in
     words. Nothing is retained, and nothing is in the accent, before the step that applies
     top K and the threshold. A lineage selection marks a chunk''s label with the selection
@@ -448,32 +451,44 @@ rag_ingestion:
   embedding_note: Above the vector, the principle of 05-rag-scenarios.yaml that the demo
     embedding stands in for a learned model, as written there (two plain sentences).
 rag_retrieval:
-  shown_in: 'Scenarios that derive retrieve-05 (rag-query and its variants), below the
+  shown_in: 'Scenarios that derive retrieve-12, the answer (rag-query and its variants; the
+    Combined scenario derives only retrieve-05 and retrieve-06 and has no panel), below the
     timeline, from the step that returns the scored chunks (retrieve-05). Scores, the
-    selection, the prompt and the answer are read from the played events (retrieve-05,
-    hybrid-02, hybrid-03, retrieve-06, retrieve-09, retrieve-10, retrieve-12), so the screen
-    always equals them; chunk text and vectors come from the index the scenario searches
-    (05 derived_event_rules.inputs at the current parameters), as retrieve-05''s technical
-    note says.'
-  sections: Scores and projection side by side from 64rem, stacked below; then the prompt;
-    then the answer. A section appears from the step that produces its content; until
-    then it is absent, not empty.
+    threshold, the selection, the prompt and the answer are read from the played events
+    (retrieve-03, retrieve-05, hybrid-02, hybrid-03, retrieve-06, retrieve-09, retrieve-10,
+    retrieve-12), so the screen always equals them and shows nothing a later step decides;
+    chunk text and vectors come from the index the scenario searches (05
+    derived_event_rules.inputs at the current parameters), as retrieve-05''s technical note
+    says.'
+  sections: The scores, then the projection, then the prompt, then the answer, stacked so
+    each chart has the full width at its real text size. A section appears from the step
+    that produces its content; until then it is absent, not empty.
   scores: 'A dot plot (labels_and_charts): one row per chunk in retrieve-05''s order, labelled
-    with its chunk ID, its dot at the cosine score on a 0–1 axis with the score written beside
-    it (4 decimals), and the threshold as one vertical line labelled "threshold <value>" (2
-    decimals). From retrieve-06 each row states its outcome in words: "retained, rank <n>" (the
+    with its chunk ID, its dot at the cosine score on a 0–1 track at least 12rem wide with the
+    score written beside it (4 decimals), on the side away from the threshold so the line stays
+    continuous. From retrieve-06 the threshold is one vertical line labelled "threshold
+    <value>" (2 decimals) and each row states its outcome in words: "retained, rank <n>" (the
     order in which the prompt carries it) or retrieve-06''s discard reason; retained dots are
     filled in the accent, the others hollow. Before retrieve-06 a line names the step that
     applies top K and the threshold. Once hybrid-02 is reached each hit shows its keyword
     score, and once hybrid-03 is reached each candidate shows its reranker score. A chunk of
-    an untrusted document says "untrusted" in its row.'
+    an untrusted document says "untrusted" in its row. With reranking (retrieve-06 rerank),
+    one sentence below says that the <k> best by reranker score are retained, so a retained
+    chunk can score lower than a dropped one. The outcome wraps within its column; no text
+    leaves its column.'
   projection: 'A plain scatter plot of 05 fixtures.projection_2d (x = cost − rules, y = product
     − technical, both from −1 to 1, equal scales): the axes are named by meaning at their
     ends (rules ← → cost, technical ↓ ↑ product), every chunk point and the question''s point
-    (retrieve-03) are labelled directly, labels that would overlap move down beside a short
-    leader line, and retained points are filled in the accent. One sentence below states that
-    the projection is fixed and conceptual and that scores are computed in all dimensions.
-    It fits the available width with text at its real size.'
+    (retrieve-03) are labelled directly, and retained points are filled in the accent. A label
+    sits right or left of its point; where it would overlap another label, a point, the
+    question''s mark, an axis, an axis name or a leader line, it moves up or down by a line,
+    nearest first, beside a leader line kept as short as that allows. A lineage-selected
+    chunk''s label has the selection background and an ink underline. Each point is exposed to
+    assistive technology as an image named by its chunk ID, coordinates and whether it is
+    retained. One sentence below states that the projection is fixed and conceptual and that
+    scores are computed in all dimensions. The plot fits the available width with text at its
+    real size; where the screen is too narrow for the plot and its labels, it scrolls
+    horizontally in a named, keyboard-focusable region.'
   prompt: 'From retrieve-09, "Prompt before and after retrieval": retrieve-09 prompt_before
     and the grounded messages of retrieve-10 side by side (two columns from 64rem, stacked
     below), each message with its role. Until retrieve-10 a line says the prompt is assembled
@@ -483,15 +498,18 @@ rag_retrieval:
     into it (05 fixtures.untrusted_documents injected_instruction) is set in weight 600 and
     followed by "(instruction inside a document: treated as data)".'
   answer: 'From retrieve-12, the answer (labelled simulated, learning.simulated_behaviour) with
-    each [n] as a button, then the source lines exactly as 05 answer_rules writes them. A
-    citation opens its evidence below the answer, next to the source document: the document''s
-    normalized text with the chunk''s words marked with the selection background and an ink
-    underline, beside the chunk''s text and metadata; a parent document (fetch_full_documents)
-    opens as the whole document. One citation is open at a time; activating it again closes
-    it. The open citation is pressed and keeps focus while the panel rebuilds; a citation that
-    no longer exists after a parameter change closes.'
-  focus: When the panel disappears (stepping back before retrieve-05) while it holds focus,
-    focus moves to the step slider, as in rag_ingestion.
+    each [n] as a button that never breaks from the punctuation after it, then the source
+    lines exactly as 05 answer_rules writes them. A citation opens its evidence below the
+    answer, next to the source document: the document''s normalized text with the chunk''s
+    words marked with the selection background and an ink underline, beside the chunk''s text
+    and metadata; a parent document (fetch_full_documents) opens as the whole document. One
+    citation is open at a time; activating it again closes it. The open citation is pressed
+    and keeps focus while the panel rebuilds; a citation that no longer exists after a
+    parameter change closes.'
+  focus: When the panel rebuilds while it holds focus, focus stays on the same control or,
+    if that control is gone, moves to the panel's heading. When the panel disappears
+    (stepping back before retrieve-05) while it holds focus, focus moves to the step slider,
+    as in rag_ingestion.
 accessibility:
 - Keyboard operable controls
 - Visible focus
