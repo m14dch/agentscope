@@ -1,0 +1,321 @@
+/* RAG retrieval panel (02 rag_retrieval) and version panel (02 rag_controls.version_panel). */
+.retrieval,
+.versions {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: var(--line-hair) solid var(--color-rule);
+}
+
+.retrieval h3,
+.versions h3 {
+  margin-bottom: var(--space-1);
+}
+
+.retrieval h4 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--size-text);
+  line-height: var(--leading-text);
+  font-weight: var(--weight-strong);
+}
+
+.retrieval h5,
+.versions h4 {
+  margin: 0 0 var(--space-1);
+  font-weight: var(--weight-regular);
+}
+
+.retrieval-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+@media (min-width: 64rem) {
+  .retrieval-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.retrieval-prompt,
+.retrieval-answer,
+.version-pair {
+  margin-top: var(--space-3);
+}
+
+.retrieval-prompt > p,
+.retrieval-answer > p,
+.version-pair > p {
+  margin-bottom: var(--space-1);
+}
+
+/* Scores: a dot plot in HTML, so it fits the width with text at its real size. */
+.retrieval .dotplot {
+  --threshold: 0.7;
+  /* Room right of the track for the value label of a score near 1. */
+  --value-room: 3.5rem;
+  display: grid;
+  grid-template-columns: max-content minmax(6rem, 1fr) minmax(0, max-content);
+  column-gap: var(--space-2);
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  list-style: none;
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+}
+
+.retrieval .dotplot li {
+  display: contents;
+}
+
+.retrieval .dotplot > li > * {
+  padding: 0.25rem 0;
+}
+
+.retrieval .dotplot .name {
+  font-family: var(--font-code);
+  text-align: right;
+  color: var(--color-ink-muted);
+}
+
+.retrieval .dotplot .retained .name {
+  color: var(--color-ink);
+}
+
+.retrieval .track,
+.retrieval .scale {
+  position: relative;
+  margin-right: var(--value-room);
+}
+
+/* The threshold: one line, continuous across rows. */
+.retrieval .track::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--threshold) * 100%);
+  border-left: var(--line-hair) solid var(--color-ink);
+}
+
+/* Discarded: hollow. Retained: filled in the accent (02 handover_decisions). */
+.retrieval .dot {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  left: calc(var(--x) * 100%);
+  width: var(--space-1);
+  height: var(--space-1);
+  margin: calc(var(--space-1) / -2) 0 0 calc(var(--space-1) / -2);
+  border-radius: 50%;
+  border: var(--line-network) solid var(--color-ink-muted);
+  background: var(--color-paper);
+}
+
+.retrieval .retained .dot {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+/* Value labels sit on paper so the threshold line passes behind them. */
+.retrieval .value {
+  position: absolute;
+  left: calc(var(--x) * 100% + var(--space-1));
+  padding: 0 2px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+.retrieval .scale {
+  min-height: var(--leading-small);
+  color: var(--color-ink-muted);
+}
+
+.retrieval .scale:not(.scale--top) {
+  border-top: var(--line-hair) solid var(--color-rule);
+}
+
+.retrieval .scale span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.retrieval .scale--top .threshold-label {
+  left: calc(var(--threshold) * 100%);
+  color: var(--color-ink);
+}
+
+.retrieval .outcome {
+  white-space: nowrap;
+}
+
+.retrieval .retained .outcome {
+  font-weight: var(--weight-strong);
+}
+
+/* Narrow screens: the chunk ID above its track. */
+@media (max-width: 47.99rem) {
+  .retrieval .dotplot {
+    grid-template-columns: minmax(6rem, 1fr) minmax(0, 45%);
+  }
+
+  .retrieval .dotplot .name {
+    grid-column: 1 / -1;
+    text-align: left;
+    padding-bottom: 0;
+  }
+
+  .retrieval .dotplot > li:first-child > :first-child,
+  .retrieval .dotplot > li:last-child > :first-child {
+    display: none;
+  }
+
+  .retrieval .outcome {
+    white-space: normal;
+  }
+}
+
+/* Projection: a plain scatter plot, labelled directly. */
+.projection {
+  width: 100%;
+  margin-bottom: var(--space-1);
+}
+
+.projection-plot {
+  display: block;
+  overflow: visible;
+}
+
+.projection-plot .axis {
+  stroke: var(--color-rule);
+  stroke-width: var(--line-hair);
+}
+
+.projection-plot .axis-name {
+  font-size: var(--size-small);
+  fill: var(--color-ink-muted);
+}
+
+.projection-plot .leader {
+  stroke: var(--color-rule);
+  stroke-width: var(--line-hair);
+}
+
+.projection-plot .point-label {
+  font-family: var(--font-code);
+  font-size: var(--size-small);
+  fill: var(--color-ink-muted);
+}
+
+.projection-plot .retained .point-label,
+.projection-plot .query .point-label {
+  fill: var(--color-ink);
+}
+
+.projection-plot .query .point-label {
+  font-weight: var(--weight-strong);
+}
+
+.projection-plot .mark {
+  fill: var(--color-paper);
+  stroke: var(--color-ink-muted);
+  stroke-width: var(--line-network);
+}
+
+.projection-plot .retained .mark {
+  fill: var(--color-accent);
+  stroke: var(--color-accent);
+}
+
+.projection-plot .query .mark {
+  fill: none;
+  stroke: var(--color-ink);
+  stroke-width: 2px;
+}
+
+.projection-plot .label-mark {
+  fill: var(--color-selection);
+  stroke: none;
+}
+
+/* Prompt messages and document blocks. */
+.prompt-message + .prompt-message {
+  margin-top: var(--space-2);
+}
+
+.code-text {
+  margin: 0;
+  font-family: var(--font-code);
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.document-block {
+  margin: var(--space-1) 0;
+  padding-left: var(--space-1);
+  border-left: var(--line-hair) solid var(--color-rule);
+}
+
+.document-block.untrusted {
+  border-left: var(--line-focus) dashed var(--color-ink);
+}
+
+.untrusted-label,
+.injected {
+  font-weight: var(--weight-strong);
+}
+
+/* The answer: citations are buttons inside the text. */
+.answer-text {
+  max-width: 48rem;
+  margin-bottom: var(--space-1);
+}
+
+.citation {
+  padding: 0 0.125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sources {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-code);
+  overflow-wrap: anywhere;
+}
+
+.evidence-title {
+  font-family: var(--font-code);
+  overflow-wrap: anywhere;
+}
+
+.evidence-text {
+  max-width: 40rem;
+}
+
+/* Version panel. */
+.version-table {
+  border-collapse: collapse;
+}
+
+.version-table th,
+.version-table td {
+  padding: 0.25rem var(--space-2) 0.25rem 0;
+  text-align: left;
+  font-weight: var(--weight-regular);
+}
+
+.version-table thead th {
+  color: var(--color-ink-muted);
+  border-bottom: var(--line-hair) solid var(--color-rule);
+}
+
+.version-table tbody th {
+  font-family: var(--font-code);
+}
+
+.diff {
+  font-weight: var(--weight-strong);
+}
