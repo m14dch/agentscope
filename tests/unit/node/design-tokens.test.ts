@@ -31,6 +31,15 @@ function files(dir: string): string[] {
 // computed colour on the rendered pages instead.
 const SCANNED = /\.(css|ts|js|mjs|html|svg|json|webmanifest)$/;
 const HEX = /#[0-9a-f]{3,8}\b/i;
+/**
+ * The approved brand images keep their own colours (02-ui-ux.yaml design.colour.use and
+ * layout brand); exactly these files are skipped, nothing else in public/brand/.
+ */
+const BRAND_ASSETS = [
+  'public/brand/agentscope-silver-dark.svg',
+  'public/brand/agentscope-silver-favicon.svg',
+  'public/brand/agentscope-silver-light.svg',
+];
 const FUNCTION = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark)\(/i;
 
 /** Code without comments, so prose such as "issue #123" is not mistaken for a colour. */
@@ -79,12 +88,29 @@ describe('colour guard (source scan)', () => {
       ...files(join(ROOT, 'src')),
       ...files(join(ROOT, 'public')),
       join(ROOT, 'index.html'),
-    ].filter((path) => SCANNED.test(path) && !path.endsWith(TOKENS_CSS));
+    ].filter(
+      (path) =>
+        SCANNED.test(path) &&
+        !path.endsWith(TOKENS_CSS) &&
+        !BRAND_ASSETS.includes(path.slice(ROOT.length)),
+    );
     expect(scanned.length).toBeGreaterThan(5);
     const offenders = scanned.flatMap((path) =>
       colourOffenders(path.slice(ROOT.length), readFileSync(path, 'utf8')),
     );
     expect(offenders).toEqual([]);
+  });
+
+  it('skips only the approved brand images, which exist and do carry colour values', () => {
+    expect(
+      files(join(ROOT, 'public/brand'))
+        .map((path) => path.slice(ROOT.length))
+        .sort(),
+    ).toEqual(BRAND_ASSETS);
+    for (const path of BRAND_ASSETS) {
+      // Without the exception they would be offenders: the exception is not stale.
+      expect(colourOffenders(path, readFileSync(join(ROOT, path), 'utf8')), path).not.toEqual([]);
+    }
   });
 });
 
