@@ -146,6 +146,11 @@ combined:
       explanation: One question that needs live account data and published account terms.
       security_boundaries:
       - user-to-agent
+      context_changes:
+      - target: agent_state
+        action: append
+        value_ref: payload
+        description: User question received
     - id: c-02
       phase: question
       sender: agent
@@ -206,6 +211,11 @@ combined:
         - everyday-account@1.2-c50o10-001
         - account-opening@1.2-c50o10-002
         - savings-account@1.2-c50o10-001
+      context_changes:
+      - target: agent_state
+        action: append
+        value_ref: payload
+        description: Prompt assembled with evidence and tool names
     - id: c-04
       phase: planning
       sender: agent

@@ -319,8 +319,9 @@ context_panel:
     description and value. An entry stays labelled "not yet seen by the model" until an
     LLM request after the step that stored it contains its value (any string of eight or
     more characters in the value appears in that request), so content the agent keeps to
-    itself never counts as seen. Descriptions state what was stored, not whether the model
-    saw it.'
+    itself never counts as seen. Entries stored from the model''s own response, and entries
+    whose value has no such string, carry no label. Descriptions state what was stored,
+    not whether the model saw it.'
   model_visible: 'What the model saw in its latest request: each message with its role
     and content, then the number of tool definitions. Before the first request: "The
     model has not seen anything yet."'
