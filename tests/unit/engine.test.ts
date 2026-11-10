@@ -65,7 +65,11 @@ describe('snapshots', () => {
     expect(mcp.server.supportedVersions).toEqual(['2026-07-28']);
     expect(mcp.discovered_tools.length).toBeGreaterThan(0);
     const memory = s.state['agent_state'] as { event: string; description: string }[];
-    expect(memory[0]).toEqual({ event: 'mcp-09', description: 'User question received' });
+    expect(memory[0]).toEqual({
+      event: 'mcp-09',
+      description: 'User question received',
+      value: 'What is the current balance of my bank account?',
+    });
     expect(memory.map((m) => m.event)).toEqual(expect.arrayContaining(['mcp-24', 'mcp-25']));
     expect(s.lineage['balance']?.map((l) => l.value)).toContain(12500.75);
   });

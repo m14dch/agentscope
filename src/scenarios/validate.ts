@@ -215,13 +215,12 @@ function checkScenario(
       else if (ch['action'] !== rule) {
         err(where, `context_change on ${String(ch['target'])} must use action ${rule}`);
       }
+      if (!Object.hasOwn(ch, 'value_ref')) err(where, 'context_change needs a value_ref');
       if (
         ch['target'] === 'model_visible_messages' &&
-        (!Object.hasOwn(ch, 'value_ref') ||
-          e.protocol !== 'LLM_API' ||
-          e.message_type !== 'REQUEST')
+        (e.protocol !== 'LLM_API' || e.message_type !== 'REQUEST')
       ) {
-        err(where, 'model_visible_messages changes only on LLM requests, with a value_ref');
+        err(where, 'model_visible_messages changes only on LLM requests');
       }
     }
     for (const ch of [...list(e.state_changes), ...list(e.context_changes)].map(obj)) {

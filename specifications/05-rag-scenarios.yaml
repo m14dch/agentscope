@@ -987,6 +987,11 @@ scenarios:
     explanation: The user asks what it takes to open and keep an account.
     security_boundaries:
     - user-to-agent
+    context_changes:
+    - target: agent_state
+      action: append
+      value_ref: payload
+      description: User question received
   - id: retrieve-02
     scenario_id: rag-query
     phase: embedding
@@ -1189,6 +1194,11 @@ scenarios:
     - path: retrieval.retained
       op: set
       value_ref: payload.retained
+    context_changes:
+    - target: agent_state
+      action: append
+      value_ref: payload.retained
+      description: Retained chunks held for the prompt
   - id: retrieve-07
     scenario_id: rag-query
     phase: retrieval
@@ -1303,7 +1313,7 @@ scenarios:
     - target: agent_state
       action: append
       value_ref: payload.prompt_after
-      description: Grounded prompt assembled; not yet model-visible
+      description: Grounded prompt assembled
   - id: retrieve-10
     scenario_id: rag-query
     phase: generation

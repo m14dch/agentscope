@@ -230,9 +230,11 @@ def check_scenario(scn, ctx):
                 err(where, f"context_change has unknown target {ch.get('target')}")
             elif ch.get("action") != rule:
                 err(where, f"context_change on {ch.get('target')} must use action {rule}")
+            if "value_ref" not in ch:
+                err(where, "context_change needs a value_ref")
             if ch.get("target") == "model_visible_messages" and (
-                    "value_ref" not in ch or e["protocol"] != "LLM_API" or e["message_type"] != "REQUEST"):
-                err(where, "model_visible_messages changes only on LLM requests, with a value_ref")
+                    e["protocol"] != "LLM_API" or e["message_type"] != "REQUEST"):
+                err(where, "model_visible_messages changes only on LLM requests")
         for ch in e.get("state_changes", []) + e.get("context_changes", []):
             if "value_ref" in ch:
                 try:
