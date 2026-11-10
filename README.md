@@ -52,11 +52,14 @@ in use.
 
 ## Deployment
 
-Every push to `main` runs `.github/workflows/pages.yml`: all CI checks, a build with the base path from
-the repository's Pages settings, deployment to GitHub Pages, then `scripts/check-deployment.ts`, which
-fails the workflow if the live page or any asset it references does not load. The repository's Pages
-source must be **GitHub Actions**. A deployment can also be started by hand from the Actions tab; only `main` deploys. Each build carries
-`<meta name="agentscope-version">` with its commit SHA, so the check also detects a stale deployment.
+One workflow, `.github/workflows/ci.yml`, runs on pull requests, pushes to `main` and manual dispatch. It
+validates the specifications, lints, runs the unit tests, builds `dist/` once and runs the browser tests against
+that build. On `main` (a push, or a run started by hand from the Actions tab) it then deploys exactly that tested
+`dist/` to GitHub Pages and runs `scripts/check-deployment.ts`, which fails the workflow if the live page or any
+asset it references does not load. Pull requests and runs from other branches never deploy. Deployable runs take
+the base path from the repository's Pages settings; other runs build for `/agentscope/`. The repository's Pages
+source must be **GitHub Actions**. Each CI build carries `<meta name="agentscope-version">` with its commit SHA, so
+the check also detects a stale deployment.
 
 To check the live site yourself (add `--expect-version` with a commit SHA to require that exact build):
 
