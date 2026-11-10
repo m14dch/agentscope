@@ -159,8 +159,10 @@ scenario_format:
     Errors identify scenario and event. validate_specs.py additionally validates MCP
     payloads against schema.json, recomputes the RAG reference results and recomputes
     every derived event of rag-index, rag-query and the Combined scenario at the default
-    parameters (an optional step with its enabling parameter on): payloads, tracked values
-    and the explanations that depend on parameters.'
+    parameters (an optional step with its enabling parameter on): payloads, tracked values,
+    the explanations of index-05, hybrid-02, hybrid-03 and retrieve-06, and the chunk-citation
+    wording of the retrieve-09 system prompt. The other explanations that depend on parameters
+    are checked by the TypeScript unit tests only.'
   encoding: 'YAML is the design specification. A Vite plugin parses it into a bundled
     JSON module at build time; the JSON is generated and never committed. Plain scalars
     are typed as PyYAML safe_load types them: booleans yes, no, on, off, true and false

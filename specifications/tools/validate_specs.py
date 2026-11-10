@@ -538,7 +538,9 @@ def corpus_kwargs(variant):
 
 def threshold_text(x):
     """Thresholds in explanations are rounded to 2 decimals (05 derived_event_rules.inputs)."""
-    return str(round(x, 2))
+    r = round(float(x), 2)
+    # Like the TypeScript String(Number(x.toFixed(2))): 0 and 1 print without '.0'.
+    return str(int(r)) if r == int(r) else str(r)
 
 
 def user_message(question, evidence, untrusted):
@@ -645,6 +647,9 @@ def check_derived_defaults(R, rag, registry, ranked, sel):
     expect("rag-query/retrieve-09", after["document_blocks"],
            [{"chunkId": c["id"], "trust": "untrusted" if c["documentId"] in untrusted else "official"} for c in sel])
     expect("rag-query/retrieve-09", ev["retrieve-09"]["tracked_values"], tracked)
+    if after["system"].count("document ID, version and chunk ID") != 1 or "document ID and version" in after["system"]:
+        err("rag-query/retrieve-09", "prompt_after.system must ask for chunk citations ('document ID, version "
+            "and chunk ID') exactly once at the default parameters")
     messages = ev["retrieve-10"]["payload"]["messages"]
     expect("rag-query/retrieve-10", messages[0]["content"], after["system"])
     expect("rag-query/retrieve-10", messages[1]["content"], user_message(scn["question"], sel, untrusted))
