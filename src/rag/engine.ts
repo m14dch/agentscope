@@ -139,21 +139,26 @@ export const INJECTION_NOTE =
   'Note: a retrieved document contained instructions addressed to the assistant; they were treated as data and ignored.';
 
 /**
- * Python's round(x, 4): the exact decimal value of the double, rounded half to even.
- * Math.round(x * 1e4) / 1e4 differs on some inputs.
+ * Python's round(x, digits): the exact decimal value of the double, rounded half to even.
+ * Math.round(x * 10 ** digits) / 10 ** digits and toFixed differ on some inputs.
  */
-export function round4(x: number): number {
+export function pyRound(x: number, digits: number): number {
   if (!Number.isFinite(x)) throw new RangeError(`cannot round ${x}`);
   const sign = x < 0 ? -1 : 1;
   // Exact for the magnitudes used here: a double's decimal expansion near 1 has < 60 digits.
   const [int = '0', frac = ''] = Math.abs(x).toFixed(80).split('.');
-  const kept = frac.slice(0, 4);
-  const rest = frac.slice(4);
+  const kept = frac.slice(0, digits);
+  const rest = frac.slice(digits);
   let units = BigInt(int + kept);
   const half = '5'.padEnd(rest.length, '0');
   if (rest > half || (rest === half && units % 2n === 1n)) units += 1n;
-  const digits = units.toString().padStart(5, '0');
-  return sign * Number(`${digits.slice(0, -4)}.${digits.slice(-4)}`);
+  const text = units.toString().padStart(digits + 1, '0');
+  return sign * Number(`${text.slice(0, -digits)}.${text.slice(-digits)}`);
+}
+
+/** Python's round(x, 4). */
+export function round4(x: number): number {
+  return pyRound(x, 4);
 }
 
 /** chunking.normalize: drop leading heading markers on each line, then join lines. */
