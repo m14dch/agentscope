@@ -12,7 +12,7 @@ const inspector = (page: Page) => page.getByRole('complementary', { name: 'Curre
 
 /** The rendered payload as JSON: folds and branches opened, fold labels removed. */
 async function renderedPayload(page: Page): Promise<unknown> {
-  const text = await page.locator('.tab-panel .json').evaluate((root) => {
+  const text = await page.locator('.tab-panel > .json').evaluate((root) => {
     const copy = root.cloneNode(true) as HTMLElement;
     copy.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''));
     copy.querySelectorAll('.json-fold > summary, .json-label').forEach((s) => s.remove());

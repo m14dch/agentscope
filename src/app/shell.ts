@@ -348,6 +348,8 @@ export class Shell {
       boundaries: this.sources.security.trust_boundaries as unknown as Boundary[],
       jump: (k) => this.go(() => player.jump(k)),
       select: (selection) => this.select(selection),
+      errorTaxonomy: this.sources.security.error_taxonomy,
+      earlierRevision: this.sources.mcp.protocol.earlier_revision_handshake,
     });
     const inspector = el(
       'aside',
