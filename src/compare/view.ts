@@ -93,7 +93,10 @@ export class CompareView {
   private playing = false;
   private rate: Speed = 1;
   private timer: unknown;
-  /** The position last announced, so a mode switch or a repeated render stays quiet. */
+  /**
+   * The position last announced, so a mode switch, a repeated render or a pause where the
+   * position was already announced stays quiet.
+   */
   private announced: number;
 
   constructor(root: HTMLElement, options: CompareOptions) {
@@ -331,14 +334,28 @@ export class CompareView {
     return id === undefined ? '' : (this.phaseLabels.get(id) ?? id);
   }
 
-  /** The pane's position line, e.g. "Step 6 of 10 · Search and filter". */
-  private paneWhere(pane: Pane): string {
+  /**
+   * The pane's position line, e.g. "Step 6 of 10 · Search and filter". A waiting pane names
+   * no step of an earlier phase: "No step in Preparation · 0 of 10 played".
+   */
+  private paneWhere(pane: Pane, at: PaneAt, semantic: string | undefined): string {
     const { player, spec } = pane;
     const k = player.cursor;
+    if (at.status === 'placeholder') {
+      return `No step in ${this.phaseLabel(semantic)} · ${k} of ${player.playback.length} played`;
+    }
     const event = player.playback.event(k);
     const phase = event ? spec.scenario.phases.find((p) => p.id === event.phase) : undefined;
     const n = player.playback.length;
     return phase ? `Step ${k} of ${n} · ${phase.label}` : `Step ${k} of ${n}`;
+  }
+
+  /** What a pane without events in the phase shows (06 compare.placeholders). */
+  private placeholder(scenario: string, phase: string | undefined): string {
+    return (
+      this.options.compare.placeholders?.[scenario]?.[phase ?? ''] ??
+      `No step in ${this.phaseLabel(phase)}.`
+    );
   }
 
   private paneMessage(pane: Pane, at: PaneAt, other: Pane, phase: string | undefined): Node[] {
@@ -347,10 +364,7 @@ export class CompareView {
       return [el('p', { class: 'message' }, 'Nothing has happened yet.')];
     }
     if (at.status === 'placeholder') {
-      const text =
-        this.options.compare.placeholders?.[scenario.id]?.[phase ?? ''] ??
-        `No step in ${this.phaseLabel(phase)}.`;
-      return [el('p', { class: 'message' }, text)];
+      return [el('p', { class: 'message' }, this.placeholder(scenario.id, phase))];
     }
     const event = pane.player.playback.event(at.cursor);
     if (!event) return [];
@@ -396,8 +410,9 @@ export class CompareView {
     for (const side of [0, 1] as const) {
       const pane = this.panes[side];
       const at = step.panes[side];
+      pane.view.setHeld(at.status === 'placeholder');
       pane.player.jump(at.cursor);
-      const paneWhere = this.paneWhere(pane);
+      const paneWhere = this.paneWhere(pane, at, step.phase);
       pane.position.textContent = paneWhere;
       pane.slider.value = String(at.cursor);
       pane.slider.setAttribute('aria-valuetext', paneWhere);
@@ -408,15 +423,15 @@ export class CompareView {
       pane.inspect.href = route;
       pane.inspect.textContent = `Inspect step ${at.cursor} in ${pane.spec.label}`;
       const n = pane.player.playback.length;
-      const state =
-        at.status === 'done'
-          ? ', done with this phase'
-          : at.status === 'placeholder'
-            ? ', no step in this phase'
-            : '';
-      announcements.push(`${pane.spec.label} step ${at.cursor} of ${n}${state}.`);
+      announcements.push(
+        at.status === 'placeholder'
+          ? `${pane.spec.label}: ${this.placeholder(pane.spec.scenario.id, step.phase)}`
+          : `${pane.spec.label} step ${at.cursor} of ${n}${at.status === 'done' ? ', done with this phase' : ''}.`,
+      );
     }
-    if (this.announced !== this.position) {
+    // Quiet while playing; the position is announced once playback pauses or ends, and after
+    // each manual step while paused (02 compare_view.accessibility).
+    if (!this.playing && this.announced !== this.position) {
       this.announced = this.position;
       this.announcer.textContent = [
         phase ? `${phase}.` : 'Before the first step.',

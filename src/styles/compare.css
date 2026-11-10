@@ -110,15 +110,6 @@
   padding-top: calc((var(--leading-text) - var(--leading-small)) / 2);
 }
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 /* Stacked below 64rem, the left pane first. */
 @media (max-width: 63.99rem) {
   .compare-panes {

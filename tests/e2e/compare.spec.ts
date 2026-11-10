@@ -63,11 +63,14 @@ test('compare-sync: Next keeps both panes on the same semantic phase, with the R
     await expect(page.locator('.compare-phases [aria-current="step"]')).toHaveText(phase);
     expect(await paneSemantic(mcp(page), mcpPhases), `MCP at compare step ${s}`).toBe(phase);
     if (phase === 'Preparation') {
-      // RAG has nothing in preparation: it stays at step 0 and says why.
+      // RAG has nothing in preparation: it names no step of its own and says why.
       await expect(rag(page).locator('.compare-message')).toHaveText(
         'Index built earlier by rag-index.',
       );
-      await expect(rag(page).locator('.compare-position p')).toHaveText('Step 0 of 10');
+      await expect(rag(page).locator('.compare-position p')).toHaveText(
+        'No step in Preparation · 0 of 10 played',
+      );
+      await expect(rag(page).locator('[data-current]')).toHaveCount(0);
     } else {
       expect(await paneSemantic(rag(page), ragPhases), `RAG at compare step ${s}`).toBe(phase);
     }
@@ -99,6 +102,9 @@ test('compare-sync: stepping either pane moves the other to the same semantic ph
   await expect(status(page)).toHaveText('Step 4 of 28 · Preparation');
   await expect(rag(page).locator('.compare-message')).toHaveText(
     'Index built earlier by rag-index.',
+  );
+  await expect(page.locator('[aria-live="polite"].visually-hidden')).toHaveText(
+    'Preparation. RAG: Index built earlier by rag-index. MCP step 4 of 28.',
   );
   // And forward to RAG's last retrieval step: MCP goes to the same offset of that phase.
   await ragSlider.fill('6');
@@ -133,12 +139,23 @@ test('compare: shared controls, keys and the mode switch act on both panes', asy
   await expect(status(page)).toHaveText('Step 0 of 28');
   await page.getByRole('slider', { name: 'Compare step' }).fill('28');
   await expect(status(page)).toHaveText('Step 28 of 28 · Answer');
-  // Play from the end does nothing; from step 27 it plays to the end and pauses.
-  await page.getByRole('slider', { name: 'Compare step' }).fill('27');
+  // The live region stays quiet while playing and speaks once playback pauses.
+  const live = page.locator('[aria-live="polite"].visually-hidden');
+  await page.getByRole('slider', { name: 'Compare step' }).fill('20');
+  await expect(live).toContainText('MCP step 20 of 28.');
   await page.getByRole('button', { name: '4×' }).click();
+  await page.getByRole('button', { name: 'Play' }).click();
+  await expect(status(page)).toHaveText(/^Step 2[12] of 28/, { timeout: 3000 });
+  await expect(live).toContainText('MCP step 20 of 28.');
+  await page.getByRole('button', { name: 'Pause' }).click();
+  const paused = ((await status(page).textContent()) ?? '').match(/^Step (\d+)/)?.[1];
+  await expect(live).toContainText(`MCP step ${paused} of 28.`);
+  // From step 27 it plays to the end, pauses and says so.
+  await page.getByRole('slider', { name: 'Compare step' }).fill('27');
   await page.getByRole('button', { name: 'Play' }).click();
   await expect(status(page)).toHaveText('Step 28 of 28 · Answer', { timeout: 3000 });
   await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
+  await expect(live).toHaveText('Answer. RAG step 10 of 10. MCP step 28 of 28.');
   // Every aspect is one sentence beside its label.
   await expect(page.locator('.compare-aspects dt')).toHaveText([
     'Data source',
