@@ -105,7 +105,9 @@ design:
   - The 2D projection is a plain scatter plot with points labelled directly and axes
     named by meaning.
   - Charts fit the available width with text at its real size. Only sequence diagrams
-    keep a fixed scale and scroll horizontally on narrow screens.
+    keep a fixed scale and scroll horizontally on narrow screens; as an interim exception
+    until issue 30, the RAG projection (rag_retrieval.projection) may scroll inside its
+    named, keyboard-focusable region on phones (below 768 px), never from 768 px up.
   - Figures expose their text to assistive technology; scrollable regions are named
     and keyboard-focusable.
   motion: Motion only shows causality (an arrow draws from sender to receiver). Nothing
@@ -475,22 +477,26 @@ rag_retrieval:
     an untrusted document says "untrusted" in its row. With reranking (retrieve-06 rerank),
     one sentence below says that the <k> best by reranker score are retained, so a retained
     chunk can score lower than a dropped one. The outcome wraps within its column; no text
-    leaves its column.'
+    leaves its column. The threshold''s label keeps clear of the top end of its line.'
   projection: 'A plain scatter plot of 05 fixtures.projection_2d (x = cost − rules, y = product
     − technical, both from −1 to 1, equal scales): the axes are named by meaning at their
     ends (rules ← → cost, technical ↓ ↑ product), every chunk point and the question''s point
     (retrieve-03) are labelled directly, and retained points are filled in the accent. A label
     sits right or left of its point; where it would overlap another label, a point, the
     question''s mark, an axis, an axis name or a leader line, it moves up or down by a line,
-    nearest first, beside a leader line kept as short as that allows. A lineage-selected
+    nearest first, beside a leader line kept as short as that allows. A leader line crosses
+    no label, point, axis name or other leader line. The plot keeps a side of at least 260
+    px and only the room its outermost labels need on each side. A lineage-selected
     chunk''s label has the selection background and an ink underline. Each point is exposed to
     assistive technology as an image named by its chunk ID, coordinates and whether it is
     retained. One sentence below states that the projection is fixed and conceptual and that
     scores are computed in all dimensions. The plot fits the available width with text at its
-    real size; where the screen is too narrow for the plot and its labels, it scrolls
-    horizontally in a named, keyboard-focusable region.'
+    real size from 768 px up; on narrower screens, where the plot and its labels cannot fit,
+    it scrolls horizontally in a named, keyboard-focusable region (labels_and_charts).'
   prompt: 'From retrieve-09, "Prompt before and after retrieval": retrieve-09 prompt_before
-    and the grounded messages of retrieve-10 side by side (two columns from 64rem, stacked
+    and retrieve-09 prompt_after filled in (its system message, and its user_template with
+    the question and one document block per item of its document_blocks and retrievedText,
+    written as retrieve-10 writes them) side by side (two columns from 64rem, stacked
     below), each message with its role. Until retrieve-10 a line says the prompt is assembled
     and the model has not seen it; from retrieve-10 it names the step that sent it. Each
     document block is set apart with its ID, version, chunk and trust; an untrusted block
