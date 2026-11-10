@@ -193,3 +193,39 @@
 .select-value[aria-pressed='true'] {
   background: var(--color-selection);
 }
+
+/* An error step names its kind in words; colour is never the only carrier (02 error_line). */
+.error-line {
+  margin-top: var(--space-1);
+}
+
+.error-kind {
+  color: var(--color-error);
+  font-weight: var(--weight-strong);
+}
+
+/* The earlier-revision comparison: collapsed, opened only on request (02 earlier_revision). */
+.earlier {
+  margin-top: var(--space-2);
+}
+
+.earlier > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.earlier > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.earlier-message {
+  margin-top: var(--space-2);
+}
+
+.earlier-message p {
+  margin: 0;
+}

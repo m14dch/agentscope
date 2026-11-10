@@ -4,8 +4,14 @@
  * A tab is shown only when the step has content for it. The inspector is rebuilt only
  * when the step changes, and focus stays on the equivalent control.
  */
-import { arrowLabel } from '../diagram/model.ts';
-import type { Json, ScenarioEvent } from '../scenarios/types.ts';
+import { type ErrorKind, errorKind, operationLabel } from '../diagram/model.ts';
+import type {
+  EarlierMessage,
+  EarlierRevision,
+  HttpEnvelope,
+  Json,
+  ScenarioEvent,
+} from '../scenarios/types.ts';
 import { jsonTree, mcpBoilerplate, newInRequest, type TreeNode, trackedValues } from './json.ts';
 
 export type TabId = 'payload' | 'transport' | 'security' | 'lineage';
@@ -31,6 +37,29 @@ export interface InspectorContext {
   jump: (step: number) => void;
   /** Selects a tracked value, or clears the selection (02 lineage_selection.select). */
   select: (selection: Selection | undefined) => void;
+  /** 07-security-protocols.yaml error_taxonomy, by key (tool_execution, protocol, ...). */
+  errorTaxonomy?: Readonly<Record<string, string>> | undefined;
+  /** 04-mcp-scenarios.yaml protocol.earlier_revision_handshake, for server/discover. */
+  earlierRevision?: EarlierRevision | undefined;
+}
+
+/** The error line of a step (02 inspector.error_line); undefined unless it is an error arrow. */
+export function errorLine(
+  event: ScenarioEvent,
+  taxonomy: Readonly<Record<string, string>> = {},
+): { kind: ErrorKind; label: string; definition: string } | undefined {
+  const kind = errorKind(event);
+  if (!kind) return undefined;
+  return { kind, label: `× ${kind} error`, definition: taxonomy[kind.replace(' ', '_')] ?? '' };
+}
+
+/** Whether a step offers the earlier-revision comparison (02 inspector.earlier_revision). */
+export function offersEarlierRevision(event: ScenarioEvent): boolean {
+  return (
+    event.protocol === 'MCP' &&
+    event.message_type === 'REQUEST' &&
+    event.operation === 'server/discover'
+  );
 }
 
 /** A selected tracked value. */
@@ -78,10 +107,7 @@ export function transportLines(
   const event = events[cursor - 1];
   const http = event?.http;
   if (!event || !http) return undefined;
-  const start =
-    http.status !== undefined
-      ? `HTTP ${http.status}`
-      : `${http.method ?? ''} ${http.path ?? ''}`.trim();
+  const start = startLine(http);
   const previous =
     event.message_type === 'REQUEST'
       ? events
@@ -95,6 +121,13 @@ export function transportLines(
     shown: headers.filter(([k, v]) => previous?.[k] !== v),
     folded: headers.filter(([k, v]) => previous?.[k] === v),
   };
+}
+
+/** The request line (method and path) or the status line of an envelope. */
+function startLine(http: HttpEnvelope): string {
+  return http.status !== undefined
+    ? `HTTP ${http.status}`
+    : `${http.method ?? ''} ${http.path ?? ''}`.trim();
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -280,9 +313,20 @@ export class Inspector {
   private message(event: ScenarioEvent): Node[] {
     const from = this.context.labels[event.sender] ?? event.sender;
     const to = this.context.labels[event.receiver] ?? event.receiver;
+    const error = errorLine(event, this.context.errorTaxonomy);
     return [
       el('p', 'message', event.explanation),
-      el('p', 'small muted', `${from} → ${to} · ${arrowLabel(event)}`),
+      el('p', 'small muted', `${from} → ${to} · ${operationLabel(event)}`),
+      ...(error
+        ? [
+            el(
+              'p',
+              'error-line small',
+              el('span', 'error-kind', error.label),
+              ...(error.definition ? [`. ${error.definition}`] : []),
+            ),
+          ]
+        : []),
     ];
   }
 
@@ -344,7 +388,49 @@ export class Inspector {
           )
         : trackedValues(event.tracked_values),
     });
-    return [tools, el('div', 'json', renderTree(tree)), ...this.notes(event)];
+    const earlier =
+      offersEarlierRevision(event) && this.context.earlierRevision
+        ? [this.earlierRevision(this.context.earlierRevision)]
+        : [];
+    return [tools, el('div', 'json', renderTree(tree)), ...this.notes(event), ...earlier];
+  }
+
+  /** The initialize handshake of an earlier revision, collapsed (02 inspector.earlier_revision). */
+  private earlierRevision(earlier: EarlierRevision): HTMLElement {
+    const details = el('details', 'json-fold earlier');
+    details.append(
+      focusKey(
+        el(
+          'summary',
+          'small',
+          'Compare with the initialize handshake of revision ',
+          // The revision date never breaks at its hyphens.
+          el('span', 'nowrap', earlier.revision),
+        ),
+        'earlier',
+      ),
+      el('p', 'small', earlier.summary),
+      ...earlier.messages.map((m) => this.earlierMessage(m, earlier.revision)),
+    );
+    return details;
+  }
+
+  private earlierMessage(m: EarlierMessage, revision: string): HTMLElement {
+    const from = this.context.labels[m.sender] ?? m.sender;
+    const to = this.context.labels[m.receiver] ?? m.receiver;
+    const operation = m.operation.startsWith('HTTP') ? m.operation : `MCP · ${m.operation}`;
+    const body =
+      m.payload === null
+        ? el('p', 'small muted', 'No body')
+        : el('div', 'json', renderTree(jsonTree(m.payload, { fold: mcpBoilerplate })));
+    return el(
+      'div',
+      'earlier-message',
+      el('p', 'small muted', `Revision ${revision} · ${from} → ${to} · ${operation}`),
+      el('p', 'code-line', startLine(m.http)),
+      el('div', 'json', ...Object.entries(m.http.headers ?? {}).map(headerLine)),
+      body,
+    );
   }
 
   private transport(step: InspectorStep): Node[] {

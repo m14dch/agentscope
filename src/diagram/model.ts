@@ -31,13 +31,16 @@ const PREFIX: Partial<Record<ScenarioEvent['protocol'], string>> = {
   DB: 'DB',
 };
 
+/** The operation, prefixed with its protocol (02 diagram.labels), without any error mark. */
+export function operationLabel(e: ScenarioEvent): string {
+  const prefix = PREFIX[e.protocol];
+  return prefix && !e.operation.startsWith(prefix) ? `${prefix} · ${e.operation}` : e.operation;
+}
+
 /** The arrow's direct text label (02 diagram.labels and error_events). */
 export function arrowLabel(e: ScenarioEvent): string {
-  const prefix = PREFIX[e.protocol];
-  const base =
-    prefix && !e.operation.startsWith(prefix) ? `${prefix} · ${e.operation}` : e.operation;
   const kind = errorKind(e);
-  return kind ? `× ${kind} error · ${base}` : base;
+  return kind ? `× ${kind} error · ${operationLabel(e)}` : operationLabel(e);
 }
 
 export function lineKind(e: ScenarioEvent): LineKind {
