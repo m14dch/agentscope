@@ -122,7 +122,8 @@ navigation:
     #/mcp/mcp-balance/14/protocol). Missing parts take defaults: the tab''s first scenario,
     step 0, architecture mode. A step beyond the scenario is clamped. An unknown tab or
     scenario shows an error naming it, with a link to the tab. Stepping replaces the
-    history entry; changing tab or scenario adds one.'
+    history entry; changing tab or scenario adds one. Parameters are not part of the route,
+    so a step number refers to the events played at the scenario''s default parameters.'
   scenario_picker: One menu per tab listing its scenarios by title; each variant shows
     its lesson on a second line. The current scenario is marked.
 layout:
@@ -242,7 +243,10 @@ controls:
     play: Advance one step per interval until the last step, then pause
     manual_navigation: Next, previous, start and jump keep playback running and restart
       the interval
-    parameter_change: The cursor stays, clamped to the new number of steps
+    parameter_change: The cursor stays on the same event if that event is still played;
+      otherwise it moves to the nearest earlier event that is still played, or to 0. Optional
+      steps that a parameter adds or removes before the cursor therefore change the step
+      number, not the event
   step_interval_ms: 1500
   step_interval_rule: At speed s, one step every step_interval_ms / s milliseconds; reduced
     motion keeps the interval and removes animated transitions

@@ -277,6 +277,10 @@ def check_derived(scn, by_id):
         for eid in step.get("events", []):
             if eid not in local:
                 err(sid, f"optional_steps names unknown event {eid}")
+                continue
+            pair = by_id.get(eid if eid in by_id else f"{sid}:{eid}", {}).get("pair_id")
+            if pair is not None and pair.split(":", 1)[-1] not in step.get("events", []):
+                err(sid, f"optional step {eid} and its pair {pair.split(':', 1)[-1]} are in different entries")
 
 
 def check_mcp(e, by_id, ctx, where):
@@ -391,7 +395,7 @@ def rag_engine(rag):
             while True:
                 t = " ".join(w[i:i + size])
                 out.append({"id": f"{doc.rsplit('.', 1)[0]}@{ver}-c{size}o{ov}-{n:03d}", "documentId": doc,
-                            "version": ver, "text": t, "embedding": embed(t)})
+                            "version": ver, "startWord": i, "text": t, "embedding": embed(t)})
                 if i + size >= len(w):
                     break
                 i += size - ov
@@ -490,16 +494,29 @@ def rag_engine(rag):
             return str(cites.index(c) + 1)
         return re.sub("\x00([^\x00]+)\x00", number, " ".join(parts)), cites, supported
 
+    def parents(sel, docs):
+        """The parent documents of the retained chunks (derived_event_rules.evidence)."""
+        out = []
+        for c in sel:
+            key = (c["documentId"], c["version"])
+            if any((p["documentId"], p["version"]) == key for p in out):
+                continue
+            text = next(t for d, v, t in docs if (d, v) == key)
+            out.append({"id": f"{c['documentId'].rsplit('.', 1)[0]}@{c['version']}", "documentId": c["documentId"],
+                        "version": c["version"], "text": " ".join(norm(text).split()), "document": True})
+        return out
+
     def source_lines(cites):
-        return [f"[{i + 1}] {c['documentId']} v{c['version']}, chunk {c['id']}" for i, c in enumerate(cites)]
+        return [f"[{i + 1}] {c['documentId']} v{c['version']}, "
+                + ("full document" if c.get("document") else f"chunk {c['id']}") for i, c in enumerate(cites)]
 
     def source_objects(cites):
-        return [{"citation": i + 1, "chunkId": c["id"], "documentId": c["documentId"], "version": c["version"]}
-                for i, c in enumerate(cites)]
+        return [{"citation": i + 1, **({} if c.get("document") else {"chunkId": c["id"]}),
+                 "documentId": c["documentId"], "version": c["version"]} for i, c in enumerate(cites)]
 
-    return {"corpus": corpus, "retrieve": retrieve, "answer": answer, "chunks": chunks,
-            "source_lines": source_lines, "source_objects": source_objects, "default_k": default_k,
-            "default_thr": default_thr, "params": params}
+    return {"corpus": corpus, "retrieve": retrieve, "answer": answer, "chunks": chunks, "parents": parents,
+            "norm": norm, "toks": toks, "source_lines": source_lines, "source_objects": source_objects,
+            "default_k": default_k, "default_thr": default_thr, "params": params}
 
 
 def corpus_kwargs(variant):
@@ -517,6 +534,123 @@ def corpus_kwargs(variant):
     if fo.get("exclude_documents"):
         kw["exclude"] = tuple(fo["exclude_documents"])
     return kw
+
+
+def threshold_text(x):
+    """Thresholds in explanations are rounded to 2 decimals (05 derived_event_rules.inputs)."""
+    return str(round(x, 2))
+
+
+def user_message(question, evidence, untrusted):
+    """retrieve-10's user message (05 derived_event_rules.retrieve-10)."""
+    def block(c):
+        trust = "untrusted" if c["documentId"] in untrusted else "official"
+        chunk = "" if c.get("document") else f' chunk="{c["id"]}"'
+        return f'<document id="{c["documentId"]}" version="{c["version"]}"{chunk} trust="{trust}">\n{c["text"]}\n</document>'
+    blocks = "\n".join(block(c) for c in evidence) if evidence else "(none)"
+    return f"Question: {question}\n\nRetrieved documents:\n{blocks}"
+
+
+def check_derived_defaults(R, rag, registry, ranked, sel):
+    """Every derived event of rag-index and rag-query at the default parameters; an optional step
+    with its enabling parameter on (05 derived_event_rules)."""
+    fx = rag["fixtures"]
+    untrusted = {d["id"] for d in fx["untrusted_documents"]}
+    chunking = next(sc for sc in rag["scenarios"] if sc["id"] == "rag-index")["parameters"]
+    size, ov = chunking["chunk_size_words"]["default"], chunking["overlap_words"]["default"]
+    docs = R["corpus"]()
+    all_chunks = R["chunks"](docs, size, ov)
+    ids = [c["id"] for c in all_chunks]
+
+    def expect(where, got, want):
+        if got != want:
+            err(where, f"{got!r} differs from the derivation {want!r}")
+
+    idx = {e["id"]: e for e in registry["rag-index"]["events"]}
+    expect("rag-index/index-04", {k: idx["index-04"]["payload"][k] for k in ("chunk_size_words", "overlap_words")},
+           {"chunk_size_words": size, "overlap_words": ov})
+    expect("rag-index/index-05", idx["index-05"]["payload"]["chunks"],
+           [{"chunkId": c["id"], "documentId": c["documentId"], "version": c["version"],
+             "startWord": c["startWord"], "text": c["text"]} for c in all_chunks])
+    expect("rag-index/index-05", idx["index-05"]["explanation"],
+           f"{len(all_chunks)} chunks, each pointing back to its source document.")
+    expect("rag-index/index-05", idx["index-05"]["tracked_values"]["chunkId"], ids)
+    expect("rag-index/index-06", idx["index-06"]["payload"]["inputs"], ids)
+    expect("rag-index/index-07", idx["index-07"]["payload"]["embeddings"],
+           [{"chunkId": c["id"], "embedding": c["embedding"]} for c in all_chunks])
+    expect("rag-index/index-08", idx["index-08"]["payload"]["records"], len(ids))
+    expect("rag-index/index-09", idx["index-09"]["payload"]["upserted"], len(ids))
+    expect("rag-index/index-10", (idx["index-10"]["payload"]["documents"], idx["index-10"]["payload"]["chunks"]),
+           (len({d for d, _, _ in docs}), len(ids)))
+
+    scn = registry["rag-query"]
+    ev = {e["id"]: e for e in scn["events"]}
+    params = {k: p["default"] for k, p in scn["parameters"].items()}
+    thr, k = params["similarity_threshold"], params["top_k"]
+    got = [c["id"] for c in sel]
+    sel_docs = sorted({c["documentId"] for c in sel})
+    expect("rag-query/retrieve-05", ev["retrieve-05"]["payload"]["matches"],
+           [{"chunkId": c["id"], "documentId": c["documentId"], "version": c["version"], "score": c["score"]}
+            for c in ranked])
+    expect("rag-query/retrieve-05", ev["retrieve-05"]["tracked_values"]["chunkId"], [c["id"] for c in ranked])
+    # hybrid-02 with keyword_retrieval on, hybrid-03 with rerank on.
+    hits = sorted([c for c in ranked if c["keyword"] > 0], key=lambda c: c["id"])
+    expect("rag-query/hybrid-02", ev["hybrid-02"]["payload"]["hits"],
+           [{"chunkId": c["id"], "keywordScore": c["keyword"], "score": c["score"]} for c in hits])
+    below = sorted([c for c in hits if c["score"] < thr], key=lambda c: (c["score"], c["id"]))
+    if not hits:
+        text = "No chunk contains a query term."
+    elif not below:
+        text = f"Exact-term hits. All of them reach the similarity threshold of {threshold_text(thr)}."
+    else:
+        present = set(R["toks"](below[0]["text"]))
+        terms = [f"'{t}'" for t in sorted(set(R["toks"](fx["query"])) - set(fx["keyword_retrieval"]["stopwords"]))
+                 if t in present]
+        terms = terms[0] if len(terms) == 1 else ", ".join(terms[:-1]) + " and " + terms[-1]
+        if len(below) == 1:
+            text = (f"Exact-term hits. One hit scores below the similarity threshold of {threshold_text(thr)}: "
+                    f"{below[0]['id']}, a lexical false positive that matches only {terms} and that the "
+                    "threshold later removes.")
+        else:
+            text = (f"Exact-term hits. {len(below)} hits score below the similarity threshold of {threshold_text(thr)}: "
+                    f"lexical false positives that the threshold later removes, such as {below[0]['id']}, which "
+                    f"matches only {terms}.")
+    expect("rag-query/hybrid-02", ev["hybrid-02"]["explanation"], text)
+    above = sorted([c for c in ranked if c["score"] >= thr], key=lambda c: (-c["rerank"], c["id"]))
+    expect("rag-query/hybrid-03", ev["hybrid-03"]["payload"]["candidates"],
+           [{"chunkId": c["id"], "score": c["score"], "keywordScore": c["keyword"], "rerankScore": c["rerank"]}
+            for c in above])
+    expect("rag-query/hybrid-03", ev["hybrid-03"]["explanation"],
+           "Drop chunks below the similarity threshold, then order by the reranker score, which also counts "
+           "the query terms in each chunk.")
+    expect("rag-query/retrieve-06", ev["retrieve-06"]["payload"],
+           {"top_k": k, "similarity_threshold": thr, "rerank": params["rerank"], "retained": got,
+            "discarded": [{"chunkId": c["id"], "score": c["score"],
+                           "reason": "below threshold" if c["score"] < thr else "outside topK"}
+                          for c in ranked if c["id"] not in got]})
+    best = "the best one" if k == 1 else f"the {k} best"
+    expect("rag-query/retrieve-06", ev["retrieve-06"]["explanation"],
+           f"Keep chunks with a score of at least {threshold_text(thr)}, then {best}. Ties are broken by chunk ID."
+           + ("" if sel else f" No chunk reaches {threshold_text(thr)}, so nothing is retained."))
+    expect("rag-query/retrieve-06", ev["retrieve-06"]["tracked_values"], {"chunkId": got})
+    # retrieve-07 and retrieve-08 with fetch_full_documents on.
+    parents = R["parents"](sel, docs)
+    expect("rag-query/retrieve-07", ev["retrieve-07"]["payload"]["documents"],
+           [{"documentId": p["documentId"], "version": p["version"]} for p in parents])
+    expect("rag-query/retrieve-08", ev["retrieve-08"]["payload"]["documents"],
+           [{"documentId": p["documentId"], "version": p["version"], "words": len(p["text"].split()),
+             "text": p["text"]} for p in parents])
+    tracked = {"sourceDocumentId": sel_docs, "chunkId": got, "retrievedText": [c["text"] for c in sel]}
+    after = ev["retrieve-09"]["payload"]["prompt_after"]
+    expect("rag-query/retrieve-09", after["document_blocks"],
+           [{"chunkId": c["id"], "trust": "untrusted" if c["documentId"] in untrusted else "official"} for c in sel])
+    expect("rag-query/retrieve-09", ev["retrieve-09"]["tracked_values"], tracked)
+    messages = ev["retrieve-10"]["payload"]["messages"]
+    expect("rag-query/retrieve-10", messages[0]["content"], after["system"])
+    expect("rag-query/retrieve-10", messages[1]["content"], user_message(scn["question"], sel, untrusted))
+    expect("rag-query/retrieve-10", ev["retrieve-10"]["tracked_values"], tracked)
+    for eid in ("retrieve-11", "retrieve-12"):
+        expect(f"rag-query/{eid}", ev[eid]["tracked_values"], {"sourceDocumentId": sel_docs, "chunkId": got})
 
 
 def check_rag(rag, comp, registry, ui):
@@ -605,17 +739,7 @@ def check_rag(rag, comp, registry, ui):
                 err("rag-query/retrieve-11", "model message differs from the composed answer and sources")
             if ev["retrieve-12"]["payload"]["answer"] != a or ev["retrieve-12"]["payload"]["sources"] != R["source_objects"](cites):
                 err("rag-query/retrieve-12", "answer or sources differ")
-            user = ev["retrieve-10"]["payload"]["messages"][1]["content"]
-            for c in sel:
-                if c["text"] not in user:
-                    err("rag-query/retrieve-10", f"prompt lacks text of {c['id']}")
-            idx = {e["id"]: e for e in registry["rag-index"]["events"]}
-            stored = [(c["chunkId"], c["text"]) for c in idx["index-05"]["payload"]["chunks"]]
-            all_chunks = R["chunks"](R["corpus"](), 50, 10)
-            if stored != [(c["id"], c["text"]) for c in all_chunks]:
-                err("rag-index/index-05", "chunks differ from computed chunks")
-            if [x["embedding"] for x in idx["index-07"]["payload"]["embeddings"]] != [c["embedding"] for c in all_chunks]:
-                err("rag-index/index-07", "vectors differ from computed vectors")
+            check_derived_defaults(R, rag, registry, ranked, sel)
 
     # Combined: answer, sources and every derived payload.
     composition = comp["answer_composition"]
@@ -642,10 +766,17 @@ def check_rag(rag, comp, registry, ui):
                     err(f"{label}/{eid}", "tracked chunkId values are neither the ranking nor the retrieved chunks")
             if ev["c-03"]["payload"]["document_blocks"] != [c["id"] for c in sel]:
                 err(label, "c-03 document blocks differ from the retrieved chunks")
-            prompt = ev["c-04"]["payload"]["messages"][1]["content"]
-            for c in sel:
-                if c["text"] not in prompt:
-                    err(label, f"c-04 prompt lacks text of {c['id']}")
+            untrusted = {d["id"] for d in rag["fixtures"]["untrusted_documents"]}
+            for eid in ("c-04", "c-06"):
+                if ev[eid]["payload"]["messages"][1]["content"] != user_message(comp["question"], sel, untrusted):
+                    err(label, f"{eid} user message differs from the derivation")
+            query = {e["id"]: e for e in registry["rag-query"]["events"]}
+            for eid in ("retrieve-05", "retrieve-06"):
+                if any(ev[eid].get(f) != query[eid].get(f) for f in ("payload", "explanation", "tracked_values")):
+                    err(label, f"{eid} differs from rag-query's derivation at the defaults")
+            applies_expl = applies["explanation"] if applies else composition["explanation"]
+            if ev["c-07"]["explanation"] != applies_expl:
+                err(label, "c-07 explanation differs from answer_composition")
             if ev["c-07"]["payload"]["message"]["content"] != a + "\n\nSources:\n" + "\n".join(R["source_lines"](cites)):
                 err(label, "c-07 model message differs")
             if ev["c-08"]["payload"]["answer"] != a or ev["c-08"]["payload"]["sources"] != R["source_objects"](cites):
@@ -671,10 +802,14 @@ def dump_rag(rag, comp):
                             if ranking is None:
                                 ranking = [[c["id"], c["score"], c["keyword"], c["rerank"], c["embedding"]] for c in ranked]
                                 out.append({"case": name, "size": size, "overlap": ov, "ranking": ranking})
-                            a, cites, _ = R["answer"](sel)
-                            out.append({"case": name, "size": size, "overlap": ov, "top_k": top_k, "threshold": thr,
-                                        "rerank": rerank, "selected": [c["id"] for c in sel], "answer": a,
-                                        "sources": R["source_lines"](cites)})
+                            for fetch in (False, True):
+                                evidence = R["parents"](sel, docs) if fetch else sel
+                                a, cites, _ = R["answer"](evidence)
+                                out.append({"case": name, "size": size, "overlap": ov, "top_k": top_k,
+                                            "threshold": thr, "rerank": rerank, "fetch": fetch,
+                                            "selected": [c["id"] for c in sel],
+                                            "evidence": [c["id"] for c in evidence], "answer": a,
+                                            "sources": R["source_lines"](cites)})
     return out
 
 

@@ -155,9 +155,12 @@ scenario_format:
     headers mirroring the body; model-visible context rules; security boundary IDs;
     lineage keys; value_ref paths; learning fields and prediction prompts; derived_events
     and optional_steps naming the scenario''s events, each optional step enabled by a
-    boolean parameter. A failure stops the build. Errors identify scenario and event. validate_specs.py additionally
-    validates MCP payloads against schema.json and recomputes the RAG reference results
-    and derived payloads.'
+    boolean parameter and holding both events of a pair. A failure stops the build.
+    Errors identify scenario and event. validate_specs.py additionally validates MCP
+    payloads against schema.json, recomputes the RAG reference results and recomputes
+    every derived event of rag-index, rag-query and the Combined scenario at the default
+    parameters (an optional step with its enabling parameter on): payloads, tracked values
+    and the explanations that depend on parameters.'
   encoding: 'YAML is the design specification. A Vite plugin parses it into a bundled
     JSON module at build time; the JSON is generated and never committed. Plain scalars
     are typed as PyYAML safe_load types them: booleans yes, no, on, off, true and false
