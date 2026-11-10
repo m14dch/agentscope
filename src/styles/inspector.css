@@ -1,0 +1,137 @@
+/* Event inspector (02-ui-ux.yaml inspector): the message first, details in tabs. */
+.tabs-bar {
+  display: flex;
+  gap: var(--space-2);
+  margin-block: var(--space-2) var(--space-1);
+  border-bottom: var(--line-hair) solid var(--color-rule);
+}
+
+.tab {
+  border: none;
+  border-bottom: var(--line-focus) solid transparent;
+  padding: var(--space-1) 0;
+  background: none;
+  color: var(--color-ink-muted);
+}
+
+.tab[aria-selected='true'] {
+  color: var(--color-ink);
+  font-weight: var(--weight-strong);
+  border-bottom-color: var(--color-ink);
+}
+
+.panel-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+
+/* A step link reads as a link; it moves the cursor. */
+.link {
+  margin-right: auto;
+  border: none;
+  padding: 0;
+  background: none;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* JSON without hue: keys and punctuation recede, values read first. */
+.json,
+.code-line {
+  font-family: var(--font-code);
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+  overflow-wrap: anywhere;
+}
+
+.json-key,
+.json-punct,
+.json-label {
+  color: var(--color-ink-muted);
+}
+
+.json-value {
+  color: var(--color-ink);
+  white-space: pre-wrap;
+}
+
+.json-children {
+  padding-left: var(--space-2);
+}
+
+.json summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.json summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A closed branch shows its opening bracket followed by an ellipsis. */
+.json-branch:not([open]) > summary::after {
+  content: ' …';
+  color: var(--color-ink-muted);
+}
+
+.json-fold > summary::before {
+  content: '▸ ';
+}
+
+.json-fold[open] > summary::before {
+  content: '▾ ';
+}
+
+/* Changed or tracked: selection background plus an ink underline. */
+.json-mark {
+  background: var(--color-selection);
+  text-decoration: underline;
+  text-decoration-color: var(--color-ink);
+  text-underline-offset: 0.2em;
+}
+
+.json-branch.json-mark {
+  text-decoration: none;
+}
+
+.notes {
+  margin-top: var(--space-2);
+  padding-left: var(--space-2);
+  color: var(--color-ink-muted);
+}
+
+.boundary {
+  margin-bottom: var(--space-2);
+}
+
+.boundary p {
+  margin: 0;
+}
+
+.boundary-id {
+  font-weight: var(--weight-strong);
+}
+
+.lineage-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: baseline;
+  font-family: var(--font-code);
+  font-size: var(--size-small);
+  margin-bottom: var(--space-1);
+}
+
+.lineage-values {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: var(--space-2);
+  list-style: none;
+}
+
+.lineage-row .link {
+  margin-right: 0;
+  font-family: var(--font-text);
+}

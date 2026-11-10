@@ -36,7 +36,7 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 
 export class Playback {
   private config: RetrievalConfig;
-  private events: readonly ScenarioEvent[];
+  private events_: readonly ScenarioEvent[];
   /** core[k] is the state after k events; holes are computed on demand. */
   private core: CoreSnapshot[];
   private views = new Map<number, Snapshot>();
@@ -48,13 +48,13 @@ export class Playback {
     this.scenario = scenario;
     this.derive = options.deriveEvents ?? ((s) => s.events);
     this.config = deepFreeze(structuredClone(defaults(scenario)));
-    this.events = this.frozenEvents(this.config);
+    this.events_ = this.frozenEvents(this.config);
     this.core = [initialSnapshot(scenario)];
   }
 
   /** Number of events; valid cursors are 0 to length. */
   get length(): number {
-    return this.events.length;
+    return this.events_.length;
   }
 
   get retrievalConfig(): RetrievalConfig {
@@ -66,8 +66,13 @@ export class Playback {
     return deepFreeze(structuredClone(this.derive(this.scenario, config)));
   }
 
+  /** The events as currently derived (frozen). */
+  get events(): readonly ScenarioEvent[] {
+    return this.events_;
+  }
+
   event(cursor: number): ScenarioEvent | undefined {
-    return cursor >= 1 ? this.events[cursor - 1] : undefined;
+    return cursor >= 1 ? this.events_[cursor - 1] : undefined;
   }
 
   snapshot(cursor: number): Snapshot {
@@ -81,7 +86,7 @@ export class Playback {
     for (; k < cursor; k += 1) {
       this.core[k + 1] = applyEvent(
         this.core[k] as CoreSnapshot,
-        this.events[k] as ScenarioEvent,
+        this.events_[k] as ScenarioEvent,
         this.scenario.id,
       );
     }
@@ -111,14 +116,14 @@ export class Playback {
     const events = this.frozenEvents(config);
     let first = 0;
     while (
-      first < Math.min(events.length, this.events.length) &&
-      same(events[first], this.events[first])
+      first < Math.min(events.length, this.events_.length) &&
+      same(events[first], this.events_[first])
     )
       first += 1;
     const changed =
-      first === events.length && first === this.events.length ? events.length + 1 : first + 1;
+      first === events.length && first === this.events_.length ? events.length + 1 : first + 1;
     this.config = config;
-    this.events = events;
+    this.events_ = events;
     // core[k] depends on events 1..k, so it stays valid for k < changed.
     this.core.length = Math.min(this.core.length, changed);
     this.views.clear();
