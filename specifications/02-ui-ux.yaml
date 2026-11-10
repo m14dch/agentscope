@@ -185,9 +185,10 @@ modes:
     colour. A group expands or collapses on click, Enter or Space; expanded, it shows its
     events up to the cursor with protocol-mode styling. Expansion is kept while the learner
     steps through the scenario.'
-  scrolling: Only a cursor change scrolls the diagram; toggling a group or laying out
-    again keeps the scroll position. Keyboard focus stays on the same group or region
-    across steps.
+  scrolling: Only a cursor change or a mode switch scrolls, and only the diagram's own
+    scroll region, never the page; toggling a group or laying out again keeps the scroll
+    position. Keyboard focus stays on the same group or region across steps. Arrow keys
+    scroll the diagram region while it has focus.
   protocol: 'Technical level: show all individual events with exact logical messages;
     the inspector holds payloads, boundaries and errors.'
   default_mode: architecture
