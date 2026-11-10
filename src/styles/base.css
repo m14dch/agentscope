@@ -99,3 +99,36 @@ pre {
 .error {
   color: var(--color-error);
 }
+
+/* Buttons: quiet text controls on paper; the pressed state is bold, not coloured. */
+button {
+  font: inherit;
+  font-size: var(--size-small);
+  color: var(--color-ink);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-rule);
+  border-radius: 0;
+  padding: 0.25rem var(--space-1);
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--color-ink);
+}
+
+/* Diagram preview (until the app shell exists). */
+.preview-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-block: var(--space-2);
+}
+
+/* The diagram scrolls inside its own region, so the controls stay in view. */
+.preview-diagram {
+  max-height: calc(100vh - 12rem);
+}
+
+.preview-controls [aria-pressed='true'] {
+  font-weight: var(--weight-strong);
+}

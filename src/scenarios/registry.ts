@@ -28,3 +28,13 @@ export function checked(specs: SpecSources): Registry {
   if (problems.length) throw new ScenarioError(problems);
   return registry;
 }
+
+/** Participant labels from the 01-architecture.yaml registry, by ID. */
+export function participantLabels(): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    (sources.architecture.participants.registry as { id: string; label?: string }[]).map((p) => [
+      p.id,
+      p.label ?? p.id,
+    ]),
+  );
+}

@@ -123,6 +123,8 @@ export interface Variant {
   fixture_overrides?: JsonObject;
   parameter_overrides?: JsonObject;
   operations?: VariantOperation[];
+  /** Replaces the takeaways of base phases that are not true for the variant. */
+  phase_overrides?: Record<string, { takeaway?: string }>;
 }
 
 export interface CopyStep {

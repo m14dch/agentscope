@@ -117,6 +117,14 @@ def expand_variant(base, var):
             if problem:
                 err(var["id"], f"parameter_overrides {problem}")
             spec["default"] = copy.deepcopy(value)
+    phases = {p["id"]: p for p in scn["phases"]}
+    for pid, override in var.get("phase_overrides", {}).items():
+        if pid not in phases:
+            err(var["id"], f"phase_overrides names unknown phase {pid}")
+        elif not str(override.get("takeaway", "")).strip():
+            err(var["id"], f"phase_overrides {pid} has no takeaway")
+        else:
+            phases[pid]["takeaway"] = override["takeaway"]
     if "question" in var:
         scn["question"] = var["question"]
     scn["title"] = var["title"]

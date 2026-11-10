@@ -17,6 +17,9 @@ function startupProblems(): string[] {
 
 const problems = startupProblems();
 
+/** Tears down the current view's listeners and timers before the next one renders. */
+let cleanup: (() => void) | undefined;
+
 function renderProblems(root: HTMLElement): void {
   root.className = 'page';
   const title = document.createElement('h1');
@@ -38,6 +41,18 @@ async function render(): Promise<void> {
   if (!app) return;
   if (problems.length) {
     renderProblems(app);
+    return;
+  }
+  cleanup?.();
+  cleanup = undefined;
+  const hash = location.hash;
+  const preview = /^#\/diagram\/([\w-]+)(?:\/(\d+))?(?:\/(architecture|protocol))?$/.exec(hash);
+  if (preview) {
+    const { renderPreview } = await import('./diagram/preview');
+    // The hash may have changed while the preview was loading.
+    if (location.hash !== hash) return;
+    const mode = preview[3] === 'protocol' ? 'protocol' : 'architecture';
+    cleanup = renderPreview(app, preview[1] ?? '', Number(preview[2] ?? 0), mode);
     return;
   }
   if (location.hash === '#/design') {
