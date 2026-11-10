@@ -1,11 +1,12 @@
 /**
  * Event inspector (02-ui-ux.yaml inspector): the step's message first, then tabs for the
  * payload, the simulated transport envelope, the security boundaries and the lineage.
- * A tab is shown only when the step has content for it.
+ * A tab is shown only when the step has content for it. The inspector is rebuilt only
+ * when the step changes, and focus stays on the equivalent control.
  */
 import { arrowLabel } from '../diagram/model.ts';
 import type { Json, ScenarioEvent } from '../scenarios/types.ts';
-import { jsonTree, newInRequest, type TreeNode, trackedValues } from './json.ts';
+import { jsonTree, mcpBoilerplate, newInRequest, type TreeNode, trackedValues } from './json.ts';
 
 export type TabId = 'payload' | 'transport' | 'security' | 'lineage';
 const TAB_LABELS: Record<TabId, string> = {
@@ -15,8 +16,7 @@ const TAB_LABELS: Record<TabId, string> = {
   lineage: 'Lineage',
 };
 const ORDER: TabId[] = ['payload', 'transport', 'security', 'lineage'];
-/** Boilerplate members of MCP messages (02 inspector.folding). */
-const FOLDED = new Set(['jsonrpc', '_meta']);
+const REDACTED = /<REDACTED[^>]*>/;
 
 export interface Boundary {
   id: string;
@@ -37,6 +37,42 @@ export interface InspectorStep {
   cursor: number;
 }
 
+export interface TransportLines {
+  /** Request line (method and path) or status line. */
+  start: string;
+  /** Headers shown, in envelope order. */
+  shown: [string, string][];
+  /** Headers identical to the sender's previous network request, folded (02 inspector.folding). */
+  folded: [string, string][];
+}
+
+/** The Transport tab's content for event `cursor` (1-based). Pure, so it can be tested. */
+export function transportLines(
+  events: readonly ScenarioEvent[],
+  cursor: number,
+): TransportLines | undefined {
+  const event = events[cursor - 1];
+  const http = event?.http;
+  if (!event || !http) return undefined;
+  const start =
+    http.status !== undefined
+      ? `HTTP ${http.status}`
+      : `${http.method ?? ''} ${http.path ?? ''}`.trim();
+  const previous =
+    event.message_type === 'REQUEST'
+      ? events
+          .slice(0, cursor - 1)
+          .filter((e) => e.sender === event.sender && e.http && e.message_type === 'REQUEST')
+          .pop()?.http?.headers
+      : undefined;
+  const headers = Object.entries(http.headers ?? {});
+  return {
+    start,
+    shown: headers.filter(([k, v]) => previous?.[k] !== v),
+    folded: headers.filter(([k, v]) => previous?.[k] === v),
+  };
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   cls?: string,
@@ -48,10 +84,22 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/** Marks an element so focus can return to its equivalent after a rebuild. */
+function focusKey<T extends HTMLElement>(node: T, key: string): T {
+  node.dataset['focus'] = key;
+  return node;
+}
+
 function renderTree(node: TreeNode): HTMLElement {
   if (node.kind === 'fold') {
     const details = el('details', 'json-fold');
-    details.append(el('summary', 'json-punct', node.label), ...node.children.map(renderTree));
+    // A fold's members are never folds themselves; the first one's path identifies it.
+    const first = node.children[0];
+    const id = first && first.kind !== 'fold' ? first.path : node.label;
+    details.append(
+      focusKey(el('summary', 'json-punct', node.label), `fold:${id}`),
+      ...node.children.map(renderTree),
+    );
     return details;
   }
   const key =
@@ -76,21 +124,33 @@ function renderTree(node: TreeNode): HTMLElement {
   const details = el('details', `json-branch${node.mark ? ' json-mark' : ''}`);
   details.open = true;
   details.append(
-    el('summary', 'json-line', ...key, el('span', 'json-punct', node.open)),
+    focusKey(
+      el('summary', 'json-line', ...key, el('span', 'json-punct', node.open)),
+      `branch:${node.path}`,
+    ),
     el('div', 'json-children', ...node.children.map(renderTree)),
     el('div', 'json-line', el('span', 'json-punct', node.close), ...comma),
   );
   return details;
 }
 
-function codeBlock(value: Json, options: Parameters<typeof jsonTree>[1] = {}): HTMLElement {
-  return el('div', 'json', renderTree(jsonTree(value, options)));
+function headerLine([k, v]: [string, string]): HTMLElement {
+  const redacted = REDACTED.test(v) ? [el('span', 'json-label', ' redacted')] : [];
+  return el(
+    'div',
+    'json-line',
+    el('span', 'json-key', `${k}: `),
+    el('span', 'json-value', v),
+    ...redacted,
+  );
 }
 
 export class Inspector {
   private readonly root: HTMLElement;
   private readonly context: InspectorContext;
   private chosen: TabId = 'payload';
+  /** The step last rendered, so unrelated player changes keep folds and focus. */
+  private rendered: { events: readonly ScenarioEvent[]; cursor: number } | undefined;
 
   constructor(root: HTMLElement, context: InspectorContext) {
     this.root = root;
@@ -98,19 +158,35 @@ export class Inspector {
     root.classList.add('inspector-body');
   }
 
-  update(step: InspectorStep): void {
+  update(step: InspectorStep, force = false): void {
+    if (!force && this.rendered?.events === step.events && this.rendered.cursor === step.cursor)
+      return;
+    this.rendered = { events: step.events, cursor: step.cursor };
+    const active = document.activeElement;
+    const restore =
+      active instanceof HTMLElement && this.root.contains(active)
+        ? (active.closest<HTMLElement>('[data-focus]')?.dataset['focus'] ?? 'tab')
+        : undefined;
+    this.build(step);
+    if (restore !== undefined) {
+      const target =
+        this.root.querySelector<HTMLElement>(`[data-focus="${CSS.escape(restore)}"]`) ??
+        this.root.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ??
+        this.root.querySelector<HTMLElement>('[role="tabpanel"]');
+      target?.focus({ preventScroll: true });
+    }
+  }
+
+  private build(step: InspectorStep): void {
     const event = step.events[step.cursor - 1];
     if (!event) {
       this.root.replaceChildren();
       return;
     }
-    const focusedTab = this.root.contains(document.activeElement)
-      ? (document.activeElement as HTMLElement | null)?.dataset['tab']
-      : undefined;
     const panels = new Map<TabId, () => Node[]>();
     if (event.payload !== undefined && event.payload !== null)
       panels.set('payload', () => this.payload(event, step));
-    if (event.http) panels.set('transport', () => this.transport(event, step));
+    if (event.http) panels.set('transport', () => this.transport(step));
     if (event.security_boundaries?.length) panels.set('security', () => this.security(event));
     if (event.tracked_values && Object.keys(event.tracked_values).length) {
       panels.set('lineage', () => this.lineage(event, step));
@@ -129,8 +205,10 @@ export class Inspector {
     const panel = el('div', 'tab-panel');
     panel.setAttribute('role', 'tabpanel');
     panel.id = 'inspector-panel';
+    // Reachable by keyboard even when it holds nothing focusable (Security, Lineage).
+    panel.tabIndex = 0;
     for (const id of available) {
-      const tab = el('button', 'tab', TAB_LABELS[id]);
+      const tab = focusKey(el('button', 'tab', TAB_LABELS[id]), `tab:${id}`);
       tab.type = 'button';
       tab.id = `inspector-tab-${id}`;
       tab.dataset['tab'] = id;
@@ -145,12 +223,11 @@ export class Inspector {
     panel.setAttribute('aria-labelledby', `inspector-tab-${shown}`);
     panel.replaceChildren(...(panels.get(shown)?.() ?? []));
     this.root.replaceChildren(...message, tablist, panel);
-    if (focusedTab) this.root.querySelector<HTMLElement>(`[data-tab="${focusedTab}"]`)?.focus();
   }
 
   private choose(id: TabId, step: InspectorStep, focus = false): void {
     this.chosen = id;
-    this.update(step);
+    this.update(step, true);
     if (focus) this.root.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.focus();
   }
 
@@ -185,33 +262,39 @@ export class Inspector {
     return [el('ul', 'notes small', ...event.technical_notes.map((n) => el('li', undefined, n)))];
   }
 
-  private stepLink(step: number, text: string): HTMLButtonElement {
-    const b = el('button', 'link', text);
+  private stepLink(step: number, text: string, key: string): HTMLButtonElement {
+    const b = focusKey(el('button', 'link', text), key);
     b.type = 'button';
     b.addEventListener('click', () => this.context.jump(step));
     return b;
   }
 
   private payload(event: ScenarioEvent, step: InspectorStep): Node[] {
-    const nodes: Node[] = [];
     const tools = el('div', 'panel-tools');
     if (event.pair_id) {
       const pair = step.events.findIndex((e) => e.id === event.pair_id);
       if (pair >= 0) {
         const kind = event.message_type === 'RESPONSE' ? 'Request' : 'Response';
-        tools.append(this.stepLink(pair + 1, `${kind}: step ${pair + 1}`));
+        tools.append(this.stepLink(pair + 1, `${kind}: step ${pair + 1}`, 'pair'));
       }
     }
-    const copy = el('button', undefined, 'Copy');
+    const status = el('span', 'small muted');
+    status.setAttribute('role', 'status');
+    const copy = focusKey(el('button', undefined, 'Copy'), 'copy');
     copy.type = 'button';
     copy.addEventListener('click', () => {
-      void navigator.clipboard?.writeText(JSON.stringify(event.payload, null, 2)).then(
-        () => (copy.textContent = 'Copied'),
-        () => (copy.textContent = 'Copy failed'),
+      const text = JSON.stringify(event.payload, null, 2);
+      const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+      if (!clipboard) {
+        status.textContent = 'Copy failed';
+        return;
+      }
+      clipboard.writeText(text).then(
+        () => (status.textContent = 'Copied'),
+        () => (status.textContent = 'Copy failed'),
       );
     });
-    tools.append(copy);
-    nodes.push(tools);
+    tools.append(status, copy);
     let changed = new Set<string>();
     if (event.protocol === 'LLM_API' && event.message_type === 'REQUEST') {
       const before = step.events
@@ -220,62 +303,39 @@ export class Inspector {
         .pop();
       changed = newInRequest(event.payload, before?.payload);
     }
-    nodes.push(
-      codeBlock(event.payload as Json, {
-        fold: event.protocol === 'MCP' ? FOLDED : new Set(),
-        changed,
-        tracked: trackedValues(event.tracked_values),
-      }),
-    );
-    nodes.push(...this.notes(event));
-    return nodes;
+    const tree = jsonTree(event.payload as Json, {
+      ...(event.protocol === 'MCP' ? { fold: mcpBoilerplate } : {}),
+      changed,
+      tracked: trackedValues(event.tracked_values),
+    });
+    return [tools, el('div', 'json', renderTree(tree)), ...this.notes(event)];
   }
 
-  private transport(event: ScenarioEvent, step: InspectorStep): Node[] {
-    const http = event.http ?? {};
-    const nodes: Node[] = [
-      el('p', 'small muted', 'Simulated exchange: nothing is sent over a network.'),
-    ];
-    const start =
-      http.status !== undefined
-        ? `HTTP ${http.status}`
-        : `${http.method ?? ''} ${http.path ?? ''}`.trim();
-    nodes.push(el('p', 'code-line', start));
-    const headers = Object.entries(http.headers ?? {});
-    // Headers unchanged since the sender's previous network request fold to one line.
-    const previous =
-      event.message_type === 'REQUEST'
-        ? step.events
-            .slice(0, step.cursor - 1)
-            .filter((e) => e.sender === event.sender && e.http && e.message_type === 'REQUEST')
-            .pop()?.http?.headers
-        : undefined;
-    const same = headers.filter(([k, v]) => previous?.[k] === v);
-    const different = headers.filter(([k, v]) => previous?.[k] !== v);
-    const line = ([k, v]: [string, string]): HTMLElement => {
-      const redacted = /<REDACTED[^>]*>/.test(v) ? [el('span', 'json-label', ' redacted')] : [];
-      return el(
-        'div',
-        'json-line',
-        el('span', 'json-key', `${k}: `),
-        el('span', 'json-value', v),
-        ...redacted,
-      );
-    };
-    const list = el('div', 'json', ...different.map(line));
-    if (same.length) {
+  private transport(step: InspectorStep): Node[] {
+    const lines = transportLines(step.events, step.cursor);
+    if (!lines) return [];
+    const list = el('div', 'json', ...lines.shown.map(headerLine));
+    if (lines.folded.length) {
       const fold = el('details', 'json-fold');
-      const label = same.length === 1 ? '1 header unchanged' : `${same.length} headers unchanged`;
-      fold.append(el('summary', 'json-punct', label), ...same.map(line));
+      const label =
+        lines.folded.length === 1
+          ? '1 header unchanged'
+          : `${lines.folded.length} headers unchanged`;
+      fold.append(
+        focusKey(el('summary', 'json-punct', label), 'fold:headers'),
+        ...lines.folded.map(headerLine),
+      );
       list.append(fold);
     }
-    nodes.push(list);
-    if (http.body_ref) nodes.push(el('p', 'small muted', 'Body: the payload in the Payload tab.'));
-    return nodes;
+    return [
+      el('p', 'small muted', 'Simulated exchange: nothing is sent over a network.'),
+      el('p', 'code-line', lines.start),
+      list,
+    ];
   }
 
   private security(event: ScenarioEvent): Node[] {
-    const items = (event.security_boundaries ?? []).map((id) => {
+    return (event.security_boundaries ?? []).map((id) => {
       const b = this.context.boundaries.find((x) => x.id === id);
       return el(
         'div',
@@ -285,33 +345,35 @@ export class Inspector {
         el('p', undefined, el('span', 'muted', 'Mitigation: '), b?.mitigation ?? ''),
       );
     });
-    return items;
   }
 
+  /** Each tracked key once, with its values and where each first appeared (02 inspector.lineage_tab). */
   private lineage(event: ScenarioEvent, step: InspectorStep): Node[] {
-    const rows: Node[] = [];
-    for (const [key, value] of Object.entries(event.tracked_values ?? {})) {
+    return Object.entries(event.tracked_values ?? {}).map(([key, value]) => {
       const values = Array.isArray(value) ? value : [value];
-      for (const v of values) {
+      const items = values.map((v, i) => {
         const first = step.events.findIndex((e) => {
           const t = e.tracked_values?.[key];
           return t !== undefined && (Array.isArray(t) ? t.some((x) => x === v) : t === v);
         });
         const origin =
           first >= 0 && first + 1 < step.cursor
-            ? this.stepLink(first + 1, `first at step ${first + 1}`)
+            ? this.stepLink(first + 1, `first at step ${first + 1}`, `lineage:${key}:${i}`)
             : el('span', 'muted', 'first here');
-        rows.push(
-          el(
-            'div',
-            'lineage-row',
-            el('span', 'json-key', key),
-            el('span', 'json-value json-mark', JSON.stringify(v)),
-            origin,
-          ),
+        return el(
+          'li',
+          undefined,
+          el('span', 'json-value json-mark', JSON.stringify(v)),
+          ' ',
+          origin,
         );
-      }
-    }
-    return rows;
+      });
+      return el(
+        'div',
+        'lineage-row',
+        el('span', 'json-key', key),
+        el('ul', 'lineage-values', ...items),
+      );
+    });
   }
 }

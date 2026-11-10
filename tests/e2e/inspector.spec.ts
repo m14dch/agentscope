@@ -53,7 +53,7 @@ test('every payload renders exactly as the event holds it, and Copy copies it', 
       if (!(await tab(page, 'Payload').count())) continue;
       await tab(page, 'Payload').click();
       await page.getByRole('button', { name: 'Copy' }).click();
-      await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
+      await expect(page.getByRole('status').filter({ hasText: 'Copied' })).toBeVisible();
       const copied = JSON.parse(
         await page.evaluate(() => navigator.clipboard.readText()),
       ) as unknown;
@@ -151,4 +151,35 @@ test('code stays readable at 200% zoom without horizontal scrolling', async ({ p
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
   ).toBeLessThanOrEqual(0);
+});
+
+test('open folds and focus survive changes that are not a step', async ({ page }) => {
+  await open(page, '#/mcp/mcp-balance/14/protocol');
+  const meta = page.locator('.tab-panel .json-fold').nth(1);
+  await meta.locator('> summary').click();
+  await expect(meta).toHaveAttribute('open', '');
+  await page.getByRole('button', { name: '2×' }).click();
+  await page.getByRole('button', { name: 'Protocol' }).click();
+  await expect(page.locator('.tab-panel .json-fold').nth(1)).toHaveAttribute('open', '');
+});
+
+test('focus stays on the equivalent control when the step changes', async ({ page }) => {
+  await open(page, '#/mcp/mcp-balance/14/protocol');
+  await page.getByRole('button', { name: 'Copy' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.status')).toContainText('Step 15 of 28');
+  await expect(page.getByRole('button', { name: 'Copy' })).toBeFocused();
+  await open(page, '#/mcp/mcp-balance/14/protocol');
+  await page.getByRole('button', { name: 'Response: step 23' }).click();
+  await expect(page.getByRole('button', { name: 'Request: step 14' })).toBeFocused();
+});
+
+test('lineage lists each key once with all its values', async ({ page }) => {
+  await open(page, '#/rag/rag-query/10/protocol');
+  await tab(page, 'Lineage').click();
+  const rows = page.locator('.lineage-row');
+  const keys = await rows.locator('> .json-key').allTextContents();
+  expect(new Set(keys).size).toBe(keys.length);
+  const retrieved = rows.filter({ hasText: 'retrievedText' });
+  await expect(retrieved.locator('li')).toHaveCount(5);
 });

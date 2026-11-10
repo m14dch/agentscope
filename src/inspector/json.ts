@@ -42,8 +42,8 @@ export interface Fold {
 export type TreeNode = Leaf | Branch | Fold;
 
 export interface TreeOptions {
-  /** Member names folded into one line wherever they appear. */
-  fold?: ReadonlySet<string>;
+  /** Whether a member, by name and its parent's path ('' at the root), is boilerplate. */
+  fold?: (key: string, parentPath: string) => boolean;
   /** Paths whose node is marked changed. */
   changed?: ReadonlySet<string>;
   /** Leaf values marked tracked. */
@@ -53,6 +53,10 @@ export interface TreeOptions {
 const REDACTED = /<REDACTED[^>]*>/;
 
 /** Builds the tree for a value. */
+/** MCP boilerplate (02 inspector.folding): the top-level jsonrpc member and every _meta. */
+export const mcpBoilerplate = (key: string, parentPath: string): boolean =>
+  key === '_meta' || (key === 'jsonrpc' && parentPath === '');
+
 export function jsonTree(value: Json, options: TreeOptions = {}): TreeNode {
   return build(value, '', undefined, false, options, undefined);
 }
@@ -98,7 +102,7 @@ function build(
   // Consecutive boilerplate members become one fold.
   const children: TreeNode[] = [];
   for (const node of nodes) {
-    const folded = node.key !== undefined && options.fold?.has(node.key);
+    const folded = node.key !== undefined && !!options.fold?.(node.key, path);
     const last = children[children.length - 1];
     if (folded && last?.kind === 'fold') {
       last.children.push(node);

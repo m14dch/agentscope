@@ -124,6 +124,13 @@
   margin-bottom: var(--space-1);
 }
 
+.lineage-values {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: var(--space-2);
+  list-style: none;
+}
+
 .lineage-row .link {
   margin-right: 0;
   font-family: var(--font-text);

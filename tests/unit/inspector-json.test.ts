@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { transportLines } from '../../src/inspector/inspector.ts';
 import {
   jsonTree,
+  mcpBoilerplate,
   newInRequest,
   treeText,
   trackedValues,
   type TreeNode,
 } from '../../src/inspector/json.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
-import type { Json } from '../../src/scenarios/types.ts';
 
 const registry = loadRegistry();
 
@@ -18,32 +19,29 @@ function find(node: TreeNode, predicate: (n: TreeNode) => boolean): TreeNode[] {
 }
 
 describe('payload trees', () => {
-  it('reproduce every payload and envelope exactly', () => {
+  it('reproduce every payload exactly', () => {
     let count = 0;
     for (const scn of Object.values(registry)) {
       for (const e of scn.events) {
-        for (const value of [e.payload, e.http as Json | undefined]) {
+        for (const value of [e.payload]) {
           if (value === undefined || value === null) continue;
-          const tree = jsonTree(value, { fold: new Set(['jsonrpc', '_meta']) });
+          const tree = jsonTree(value, { fold: mcpBoilerplate });
           expect(treeText(tree), e.id).toBe(JSON.stringify(value, null, 2));
           count += 1;
         }
       }
     }
-    expect(count).toBeGreaterThan(300);
+    expect(count).toBeGreaterThan(250);
   });
 
   it('fold jsonrpc and _meta into one line naming them', () => {
     const tree = jsonTree(
       { jsonrpc: '2.0', id: 1, params: { name: 'x', _meta: { a: 1 } } },
-      { fold: new Set(['jsonrpc', '_meta']) },
+      { fold: mcpBoilerplate },
     );
     const folds = find(tree, (n) => n.kind === 'fold');
     expect(folds.map((f) => (f.kind === 'fold' ? f.label : ''))).toEqual(['jsonrpc', '_meta']);
-    const both = jsonTree(
-      { jsonrpc: '2.0', _meta: {}, id: 1 },
-      { fold: new Set(['jsonrpc', '_meta']) },
-    );
+    const both = jsonTree({ jsonrpc: '2.0', _meta: {}, id: 1 }, { fold: mcpBoilerplate });
     expect(
       find(both, (n) => n.kind === 'fold').map((f) => (f.kind === 'fold' ? f.label : '')),
     ).toEqual(['jsonrpc, _meta']);
@@ -70,6 +68,46 @@ describe('payload trees', () => {
         n.kind === 'fold' ? '' : n.path,
       ),
     ).toEqual(['token']);
+  });
+});
+
+describe('transport lines', () => {
+  it('show every header of every envelope exactly once, shown or folded', () => {
+    let count = 0;
+    for (const scn of Object.values(registry)) {
+      scn.events.forEach((e, i) => {
+        const lines = transportLines(scn.events, i + 1);
+        if (!e.http) {
+          expect(lines).toBeUndefined();
+          return;
+        }
+        count += 1;
+        const http = e.http;
+        expect(lines?.start, e.id).toBe(
+          http.status !== undefined ? `HTTP ${http.status}` : `${http.method} ${http.path}`,
+        );
+        const all = [...(lines?.shown ?? []), ...(lines?.folded ?? [])];
+        expect(Object.fromEntries(all), e.id).toEqual(http.headers ?? {});
+        expect(all).toHaveLength(Object.keys(http.headers ?? {}).length);
+      });
+    }
+    expect(count).toBe(60);
+  });
+
+  it('fold the headers a sender repeats from its previous request', () => {
+    const events = registry['mcp-balance']?.events ?? [];
+    const at = (id: string): number => events.findIndex((e) => e.id === id) + 1;
+    expect(transportLines(events, at('mcp-02'))?.folded).toEqual([]);
+    expect(transportLines(events, at('mcp-14'))?.folded.map(([k]) => k)).toEqual([
+      'Accept',
+      'Content-Type',
+      'MCP-Protocol-Version',
+      'Authorization',
+    ]);
+    expect(transportLines(events, at('mcp-14'))?.shown.map(([k]) => k)).toEqual([
+      'Mcp-Method',
+      'Mcp-Name',
+    ]);
   });
 });
 
