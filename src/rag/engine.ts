@@ -87,6 +87,25 @@ export interface Chunk {
   embedding: number[];
 }
 
+/** embedding.vector: every dimension starts at this value (smoothing keeps vectors nonzero). */
+export const SMOOTHING = 0.1;
+
+/** A lexicon word found in a text, for one dimension. */
+export interface LexiconHit {
+  word: string;
+  count: number;
+  /** The word's weight in this dimension. */
+  weight: number;
+}
+
+/** How a text's demo embedding comes about (RagEngine.embedding). */
+export interface EmbeddingWorking {
+  dimensions: { name: string; hits: LexiconHit[]; sum: number }[];
+  /** Length of the vector of sums, which each sum is divided by. */
+  length: number;
+  vector: number[];
+}
+
 export interface ScoredChunk extends Chunk {
   /** Cosine similarity with the query vector, rounded to 4 decimals. */
   score: number;
@@ -236,14 +255,36 @@ export class RagEngine {
 
   /** embedding.vector: 0.1 smoothing plus lexicon weights, L2-normalized, 4 decimals. */
   embed(text: string): number[] {
-    const n = this.fixtures.embedding.dimensions.length;
-    const v = new Array<number>(n).fill(0.1);
+    return this.embedding(text).vector;
+  }
+
+  /**
+   * embedding.vector with its working: per dimension the lexicon words found in the text
+   * (with counts and weights) and the sum before normalizing, the vector's length, and
+   * the vector itself.
+   */
+  embedding(text: string): EmbeddingWorking {
+    const dims = this.fixtures.embedding.dimensions;
+    const sums = new Array<number>(dims.length).fill(SMOOTHING);
+    const found = new Map<string, number>();
     for (const t of tokens(text)) {
       const w = this.lexicon.get(t);
-      if (w) for (let i = 0; i < n; i += 1) v[i] = (v[i] as number) + (w[i] as number);
+      if (!w) continue;
+      found.set(t, (found.get(t) ?? 0) + 1);
+      for (let i = 0; i < dims.length; i += 1) sums[i] = (sums[i] as number) + (w[i] as number);
     }
-    const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
-    return v.map((x) => round4(x / norm));
+    const length = Math.sqrt(sums.reduce((s, x) => s + x * x, 0));
+    return {
+      dimensions: dims.map((name, i) => ({
+        name,
+        hits: [...found]
+          .filter(([word]) => (this.lexicon.get(word)?.[i] ?? 0) > 0)
+          .map(([word, count]) => ({ word, count, weight: this.lexicon.get(word)?.[i] ?? 0 })),
+        sum: sums[i] as number,
+      })),
+      length,
+      vector: sums.map((x) => round4(x / length)),
+    };
   }
 
   /** embedding.score: cosine similarity, 4 decimals. */
