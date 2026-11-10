@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Playback } from '../../src/engine/playback.ts';
-import { contextModel, hasContext } from '../../src/inspector/context.ts';
+import {
+  contextModel,
+  hasContext,
+  SOURCE_LABELS,
+  toolMessageLabel,
+} from '../../src/inspector/context.ts';
 import { createPlayback } from '../../src/rag/bundled.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
 import type { Scenario } from '../../src/scenarios/types.ts';
@@ -131,6 +136,56 @@ describe('labels the review asked for', () => {
     expect(user?.documents.filter((d) => d.untrusted).map((d) => d.documentId)).toEqual([
       'community-faq.md',
     ]);
+  });
+
+  it('labels a call to an unknown tool as failed, not as tool data', () => {
+    const scn = scenario('mcp-jsonrpc-error');
+    const p = createPlayback(scn);
+    const k = p.events.findIndex((e) => e.id.endsWith(':mcp-26')) + 1;
+    const model = contextModel(p.events, p.snapshot(k), p.snapshot(k - 1));
+    const tool = model.messages?.find((m) => m.role === 'tool');
+    expect(tool).toMatchObject({ tool: 'get_balance', source: 'tool-failed' });
+    expect(toolMessageLabel('tool-failed', 'get_balance')).toBe('Tool call failed · get_balance');
+    expect(
+      model.memory.find((m) => m.description === 'Tool message stored in conversation')?.source,
+    ).toBe('tool-failed');
+    expect(SOURCE_LABELS['tool-failed']).toBe('Tool call failed');
+  });
+
+  it('labels an isError result of an existing tool as its error result, still tool data', () => {
+    const scn = scenario('mcp-not-found');
+    const p = createPlayback(scn);
+    const k = p.events.findIndex((e) => e.id.endsWith(':mcp-26')) + 1;
+    const model = contextModel(p.events, p.snapshot(k), p.snapshot(k - 1));
+    const tool = model.messages?.find((m) => m.role === 'tool');
+    expect(tool).toMatchObject({ tool: 'get_customer_balance', source: 'tool-error' });
+    expect(toolMessageLabel('tool-error', 'get_customer_balance')).toBe(
+      'Tool data · get_customer_balance error result',
+    );
+    expect(
+      model.memory
+        .filter((m) => m.description.startsWith('Tool '))
+        .map((m) => [m.description, m.source]),
+    ).toEqual([
+      ['Tool result received', 'tool-error'],
+      ['Tool message stored in conversation', 'tool-error'],
+    ]);
+    // A successful call stays plain tool data.
+    const ok = createPlayback(scenario('mcp-balance'));
+    const end = contextModel(ok.events, ok.snapshot(ok.length), undefined);
+    expect(end.messages?.find((m) => m.role === 'tool')?.source).toBe('tool');
+  });
+
+  it('does not label an empty list of retained chunks as document evidence', () => {
+    const p = createPlayback(scenario('rag-query'));
+    p.setParameters({ similarity_threshold: 1 });
+    const k = p.events.findIndex((e) => e.id === 'retrieve-06') + 1;
+    expect(k).toBeGreaterThan(0);
+    const entry = contextModel(p.events, p.snapshot(k), undefined).memory.find(
+      (m) => m.description === 'Retained chunks held for the prompt',
+    );
+    expect(entry?.value).toEqual([]);
+    expect(entry?.source).toBeUndefined();
   });
 
   it('does not label an entry with nothing to send', () => {

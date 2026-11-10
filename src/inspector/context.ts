@@ -6,14 +6,27 @@ import type { Snapshot } from '../engine/playback.ts';
 import type { Json, ScenarioEvent } from '../scenarios/types.ts';
 import { promptParts } from './retrieval.ts';
 
-/** Where an item came from (02 context_panel.provenance). */
-export type Source = 'tool' | 'documents';
+/**
+ * Where an item came from (02 context_panel.provenance): data a tool returned, an isError
+ * result of a tool, a tool call that failed at the protocol level (no tool data), or
+ * retrieved documents.
+ */
+export type Source = 'tool' | 'tool-error' | 'tool-failed' | 'documents';
 
-/** The label naming each source. */
+/** The label naming each source in agent state. */
 export const SOURCE_LABELS: Readonly<Record<Source, string>> = {
   tool: 'Tool data',
+  'tool-error': 'Tool data · error result',
+  'tool-failed': 'Tool call failed',
   documents: 'Document evidence',
 };
+
+/** The label of a tool message in the model-visible context, naming its tool. */
+export function toolMessageLabel(source: Source, tool: string): string {
+  if (source === 'tool-failed') return `Tool call failed · ${tool}`;
+  if (source === 'tool-error') return `Tool data · ${tool} error result`;
+  return `Tool data · ${tool} result`;
+}
 
 export interface MemoryEntry {
   step: number;
@@ -42,6 +55,8 @@ export interface VisibleMessage {
   text: string;
   /** For a tool message, the tool its call named. */
   tool?: string;
+  /** For a tool message, the outcome of its call. */
+  source?: Source;
   /** The message's document blocks, in prompt order. */
   documents: DocumentBlock[];
   /** New since the previous step. */
@@ -89,13 +104,49 @@ function isToolData(value: Json | undefined): boolean {
   );
 }
 
-/** A memory entry's source: tool data, or the retained chunks of a retrieval step. */
+/**
+ * The outcome of the last MCP tools/call (of the named tool, if given) answered before
+ * `before`: a JSON-RPC error fails the call; a result with isError true is an error result.
+ * Undefined when no such call was answered.
+ */
+function callOutcome(
+  events: readonly ScenarioEvent[],
+  before: number,
+  tool?: string,
+): Source | undefined {
+  for (let i = Math.min(before, events.length) - 1; i >= 0; i -= 1) {
+    const request = events[i] as ScenarioEvent;
+    const payload = obj(request.payload as Json | undefined);
+    if (request.protocol !== 'MCP' || payload['method'] !== 'tools/call') continue;
+    if (tool !== undefined && obj(payload['params'])['name'] !== tool) continue;
+    const at = events.findIndex((e) => e.id === request.pair_id);
+    if (at < 0 || at >= before) continue;
+    const response = obj(events[at]?.payload as Json | undefined);
+    if (Object.hasOwn(response, 'error')) return 'tool-failed';
+    return obj(response['result'])['isError'] === true ? 'tool-error' : 'tool';
+  }
+  return undefined;
+}
+
+/** The outcome a tool value states itself, where no MCP call answers it. */
+function ownOutcome(value: Json | undefined): Source {
+  const v = obj(value);
+  return v['isError'] === true || v['is_error'] === true ? 'tool-error' : 'tool';
+}
+
+/**
+ * A memory entry's source: tool data (qualified by its call's outcome), or a non-empty list
+ * of retained chunks from a retrieval step.
+ */
 function memorySource(
-  stored: ScenarioEvent | undefined,
+  events: readonly ScenarioEvent[],
+  index: number,
   value: Json | undefined,
 ): Source | undefined {
-  if (isToolData(value)) return 'tool';
-  if (stored?.protocol === 'RAG_INTERNAL' && Array.isArray(value)) return 'documents';
+  if (isToolData(value)) return callOutcome(events, index + 1) ?? ownOutcome(value);
+  const stored = events[index];
+  if (stored?.protocol === 'RAG_INTERNAL' && Array.isArray(value) && value.length)
+    return 'documents';
   return undefined;
 }
 
@@ -170,7 +221,7 @@ export function contextModel(
   const entries = memory.map((raw, i): MemoryEntry => {
     const entry = obj(raw);
     const index = events.findIndex((e) => e.id === entry['event']);
-    const source = memorySource(events[index], entry['value']);
+    const source = memorySource(events, index, entry['value']);
     const entryOut: MemoryEntry = {
       step: index + 1,
       description: String(entry['description'] ?? ''),
@@ -196,6 +247,8 @@ export function contextModel(
     for (const c of Array.isArray(calls) ? calls : [])
       tools.set(String(obj(c)['id']), String(obj(c)['name']));
   }
+  // The request the model saw: the latest LLM request played.
+  const sentAt = requests.at(-1)?.index ?? snapshot.cursor;
   const messages = list?.map((m, i): VisibleMessage => {
     const message = obj(m);
     const role = String(message['role'] ?? '');
@@ -203,7 +256,12 @@ export function contextModel(
     return {
       role,
       ...withDocuments(messageText(message)),
-      ...(role === 'tool' ? { tool: tool ?? 'unknown tool' } : {}),
+      ...(role === 'tool'
+        ? {
+            tool: tool ?? 'unknown tool',
+            source: callOutcome(events, sentAt, tool) ?? ownOutcome(m),
+          }
+        : {}),
       added: i >= listBefore.length || JSON.stringify(m) !== JSON.stringify(listBefore[i]),
     };
   });
@@ -231,6 +289,11 @@ function sourceLabel(text: string): HTMLElement {
   return el('strong', 'source-label', text);
 }
 
+/** A source label and the separator after it, which never break apart. */
+function sourceTag(text: string): (Node | string)[] {
+  return [sourceLabel(text), '\u00a0· '];
+}
+
 /** Renders the panel's two columns. */
 export function renderContext(model: ContextModel): HTMLElement {
   const memory = el('section', 'context-column');
@@ -244,7 +307,7 @@ export function renderContext(model: ContextModel): HTMLElement {
       'li',
       entry.added ? 'context-added' : undefined,
       el('span', 'small muted', `Step ${entry.step} · `),
-      ...(entry.source ? [sourceLabel(SOURCE_LABELS[entry.source]), ' · '] : []),
+      ...(entry.source ? sourceTag(SOURCE_LABELS[entry.source]) : []),
       entry.description,
     );
     if (entry.unseen) item.append(el('span', 'unseen', ' · not yet seen by the model'));
@@ -272,9 +335,7 @@ export function renderContext(model: ContextModel): HTMLElement {
         'li',
         m.added ? 'context-added' : undefined,
         el('span', 'small muted', `${m.role} · `),
-        ...(m.tool !== undefined
-          ? [sourceLabel(`${SOURCE_LABELS.tool} · ${m.tool} result`), ' · ']
-          : []),
+        ...(m.tool !== undefined ? sourceTag(toolMessageLabel(m.source ?? 'tool', m.tool)) : []),
         m.text,
       );
       // Document blocks below the message's own text, in prompt order.
@@ -290,7 +351,7 @@ export function renderContext(model: ContextModel): HTMLElement {
             el(
               'li',
               undefined,
-              el('p', 'small', sourceLabel(SOURCE_LABELS.documents), ` · ${where}`),
+              el('p', 'small', ...sourceTag(SOURCE_LABELS.documents), where),
               el('p', 'context-document-text', d.text),
             ),
           );
