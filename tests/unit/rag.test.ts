@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { parseSpec } from '../../scripts/spec-sources.ts';
+import { parse } from 'yaml';
+import acceptanceYaml from '../../specifications/08-acceptance-tests.yaml?raw';
 import sources from 'virtual:agentscope-specs';
 import { Playback, type Snapshot } from '../../src/engine/playback.ts';
 import { type Clock, Player } from '../../src/engine/player.ts';
@@ -656,12 +656,9 @@ describe('derived events', () => {
     const registered = Object.values(registry).reduce((n, scn) => n + scn.events.length, 0);
     expect(played).toBeLessThan(registered);
     // 08-acceptance-tests.yaml quality_gates.min_supported_events (not bundled by the app).
-    const acceptance = parseSpec(
-      readFileSync(
-        new URL('../../specifications/08-acceptance-tests.yaml', import.meta.url),
-        'utf8',
-      ),
-    ) as { quality_gates: { min_supported_events: number } };
+    const acceptance = parse(acceptanceYaml) as {
+      quality_gates: { min_supported_events: number };
+    };
     const min = acceptance.quality_gates.min_supported_events;
     expect(min).toBeGreaterThan(0);
     expect(played).toBeGreaterThanOrEqual(min);
