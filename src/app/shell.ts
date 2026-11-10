@@ -5,7 +5,8 @@
  */
 import { Playback } from '../engine/playback.ts';
 import { Player, SPEEDS, type Speed } from '../engine/player.ts';
-import { arrowLabel, type Mode } from '../diagram/model.ts';
+import type { Mode } from '../diagram/model.ts';
+import { type Boundary, Inspector } from '../inspector/inspector.ts';
 import { DiagramView } from '../diagram/view.ts';
 import { loadRegistry, participantLabels, specSources } from '../scenarios/registry.ts';
 import type { Scenario } from '../scenarios/types.ts';
@@ -20,6 +21,7 @@ import {
 } from './routes.ts';
 import '../styles/diagram.css';
 import '../styles/shell.css';
+import '../styles/inspector.css';
 
 const SIMULATED = 'Everything here is simulated. Nothing leaves your browser.';
 
@@ -59,7 +61,10 @@ function keyBelongsToFocus(target: EventTarget | null, key: string): boolean {
   }
   // The arrow keys move text cursors, the step slider and the splitter, and scroll the
   // diagram region; a focused group inside the region leaves them to stepping.
-  return !!target.closest('input, [role="separator"]') || target.matches('.diagram-scroller');
+  return (
+    !!target.closest('input, [role="separator"], [role="tab"]') ||
+    target.matches('.diagram-scroller')
+  );
 }
 
 /** Decodes percent-encoding for display; text is inserted with textContent only. */
@@ -332,11 +337,18 @@ export class Shell {
     // The prompt slot announces a prediction once; the message slot is quiet.
     const promptSlot = el('div', { 'aria-live': 'polite' });
     const messageSlot = el('div');
+    const details = el('div');
+    const inspectorView = new Inspector(details, {
+      labels: this.labels,
+      boundaries: this.sources.security.trust_boundaries as unknown as Boundary[],
+      jump: (k) => this.go(() => player.jump(k)),
+    });
     const inspector = el(
       'aside',
       { class: 'inspector', 'aria-label': 'Current step' },
       promptSlot,
       messageSlot,
+      details,
     );
     let shownPrompt: number | undefined;
     const workspace = el('div', { class: 'workspace' }, diagram, splitter, inspector);
@@ -386,7 +398,8 @@ export class Shell {
         shownPrompt = promptAt;
         promptSlot.replaceChildren(...this.promptContent(state));
       }
-      messageSlot.replaceChildren(...this.messageContent(state));
+      messageSlot.replaceChildren(...this.introContent(state));
+      inspectorView.update({ events: player.playback.events, cursor: k });
       this.syncUrl();
     };
 
@@ -424,24 +437,14 @@ export class Shell {
     ];
   }
 
-  private messageContent(state: ScenarioView): Node[] {
-    const { player, scenario } = state;
-    const nodes: Node[] = [];
-    const event = player.playback.event(player.cursor);
-    if (!event) {
-      nodes.push(
-        el('p', { class: 'message' }, `${scenario.question ?? scenario.learning_question}`),
-      );
-      nodes.push(
-        el('p', { class: 'small muted' }, 'Nothing has happened yet. Next runs the first step.'),
-      );
-      return nodes;
-    }
-    const from = this.labels[event.sender] ?? event.sender;
-    const to = this.labels[event.receiver] ?? event.receiver;
-    nodes.push(el('p', { class: 'message' }, event.explanation));
-    nodes.push(el('p', { class: 'small muted' }, `${from} → ${to} · ${arrowLabel(event)}`));
-    return nodes;
+  /** Before the first step: the question the scenario answers. */
+  private introContent(state: ScenarioView): Node[] {
+    if (state.player.cursor > 0) return [];
+    const { scenario } = state;
+    return [
+      el('p', { class: 'message' }, `${scenario.question ?? scenario.learning_question}`),
+      el('p', { class: 'small muted' }, 'Nothing has happened yet. Next runs the first step.'),
+    ];
   }
 
   /** Runs a navigation that never shows a prediction prompt. */
