@@ -1,0 +1,156 @@
+/* Compare view (02-ui-ux.yaml compare_view): two panes in sync, then the aspects. */
+.compare-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.compare-timeline input {
+  width: 100%;
+}
+
+.compare-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  padding: 0;
+  list-style: none;
+  color: var(--color-ink-muted);
+}
+
+.compare-phases [aria-current='step'] {
+  color: var(--color-ink);
+  font-weight: var(--weight-strong);
+}
+
+/*
+ * Side by side from 64rem. The panes share their rows (subgrid), so both diagrams start at
+ * the same height whatever the length of each message.
+ */
+.compare-panes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(6, auto);
+  column-gap: var(--grid-gutter);
+  border-top: var(--line-hair) solid var(--color-rule);
+}
+
+.compare-pane {
+  display: grid;
+  grid-row: span 6;
+  grid-template-rows: subgrid;
+  align-content: start;
+  min-width: 0;
+  padding-top: var(--space-2);
+}
+
+.compare-pane > * {
+  min-width: 0;
+}
+
+.compare-question {
+  margin-bottom: var(--space-1);
+}
+
+.compare-position {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.compare-position input {
+  width: 100%;
+}
+
+/* Room for a three-line explanation, so the diagrams rarely move while stepping. */
+.compare-message {
+  min-height: calc(3 * var(--leading-text) + var(--leading-small));
+  margin-bottom: var(--space-2);
+}
+
+.compare-message p {
+  margin: 0;
+}
+
+.compare-pane .diagram-pane {
+  max-height: calc(100vh - 16rem);
+  min-height: 16rem;
+  overflow: auto;
+  border-top: var(--line-hair) solid var(--color-rule);
+  border-bottom: var(--line-hair) solid var(--color-rule);
+}
+
+.compare-pane a {
+  color: inherit;
+}
+
+.compare-pane > p:last-child {
+  margin-block: var(--space-1) var(--space-2);
+}
+
+.compare-aspects {
+  margin-top: var(--space-3);
+  max-width: 64rem;
+}
+
+.compare-aspects h3 {
+  margin-bottom: var(--space-1);
+}
+
+.compare-aspects dl {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: var(--space-1) var(--grid-gutter);
+}
+
+.compare-aspects dt {
+  /* The small label shares the sentence's first baseline. */
+  padding-top: calc((var(--leading-text) - var(--leading-small)) / 2);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Stacked below 64rem, the left pane first. */
+@media (max-width: 63.99rem) {
+  .compare-panes {
+    display: block;
+  }
+
+  .compare-pane {
+    display: block;
+  }
+
+  .compare-pane + .compare-pane {
+    border-top: var(--line-hair) solid var(--color-rule);
+    margin-top: var(--space-2);
+  }
+
+  .compare-pane .diagram-pane {
+    max-height: 70vh;
+  }
+
+  /* Stacked, the panes share no rows, so no room is held for a longer message. */
+  .compare-message {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 47.99rem) {
+  .compare-aspects dl {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+
+  .compare-aspects dd {
+    margin-bottom: var(--space-1);
+  }
+}

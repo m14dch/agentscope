@@ -38,6 +38,7 @@ import {
   tabScenarios,
 } from './routes.ts';
 import { offlineIndicator } from './offline.ts';
+import { CompareView } from '../compare/view.ts';
 import { appUrl } from '../base.ts';
 import '../styles/diagram.css';
 import '../styles/shell.css';
@@ -167,6 +168,8 @@ export class Shell {
   private readonly header: HTMLElement;
   private readonly content: HTMLElement;
   private current: ScenarioView | undefined;
+  /** The Compare view while the Compare tab shows (02 compare_view). */
+  private compare: CompareView | undefined;
   /** Removes the document listeners of the current header. */
   private headerListeners: AbortController | undefined;
   /** Whether a page has been shown; the first one does not take focus. */
@@ -183,8 +186,7 @@ export class Shell {
   }
 
   destroy(): void {
-    this.current?.dispose();
-    this.current = undefined;
+    this.leaveScenario();
     window.removeEventListener('keydown', this.onKey);
     this.headerListeners?.abort();
     this.root.replaceChildren();
@@ -220,11 +222,9 @@ export class Shell {
       return;
     }
     const route = parsed.route;
-    if (route.tab === 'compare' || route.scenario === undefined) {
-      this.leaveScenario();
-      this.route = route;
-      this.renderHeader(route.tab, undefined);
-      this.renderCompare();
+    if (route.tab === 'compare') {
+      if (this.compare) this.compare.follow(route.step, route.mode);
+      else this.renderCompare(route);
       return;
     }
     const scenario = this.registry[route.scenario];
@@ -253,6 +253,8 @@ export class Shell {
   private leaveScenario(): void {
     this.current?.dispose();
     this.current = undefined;
+    this.compare?.dispose();
+    this.compare = undefined;
   }
 
   /** Writes the current position into the address without adding a history entry. */
@@ -348,34 +350,29 @@ export class Shell {
     this.current.render();
   }
 
-  private renderCompare(): void {
-    const compare = this.sources.comparison.compare as unknown as {
-      headline: string;
-      left_scenario: string;
-      right_scenario: string;
-      left_question: string;
-      right_question: string;
+  /** The Compare tab: both scenarios side by side, in sync by semantic phase. */
+  private renderCompare(route: Route): void {
+    this.leaveScenario();
+    this.renderHeader(route.tab, undefined);
+    const { compare, semantic_phases } = this.sources.comparison;
+    const pane = (id: string) => {
+      const tab = TABS.find((t) => t !== 'compare' && this.tabs[t].includes(id)) ?? 'mcp';
+      return { scenario: this.registry[id] as Scenario, label: TAB_LABELS[tab], tab };
     };
-    const side = (tab: Tab, id: string, label: string, question: string): HTMLElement =>
-      el(
-        'li',
-        {},
-        el('span', { class: 'small muted' }, label),
-        el('a', { href: `#/${tab}/${id}/0` }, question),
-      );
-    this.content.replaceChildren(
-      el(
-        'section',
-        { class: 'lesson' },
-        el('h2', { tabindex: '-1' }, compare.headline),
-        el(
-          'ul',
-          { class: 'compare-sides' },
-          side('rag', compare.left_scenario, 'RAG', compare.left_question),
-          side('mcp', compare.right_scenario, 'MCP', compare.right_question),
-        ),
-      ),
-    );
+    this.compare = new CompareView(this.content, {
+      compare,
+      phases: semantic_phases,
+      panes: [pane(compare.left_scenario), pane(compare.right_scenario)],
+      labels: this.labels,
+      step: route.step,
+      mode: route.mode,
+      onChange: (step, mode) => {
+        this.route = { ...route, step, mode };
+        const hash = formatRoute(this.route);
+        if (location.hash !== hash) history.replaceState(null, '', hash);
+      },
+    });
+    this.header.querySelector('.shell-bar')?.append(this.compare.modeSwitch);
   }
 
   private renderScenario(scenario: Scenario, route: Route): ScenarioView {
@@ -838,8 +835,19 @@ export class Shell {
   }
 
   private readonly onKey = (e: KeyboardEvent): void => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    const compare = this.compare;
+    if (compare) {
+      if (keyBelongsToFocus(e.target, e.key)) return;
+      if (e.key === 'ArrowRight') compare.next();
+      else if (e.key === 'ArrowLeft') compare.previous();
+      else if (e.key === ' ') compare.toggle();
+      else return;
+      e.preventDefault();
+      return;
+    }
     const c = this.current;
-    if (!c || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!c) return;
     if (e.key === 'Escape' && c.selection) {
       this.select(undefined);
       e.preventDefault();

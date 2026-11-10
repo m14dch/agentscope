@@ -139,11 +139,11 @@ test('an unknown scenario is named, with a way back', async ({ page }) => {
   await expect(page).toHaveURL(/#\/rag\/rag-query\/0$/);
 });
 
-test('compare links both questions to their scenarios', async ({ page }) => {
-  await page.goto('./#/compare');
+test('each compare pane links its step to its own scenario', async ({ page }) => {
+  await page.goto('./#/compare/compare-rag-mcp/3');
   await expect(page.getByRole('heading', { level: 2 })).toContainText('MCP fetches live data');
-  await page.getByRole('link', { name: 'What is the current balance of my bank account?' }).click();
-  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/0$/);
+  await page.getByRole('link', { name: 'Inspect step 3 in MCP' }).click();
+  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/3$/);
 });
 
 test('the simulated statement is always visible', async ({ page }) => {
@@ -230,9 +230,7 @@ test('after choosing a tab or a scenario, focus moves to the new page heading', 
   await page.goBack();
   await expect(page.locator('.lesson h2')).toBeFocused();
   await page.goto('./#/compare');
-  await page
-    .getByRole('link', { name: 'What is the current balance of my bank account?' })
-    .press('Enter');
+  await page.getByRole('link', { name: 'Inspect step 0 in MCP' }).press('Enter');
   await expect(page.locator('.lesson h2')).toBeFocused();
   await page.goto('./#/rag/nope');
   await page.getByRole('link', { name: 'Go to RAG' }).press('Enter');

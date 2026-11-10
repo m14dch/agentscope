@@ -135,6 +135,8 @@ for (const route of [
   // the answer with citations, and the version panel.
   './#/rag/rag-prompt-injection/10',
   './#/rag/rag-stale/10',
+  // Both compare panes, one of them done with its phase.
+  './#/compare/compare-rag-mcp/16',
 ]) {
   test(`every computed colour on ${route} is a design token`, async ({ page }) => {
     await page.goto(route);
