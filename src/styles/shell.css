@@ -203,3 +203,8 @@
     border-top: var(--line-hair) solid var(--color-rule);
   }
 }
+
+.picker summary {
+  text-decoration: underline dotted var(--color-ink-muted);
+  text-underline-offset: 0.25em;
+}

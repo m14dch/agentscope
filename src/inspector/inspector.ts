@@ -29,12 +29,36 @@ export interface InspectorContext {
   boundaries: readonly Boundary[];
   /** Moves the cursor to a step (1-based). */
   jump: (step: number) => void;
+  /** Selects a tracked value, or clears the selection (02 lineage_selection.select). */
+  select: (selection: Selection | undefined) => void;
+}
+
+/** A selected tracked value. */
+export interface Selection {
+  key: string;
+  value: string | number;
+}
+
+/** Steps (0-based indices) whose tracked values under `key` include `value`. */
+export function occurrences(events: readonly ScenarioEvent[], selection: Selection): number[] {
+  const found: number[] = [];
+  events.forEach((e, i) => {
+    const t = e.tracked_values?.[selection.key];
+    if (
+      t !== undefined &&
+      (Array.isArray(t) ? t.some((x) => x === selection.value) : t === selection.value)
+    ) {
+      found.push(i);
+    }
+  });
+  return found;
 }
 
 /** What the inspector shows for one cursor position. */
 export interface InspectorStep {
   events: readonly ScenarioEvent[];
   cursor: number;
+  selection?: Selection | undefined;
 }
 
 export interface TransportLines {
@@ -150,7 +174,7 @@ export class Inspector {
   private readonly context: InspectorContext;
   private chosen: TabId = 'payload';
   /** The step last rendered, so unrelated player changes keep folds and focus. */
-  private rendered: { events: readonly ScenarioEvent[]; cursor: number } | undefined;
+  private rendered: InspectorStep | undefined;
 
   constructor(root: HTMLElement, context: InspectorContext) {
     this.root = root;
@@ -159,9 +183,13 @@ export class Inspector {
   }
 
   update(step: InspectorStep, force = false): void {
-    if (!force && this.rendered?.events === step.events && this.rendered.cursor === step.cursor)
-      return;
-    this.rendered = { events: step.events, cursor: step.cursor };
+    const same =
+      this.rendered?.events === step.events &&
+      this.rendered.cursor === step.cursor &&
+      this.rendered.selection?.key === step.selection?.key &&
+      this.rendered.selection?.value === step.selection?.value;
+    if (!force && same) return;
+    this.rendered = { ...step };
     const active = document.activeElement;
     const restore =
       active instanceof HTMLElement && this.root.contains(active)
@@ -307,7 +335,14 @@ export class Inspector {
     const tree = jsonTree(event.payload as Json, {
       ...(event.protocol === 'MCP' ? { fold: mcpBoilerplate } : {}),
       changed,
-      tracked: trackedValues(event.tracked_values),
+      // With a selection only its fields are highlighted (02 lineage_selection.payload).
+      tracked: step.selection
+        ? new Set(
+            trackedValues(event.tracked_values).has(step.selection.value)
+              ? [step.selection.value]
+              : [],
+          )
+        : trackedValues(event.tracked_values),
     });
     return [tools, el('div', 'json', renderTree(tree)), ...this.notes(event)];
   }
@@ -348,25 +383,55 @@ export class Inspector {
     });
   }
 
-  /** Each tracked key once, with its values and where each first appeared (02 inspector.lineage_tab). */
+  /**
+   * Each tracked key once, its values with the steps where they occurred up to this one,
+   * and a toggle that selects the value (02 inspector.lineage_tab, lineage_selection).
+   */
   private lineage(event: ScenarioEvent, step: InspectorStep): Node[] {
     return Object.entries(event.tracked_values ?? {}).map(([key, value]) => {
-      const values = Array.isArray(value) ? value : [value];
+      const values = (Array.isArray(value) ? value : [value]).filter(
+        (v): v is string | number => typeof v === 'string' || typeof v === 'number',
+      );
       const items = values.map((v, i) => {
-        const first = step.events.findIndex((e) => {
-          const t = e.tracked_values?.[key];
-          return t !== undefined && (Array.isArray(t) ? t.some((x) => x === v) : t === v);
+        // Steps after the current one are not revealed.
+        const earlier = occurrences(step.events, { key, value: v }).filter(
+          (k) => k < step.cursor - 1,
+        );
+        const where: (Node | string)[] = [];
+        if (!earlier.length) where.push(el('span', 'muted', 'first here'));
+        earlier.forEach((k, n) => {
+          if (n === 1) where.push(el('span', 'muted', '; also '));
+          else if (n > 1) where.push(', ');
+          const link = this.stepLink(
+            k + 1,
+            n === 0 ? `first at step ${k + 1}` : `${k + 1}`,
+            `lineage:${key}:${i}:${n}`,
+          );
+          if (n > 0) link.setAttribute('aria-label', `step ${k + 1}`);
+          where.push(link);
         });
-        const origin =
-          first >= 0 && first + 1 < step.cursor
-            ? this.stepLink(first + 1, `first at step ${first + 1}`, `lineage:${key}:${i}`)
-            : el('span', 'muted', 'first here');
+        const selected = step.selection?.key === key && step.selection.value === v;
+        const toggle = focusKey(
+          el('button', 'select-value', selected ? 'Selected' : 'Select'),
+          `select:${key}:${i}`,
+        );
+        toggle.type = 'button';
+        toggle.setAttribute('aria-pressed', String(selected));
+        toggle.setAttribute(
+          'aria-label',
+          `${selected ? 'Clear selection of' : 'Select'} ${key} ${JSON.stringify(v)}`,
+        );
+        toggle.addEventListener('click', () =>
+          this.context.select(selected ? undefined : { key, value: v }),
+        );
         return el(
           'li',
           undefined,
           el('span', 'json-value json-mark', JSON.stringify(v)),
           ' ',
-          origin,
+          ...where,
+          ' ',
+          toggle,
         );
       });
       return el(

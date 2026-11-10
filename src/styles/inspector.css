@@ -135,3 +135,61 @@
   margin-right: 0;
   font-family: var(--font-text);
 }
+
+/* Controls that fold or expand content: dotted ink-muted underline (02 design). */
+.json-fold > summary,
+.json-branch > summary > .json-punct:last-child,
+.context-value > summary {
+  text-decoration: underline dotted var(--color-ink-muted);
+  text-underline-offset: 0.25em;
+}
+
+/* Model-context panel (02 context_panel): agent state beside what the model saw. */
+.panel-toggle {
+  align-self: flex-start;
+}
+
+.context-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.context-column h3 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+}
+
+.context-list {
+  margin: 0;
+  padding-left: var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+.context-list li {
+  margin-bottom: var(--space-1);
+}
+
+/* New since the previous step: the selection background, nothing else. */
+.context-added {
+  background: var(--color-selection);
+}
+
+/* The lesson of the panel: stored, but the model has not seen it. */
+.unseen {
+  font-weight: var(--weight-strong);
+}
+
+.context-value pre {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-code);
+  font-size: var(--size-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.select-value[aria-pressed='true'] {
+  background: var(--color-selection);
+}

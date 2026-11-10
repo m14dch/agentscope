@@ -41,6 +41,7 @@ const reducedMotion = (): boolean =>
 export class DiagramView {
   private viewMode: Mode;
   private readonly expanded = new Set<string>();
+  private selected: ReadonlySet<number> = new Set();
   private readonly unsubscribe: () => void;
   private readonly root: HTMLElement;
   private readonly player: Player;
@@ -85,6 +86,12 @@ export class DiagramView {
     this.render();
   }
 
+  /** Marks the steps carrying the selected lineage value (02 lineage_selection.diagram). */
+  setSelected(indices: ReadonlySet<number>): void {
+    this.selected = indices;
+    this.render();
+  }
+
   /** Expands or collapses a group by its key (data-group). */
   toggleGroup(key: string): void {
     if (this.expanded.has(key)) this.expanded.delete(key);
@@ -122,6 +129,7 @@ export class DiagramView {
       cursor: this.player.cursor,
       expanded: this.expanded,
       measure: this.measure,
+      selected: this.selected,
     });
     const title = `${scenario.title}, ${this.viewMode} view, step ${this.player.cursor} of ${this.player.playback.length}`;
     this.root.innerHTML = renderSvg(

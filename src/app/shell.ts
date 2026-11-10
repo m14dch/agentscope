@@ -6,7 +6,8 @@
 import { Playback } from '../engine/playback.ts';
 import { Player, SPEEDS, type Speed } from '../engine/player.ts';
 import type { Mode } from '../diagram/model.ts';
-import { type Boundary, Inspector } from '../inspector/inspector.ts';
+import { contextModel, hasContext, renderContext } from '../inspector/context.ts';
+import { type Boundary, Inspector, occurrences, type Selection } from '../inspector/inspector.ts';
 import { DiagramView } from '../diagram/view.ts';
 import { loadRegistry, participantLabels, specSources } from '../scenarios/registry.ts';
 import type { Scenario } from '../scenarios/types.ts';
@@ -82,6 +83,8 @@ interface ScenarioView {
   view: DiagramView;
   /** Index of the event whose prediction prompt is showing, if any. */
   prompt: number | undefined;
+  /** The selected lineage value; cleared when the scenario changes. */
+  selection: Selection | undefined;
   render: () => void;
   dispose: () => void;
 }
@@ -342,6 +345,7 @@ export class Shell {
       labels: this.labels,
       boundaries: this.sources.security.trust_boundaries as unknown as Boundary[],
       jump: (k) => this.go(() => player.jump(k)),
+      select: (selection) => this.select(selection),
     });
     const inspector = el(
       'aside',
@@ -365,6 +369,19 @@ export class Shell {
     // The one place that states the step and its phase; the slider carries it for assistive tech.
     const status = el('span', { class: 'small muted status' });
     const timeline = el('footer', { class: 'timeline' }, slider, status);
+    // The model-context panel, collapsed at start (02 layout, context_panel).
+    const contextBody = el('div', { id: 'context-panel', class: 'context-panel', hidden: '' });
+    const contextToggle = button(
+      'Model context',
+      () => {
+        const open = contextToggle.getAttribute('aria-expanded') !== 'true';
+        contextToggle.setAttribute('aria-expanded', String(open));
+        contextBody.hidden = !open;
+        state.render();
+      },
+      { 'aria-expanded': 'false', 'aria-controls': 'context-panel', class: 'panel-toggle' },
+    );
+    if (hasContext(scenario.initial_state)) timeline.append(contextToggle, contextBody);
 
     const view = new DiagramView(diagram, player, { labels: this.labels, mode: route.mode });
     const state: ScenarioView = {
@@ -372,6 +389,7 @@ export class Shell {
       player,
       view,
       prompt: undefined,
+      selection: undefined,
       render: () => undefined,
       dispose: () => undefined,
     };
@@ -399,7 +417,17 @@ export class Shell {
         promptSlot.replaceChildren(...this.promptContent(state));
       }
       messageSlot.replaceChildren(...this.introContent(state));
-      inspectorView.update({ events: player.playback.events, cursor: k });
+      inspectorView.update({
+        events: player.playback.events,
+        cursor: k,
+        selection: state.selection,
+      });
+      if (!contextBody.hidden) {
+        const previous = k > 0 ? player.playback.snapshot(k - 1) : undefined;
+        contextBody.replaceChildren(
+          renderContext(contextModel(player.playback.events, player.snapshot, previous)),
+        );
+      }
       this.syncUrl();
     };
 
@@ -509,9 +537,28 @@ export class Shell {
     });
   }
 
+  /** Selects a lineage value or clears the selection (02 lineage_selection). */
+  private select(selection: Selection | undefined): void {
+    const c = this.current;
+    if (!c) return;
+    c.selection = selection;
+    const events = c.player.playback.events;
+    c.view.setSelected(new Set(selection ? occurrences(events, selection) : []));
+    c.render();
+  }
+
   private readonly onKey = (e: KeyboardEvent): void => {
     const c = this.current;
     if (!c || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (
+      e.key === 'Escape' &&
+      c.selection &&
+      !(e.target instanceof Element && e.target.closest('details[open]'))
+    ) {
+      this.select(undefined);
+      e.preventDefault();
+      return;
+    }
     if (keyBelongsToFocus(e.target, e.key)) return;
     if (e.key === 'ArrowRight') this.next();
     else if (e.key === 'ArrowLeft') this.go(() => c.player.previous());

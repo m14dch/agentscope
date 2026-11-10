@@ -141,3 +141,20 @@
   stroke: var(--color-ink);
   stroke-width: var(--line-focus);
 }
+
+/* The selected lineage value (02 lineage_selection.diagram): selection background and an
+   ink underline, never the accent. */
+.label-mark {
+  fill: var(--color-selection);
+}
+
+.arrow-label--selected {
+  text-decoration: underline;
+  text-decoration-color: var(--color-ink);
+  stroke: none;
+}
+
+/* A group folds or expands: dotted ink-muted underline (02 design). */
+.group-label {
+  text-decoration: underline dotted var(--color-ink-muted);
+}
