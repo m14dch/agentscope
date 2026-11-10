@@ -99,8 +99,8 @@ export interface Source {
 export interface RetrievalModel {
   /** Every chunk in retrieve-05's order (descending score). */
   rows: ScoreRow[];
-  threshold: number;
-  topK: number;
+  /** retrieve-06's parameters, once it is played. */
+  selection?: { threshold: number; topK: number; rerank: boolean };
   /** 1-based step that applies top K and the threshold (retrieve-06). */
   selectionStep: number;
   /** The question's projected vector (retrieve-03). */
@@ -201,8 +201,15 @@ export function retrievalModel(
   const queryVector = list(payload(queryAt)['embedding']).map(Number);
   const model: RetrievalModel = {
     rows,
-    threshold: Number(selection['similarity_threshold']),
-    topK: Number(selection['top_k']),
+    ...(reached(selectAt, cursor)
+      ? {
+          selection: {
+            threshold: Number(selection['similarity_threshold']),
+            topK: Number(selection['top_k']),
+            rerank: selection['rerank'] === true,
+          },
+        }
+      : {}),
     selectionStep: selectAt + 1,
     query: reached(queryAt, cursor) && queryVector.length ? index.project(queryVector) : undefined,
   };
@@ -302,51 +309,233 @@ export function pointLabel(chunkId: string): string {
   return m ? `${m[1] ?? ''} · ${m[2] ?? ''}` : chunkId;
 }
 
+/** An axis-aligned box in pixels. */
+export interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** A point of the projection to draw: its projected coordinates and label. */
+export interface ProjectedPoint {
+  x: number;
+  y: number;
+  label: string;
+  /** The chunk ID; empty for the question. */
+  id: string;
+  retained: boolean;
+}
+
 export interface PlacedLabel {
+  /** The text's anchor point (x) and baseline (y). */
   x: number;
   y: number;
   anchor: 'start' | 'end';
-  /** Whether the label moved away from its point and needs a leader line. */
-  moved: boolean;
+  box: Box;
+  /** A leader line from the point to the label, when the label moved off its point's row. */
+  leader?: [number, number, number, number];
+}
+
+export interface ProjectionLayout {
+  width: number;
+  height: number;
+  /** Pixel position of each point, in input order. */
+  pixels: { x: number; y: number }[];
+  /** Each point's mark as a box (to keep labels off it). */
+  marks: Box[];
+  labels: PlacedLabel[];
+  axes: { x: [number, number, number, number]; y: [number, number, number, number] };
+  axisNames: { text: string; x: number; y: number; anchor: 'start' | 'end'; box: Box }[];
+}
+
+/** Width of a character of the code font at the small size (JetBrains Mono: 0.6 em). */
+export const CODE_CHAR = 13 * 0.6;
+/** Width of a character of the text font at the small size, generously. */
+const TEXT_CHAR = 7.5;
+/** A label's glyph box is 16 px tall; labels move by a line of 18 px. */
+const GLYPH = 16;
+const LINE = 18;
+const GAP = 6;
+const MARK = 6;
+
+const overlaps = (a: Box, b: Box): boolean =>
+  a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+/** Whether the segment crosses the box (Liang–Barsky clipping). */
+export function segmentCrosses(s: readonly [number, number, number, number], b: Box): boolean {
+  const [x1, y1, x2, y2] = s;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  let t0 = 0;
+  let t1 = 1;
+  for (const [p, q] of [
+    [-dx, x1 - b.left],
+    [dx, b.right - x1],
+    [-dy, y1 - b.top],
+    [dy, b.bottom - y1],
+  ] as const) {
+    if (p === 0) {
+      if (q < 0) return false;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/** Places the labels in the given order (projectionLayout); cost counts unplaced labels first. */
+function placeInOrder(
+  order: readonly number[],
+  points: readonly ProjectedPoint[],
+  pixels: readonly { x: number; y: number }[],
+  marks: readonly Box[],
+  fixed: readonly Box[],
+  width: number,
+): { labels: PlacedLabel[]; cost: number } {
+  const placed: Box[] = [];
+  const leaders: [number, number, number, number][] = [];
+  const labels = new Array<PlacedLabel>(points.length);
+  let cost = 0;
+  for (const i of order) {
+    const p = pixels[i] as { x: number; y: number };
+    const w = (points[i]?.label.length ?? 0) * CODE_CHAR;
+    const own = marks[i] as Box;
+    const others = marks.filter((_, j) => j !== i);
+    // A leader starts at its point, so marks on top of that point cannot block it.
+    const apart = others.filter((m) => !overlaps(m, own));
+    let chosen: PlacedLabel | undefined;
+    for (let k = 0; k <= 30 && !chosen; k += 1) {
+      for (const dy of k === 0 ? [0] : [-k * LINE, k * LINE]) {
+        for (const anchor of ['start', 'end'] as const) {
+          const x = anchor === 'start' ? p.x + GAP + 2 : p.x - GAP - 2;
+          const left = anchor === 'start' ? x : x - w;
+          const y = p.y + 4 + dy;
+          const box = { left, right: left + w, top: y - GLYPH + 4, bottom: y + 4 };
+          if (box.left < 0 || box.right > width || box.top < 0) continue;
+          const leader: [number, number, number, number] | undefined = dy
+            ? [p.x, p.y + (dy < 0 ? -MARK : MARK), anchor === 'start' ? left : left + w, y - 4]
+            : undefined;
+          const blocked =
+            [...placed, ...fixed, ...others, own].some((b) => overlaps(box, b)) ||
+            leaders.some((s) => segmentCrosses(s, box)) ||
+            (leader !== undefined && [...placed, ...apart].some((b) => segmentCrosses(leader, b)));
+          if (blocked) continue;
+          chosen = { x, y, anchor, box, ...(leader ? { leader } : {}) };
+          cost += dy * dy;
+          break;
+        }
+        if (chosen) break;
+      }
+    }
+    if (!chosen) {
+      // Keeps every point labelled if the search runs out; such a layout is never chosen
+      // while another order places every label.
+      cost += 1e6;
+      chosen = {
+        x: p.x + GAP + 2,
+        y: p.y + 4,
+        anchor: 'start',
+        box: { left: p.x + GAP + 2, right: p.x + GAP + 2 + w, top: p.y - 8, bottom: p.y + 8 },
+      };
+    }
+    placed.push(chosen.box);
+    if (chosen.leader) leaders.push(chosen.leader);
+    labels[i] = chosen;
+  }
+  return { labels, cost };
 }
 
 /**
- * Places a label beside each point (pixel coordinates), moving a label down a line at a
- * time while it would overlap one already placed. Labels go right of their point unless
- * that runs past `width`. Points are handled from top to bottom.
+ * Lays out the projection (02 rag_retrieval.projection) for an available width: a square
+ * plot from −1 to 1 with room left and right for labels, axes named at their ends, and a
+ * label beside every point. A label goes right or left of its point; where it would overlap
+ * another label, a point mark, an axis, an axis name or a leader line, it moves up or down by
+ * a line, nearest first, beside a leader line. The layout is wider than `available` only
+ * when the plot and its labels cannot fit.
  */
-export function placeLabels(
-  points: readonly { x: number; y: number; width: number }[],
-  width: number,
-  line = 16,
-  gap = 6,
-  obstacles: readonly { left: number; right: number; top: number; bottom: number }[] = [],
-): PlacedLabel[] {
-  const placed: { left: number; right: number; top: number; bottom: number }[] = [...obstacles];
-  const out: PlacedLabel[] = new Array<PlacedLabel>(points.length);
-  const order = points
-    .map((_, i) => i)
-    .sort((a, b) => (points[a]?.y ?? 0) - (points[b]?.y ?? 0) || a - b);
-  for (const i of order) {
-    const p = points[i] as { x: number; y: number; width: number };
-    const right = p.x + gap + p.width <= width;
-    const left = right ? p.x + gap : p.x - gap - p.width;
-    let y = p.y + 4;
-    const box = () => ({ left, right: left + p.width, top: y - line + 4, bottom: y + 4 });
-    let moved = false;
-    for (let tries = 0; tries < 64; tries += 1) {
-      const b = box();
-      const hit = placed.some(
-        (q) => b.left < q.right && b.right > q.left && b.top < q.bottom && b.bottom > q.top,
-      );
-      if (!hit) break;
-      y += line;
-      moved = true;
-    }
-    placed.push(box());
-    out[i] = { x: right ? p.x + gap : p.x - gap, y, anchor: right ? 'start' : 'end', moved };
+export function projectionLayout(
+  points: readonly ProjectedPoint[],
+  available: number,
+): ProjectionLayout {
+  const longest = Math.max(8, ...points.map((p) => p.label.length)) * CODE_CHAR;
+  const margin = Math.ceil(longest + GAP + 8);
+  const side = Math.round(Math.max(480, Math.min(560, available - 2 * margin)));
+  const width = side + 2 * margin;
+  const top = 40;
+  const px = (x: number): number => margin + ((x + 1) / 2) * side;
+  const py = (y: number): number => top + ((1 - y) / 2) * side;
+  const cx = px(0);
+  const cy = py(0);
+  const axes: ProjectionLayout['axes'] = {
+    x: [px(-1), cy, px(1), cy],
+    y: [cx, py(1), cx, py(-1)],
+  };
+  const name = (
+    text: string,
+    x: number,
+    y: number,
+    anchor: 'start' | 'end',
+  ): ProjectionLayout['axisNames'][number] => {
+    const w = text.length * TEXT_CHAR;
+    const left = anchor === 'start' ? x : x - w;
+    return { text, x, y, anchor, box: { left, right: left + w, top: y - 12, bottom: y + 4 } };
+  };
+  const axisNames = [
+    name('← rules', px(-1), cy + 20, 'start'),
+    name('cost →', px(1), cy + 20, 'end'),
+    name('↑ product', cx + GAP, py(1) - 12, 'start'),
+    name('↓ technical', cx + GAP, py(-1) + 20, 'start'),
+  ];
+  const pixels = points.map((p) => ({ x: px(p.x), y: py(p.y) }));
+  const marks = pixels.map((p) => ({
+    left: p.x - MARK,
+    right: p.x + MARK,
+    top: p.y - MARK,
+    bottom: p.y + MARK,
+  }));
+  const fixed: Box[] = [
+    { left: axes.x[0], right: axes.x[2], top: cy - 1, bottom: cy + 1 },
+    { left: cx - 1, right: cx + 1, top: axes.y[1], bottom: axes.y[3] },
+    ...axisNames.map((a) => a.box),
+  ];
+  // Greedy placement depends on the order; try a few and keep the one with the fewest
+  // unplaced labels, then the shortest leaders (squared, so no leader grows long).
+  const near = (i: number): number =>
+    pixels.filter(
+      (q, j) =>
+        j !== i &&
+        Math.abs(q.x - (pixels[i]?.x ?? 0)) < 120 &&
+        Math.abs(q.y - (pixels[i]?.y ?? 0)) < 40,
+    ).length;
+  const indices = points.map((_, i) => i);
+  const by = (f: (i: number) => number) => [...indices].sort((a, b) => f(a) - f(b) || a - b);
+  const orders = [
+    by((i) => pixels[i]?.y ?? 0),
+    by((i) => -(pixels[i]?.y ?? 0)),
+    by((i) => pixels[i]?.x ?? 0),
+    by((i) => -(pixels[i]?.x ?? 0)),
+    by((i) => -near(i)),
+    by((i) => near(i)),
+  ];
+  let best: { labels: PlacedLabel[]; cost: number } | undefined;
+  for (const order of orders) {
+    const result = placeInOrder(order, points, pixels, marks, fixed, width);
+    if (!best || result.cost < best.cost) best = result;
+    if (best.cost === 0) break;
   }
-  return out;
+  const labels = best?.labels ?? [];
+  const height = Math.ceil(
+    Math.max(
+      py(-1) + 32,
+      ...labels.map((l) => l.box.bottom + 4),
+      ...axisNames.map((a) => a.box.bottom + 4),
+    ),
+  );
+  return { width, height, pixels, marks, labels, axes, axisNames };
 }
 
 /** One document's source version and the versions the index holds. */
@@ -450,8 +639,18 @@ export const thresholdLabel = (x: number): string => Number(thresholdText(x)).to
 
 const score4 = (x: number): string => x.toFixed(4);
 
-/** Width of a label in the code font at the small size (JetBrains Mono: 0.6 em per character). */
-const CHAR = 13 * 0.6;
+/** The projected points to draw: the question (if reached), then every chunk. */
+export function projectedPoints(model: RetrievalModel): ProjectedPoint[] {
+  return [
+    ...(model.query ? [{ ...model.query, label: 'question', id: '', retained: false }] : []),
+    ...model.rows.map((r) => ({
+      ...r.point,
+      label: pointLabel(r.chunkId),
+      id: r.chunkId,
+      retained: r.outcome?.retained === true,
+    })),
+  ];
+}
 
 export interface RetrievalContext {
   /** The index the scenario searches at the current parameters. */
@@ -505,6 +704,7 @@ export class RetrievalPanel {
     if (key === this.shown) return;
     this.shown = key;
     const active = document.activeElement;
+    // The focused control's key, '' for an element without one, undefined outside the panel.
     const restore =
       active instanceof HTMLElement && this.root.contains(active)
         ? (active.closest<HTMLElement>('[data-focus]')?.dataset['focus'] ?? '')
@@ -518,13 +718,13 @@ export class RetrievalPanel {
       return;
     }
     const index = this.context.index();
-    const projection = this.projection(model);
     this.root.replaceChildren(
       Object.assign(el('h3', undefined, 'Why each chunk was kept or dropped'), {
         id: 'retrieval-title',
         tabIndex: -1,
       }),
-      el('div', 'retrieval-columns', this.scores(model), projection),
+      this.scores(model),
+      this.projection(model),
       ...(model.prompt ? [this.prompt(model.prompt)] : []),
       ...(model.answer ? [this.answer(model.answer, index)] : []),
     );
@@ -534,9 +734,11 @@ export class RetrievalPanel {
       this.observer?.observe(plot.node);
       plot.draw();
     }
-    if (restore) {
+    if (restore !== undefined) {
+      // A control that is gone (or one without a key) hands focus to the panel's heading.
       const target =
-        this.root.querySelector<HTMLElement>(`[data-focus="${CSS.escape(restore)}"]`) ??
+        (restore &&
+          this.root.querySelector<HTMLElement>(`[data-focus="${CSS.escape(restore)}"]`)) ||
         this.root.querySelector<HTMLElement>('#retrieval-title');
       target?.focus({ preventScroll: true });
     }
@@ -550,7 +752,7 @@ export class RetrievalPanel {
   }
 
   private scores(model: RetrievalModel): HTMLElement {
-    const threshold = thresholdLabel(model.threshold);
+    const sel = model.selection;
     const marked = this.selection?.value;
     const items = model.rows.map((r) => {
       const retained = r.outcome?.retained === true;
@@ -563,18 +765,35 @@ export class RetrievalPanel {
       if (r.rerank !== undefined) details.push(`rerank ${score4(r.rerank)}`);
       if (r.keyword !== undefined) details.push(`keyword ${String(r.keyword)}`);
       if (r.untrusted) details.push('untrusted');
+      // The value sits on the side away from the threshold, so the line stays continuous.
+      const below = sel !== undefined && r.score < sel.threshold;
       li.append(
         el('span', `name${r.chunkId === marked ? ' chunk-mark' : ''}`, r.chunkId),
-        el('span', 'track', el('span', 'dot'), el('span', 'value score-value', score4(r.score))),
+        el(
+          'span',
+          'track',
+          el('span', 'dot'),
+          el('span', `value score-value${below ? ' value--left' : ''}`, score4(r.score)),
+        ),
         el('span', `outcome${retained ? '' : ' muted'}`, details.join(' · ')),
       );
       return li;
     });
-    // The threshold's label above the tracks, and the axis below them.
-    const label = el('span', 'threshold-label', `threshold ${threshold}`);
-    const head = el('li', undefined, el('span'), el('span', 'scale scale--top', label), el('span'));
+    // The threshold's label above the tracks (from retrieve-06), and the axis below them.
+    const threshold = sel ? thresholdLabel(sel.threshold) : undefined;
+    const head = el(
+      'li',
+      undefined,
+      el('span'),
+      el(
+        'span',
+        'scale scale--top',
+        ...(threshold ? [el('span', 'threshold-label', `threshold ${threshold}`)] : []),
+      ),
+      el('span'),
+    );
     head.setAttribute('aria-hidden', 'true');
-    const plot = el('ol', 'dotplot', head, ...items);
+    const plot = el('ol', `dotplot${sel ? ' dotplot--threshold' : ''}`, head, ...items);
     const foot = el('li');
     foot.setAttribute('aria-hidden', 'true');
     const zero = el('span', undefined, '0');
@@ -583,33 +802,38 @@ export class RetrievalPanel {
     one.style.left = '100%';
     foot.append(el('span'), el('span', 'scale', zero, one), el('span'));
     plot.append(foot);
-    plot.style.setProperty('--threshold', String(Math.min(Math.max(model.threshold, 0), 1)));
+    if (sel) plot.style.setProperty('--threshold', String(Math.min(Math.max(sel.threshold, 0), 1)));
     plot.setAttribute(
       'aria-label',
-      `Cosine similarity of each chunk to the question, from 0 to 1, with the threshold at ${threshold}`,
+      `Cosine similarity of each chunk to the question, from 0 to 1${threshold ? `, with the threshold at ${threshold}` : ''}`,
     );
-    const best = model.topK === 1 ? 'the best one' : `the ${model.topK} best`;
-    const note = model.rows.some((r) => r.outcome)
-      ? el(
-          'p',
-          'small muted',
-          `Chunks scoring at least ${threshold} are candidates; ${best} are retained.`,
-        )
-      : el(
+    const notes: HTMLElement[] = [];
+    if (!sel)
+      notes.push(
+        el(
           'p',
           'small muted',
           'Top K and the threshold are applied at ',
           this.stepLink(model.selectionStep, 'selection-step'),
           '.',
-        );
-    return el('div', 'retrieval-column', el('h4', undefined, 'Scores'), plot, note);
+        ),
+      );
+    else if (sel.rerank)
+      notes.push(
+        el(
+          'p',
+          'small muted rerank-note',
+          `With reranking, the ${sel.topK === 1 ? 'best chunk' : `${sel.topK} best chunks`} by reranker score ${sel.topK === 1 ? 'is' : 'are'} retained, so a retained chunk can have a lower cosine score than a dropped one.`,
+        ),
+      );
+    return el('div', 'retrieval-scores', el('h4', undefined, 'Scores'), plot, ...notes);
   }
 
   private projection(model: RetrievalModel): HTMLElement {
     const node = el('div', 'projection');
     const figure = el(
       'figure',
-      'retrieval-column',
+      'retrieval-projection',
       el('h4', undefined, 'Projection'),
       node,
       el(
@@ -619,98 +843,74 @@ export class RetrievalPanel {
       ),
     );
     const marked = this.selection?.value;
+    const points = projectedPoints(model);
     const draw = (): void => {
-      const width = Math.max(node.clientWidth, 240);
       this.lastWidth = node.clientWidth;
-      const points = [
-        ...(model.query ? [{ ...model.query, label: 'question', id: '', retained: false }] : []),
-        ...model.rows.map((r) => ({
-          ...r.point,
-          label: pointLabel(r.chunkId),
-          id: r.chunkId,
-          retained: r.outcome?.retained === true,
-        })),
-      ];
-      const longest = Math.max(...points.map((p) => p.label.length), 8) * CHAR;
-      const pad = 24;
-      const side = Math.max(160, Math.min(560, width - 2 * pad - longest / 3));
-      const left = pad;
-      const top = 24;
-      const px = (x: number): number => left + ((x + 1) / 2) * side;
-      const py = (y: number): number => top + ((1 - y) / 2) * side;
-      const pixels = points.map((p) => ({
-        x: px(p.x),
-        y: py(p.y),
-        width: p.label.length * CHAR,
-      }));
-      // Axis names sit at the axes' ends; point labels move out of their way.
-      const axisNames = [
-        { text: '← rules', x: px(-1), y: py(0) + 18, anchor: 'start' },
-        { text: 'cost →', x: px(1), y: py(0) + 18, anchor: 'end' },
-        { text: '↑ product', x: px(0) + 6, y: py(1) - 8, anchor: 'start' },
-        { text: '↓ technical', x: px(0) + 6, y: py(-1) + 18, anchor: 'start' },
-      ];
-      const nameWidth = (t: string): number => t.length * 7.5;
-      const labels = placeLabels(
-        pixels,
-        width - 2,
-        16,
-        6,
-        axisNames.map((a) => ({
-          left: a.anchor === 'end' ? a.x - nameWidth(a.text) : a.x,
-          right: a.anchor === 'end' ? a.x : a.x + nameWidth(a.text),
-          top: a.y - 12,
-          bottom: a.y + 4,
-        })),
-      );
-      const height = Math.max(top + side + 32, ...labels.map((l) => l.y + 8));
+      const layout = projectionLayout(points, Math.max(node.clientWidth, 240));
+      // Too narrow for the plot and its labels: the plot scrolls in a named, focusable region.
+      if (layout.width > node.clientWidth) {
+        node.setAttribute('role', 'region');
+        node.setAttribute('aria-label', 'Projection, scrolls horizontally');
+        node.tabIndex = 0;
+      } else {
+        node.removeAttribute('role');
+        node.removeAttribute('aria-label');
+        node.removeAttribute('tabindex');
+      }
       const root = svg('svg', {
         class: 'projection-plot',
-        width,
-        height,
-        viewBox: `0 0 ${width} ${height}`,
+        width: layout.width,
+        height: layout.height,
+        viewBox: `0 0 ${layout.width} ${layout.height}`,
         role: 'group',
         'aria-label': 'Chunks and the question in the fixed 2D projection',
       });
-      const cx = px(0);
-      const cy = py(0);
+      const [ax1, ay1, ax2, ay2] = layout.axes.x;
+      const [bx1, by1, bx2, by2] = layout.axes.y;
       root.append(
-        svg('line', { class: 'axis', x1: px(-1), y1: cy, x2: px(1), y2: cy }),
-        svg('line', { class: 'axis', x1: cx, y1: py(1), x2: cx, y2: py(-1) }),
-        ...axisNames.map((a) =>
-          svg('text', { class: 'axis-name', x: a.x, y: a.y, 'text-anchor': a.anchor }, a.text),
-        ),
+        svg('line', { class: 'axis', x1: ax1, y1: ay1, x2: ax2, y2: ay2 }),
+        svg('line', { class: 'axis', x1: bx1, y1: by1, x2: bx2, y2: by2 }),
+        ...layout.axisNames.map((a) => {
+          const t = svg(
+            'text',
+            { class: 'axis-name', x: a.x, y: a.y, 'text-anchor': a.anchor },
+            a.text,
+          );
+          t.setAttribute('aria-hidden', 'true');
+          return t;
+        }),
       );
       points.forEach((p, i) => {
-        const at = pixels[i] as { x: number; y: number; width: number };
-        const l = labels[i] as PlacedLabel;
+        const at = layout.pixels[i] as { x: number; y: number };
+        const l = layout.labels[i] as PlacedLabel;
         const g = svg('g', {
           class: p.id ? (p.retained ? 'point retained' : 'point') : 'point query',
+          role: 'img',
+          'aria-label': `${p.id || 'The question'}: x ${p.x.toFixed(4)}, y ${p.y.toFixed(4)}${p.retained ? ', retained' : ''}`,
         });
         if (p.id) g.dataset['chunk'] = p.id;
-        g.append(
-          svg(
-            'title',
-            {},
-            `${p.id || 'question'}: x ${p.x.toFixed(4)}, y ${p.y.toFixed(4)}${p.retained ? ', retained' : ''}`,
-          ),
-        );
-        if (l.moved) {
-          g.append(
-            svg('line', {
-              class: 'leader',
-              x1: at.x,
-              y1: at.y,
-              x2: l.anchor === 'start' ? l.x - 2 : l.x + 2,
-              y2: l.y - 4,
-            }),
-          );
+        if (l.leader) {
+          const [x1, y1, x2, y2] = l.leader;
+          g.append(svg('line', { class: 'leader', x1, y1, x2, y2 }));
         }
         if (p.id && p.id === marked) {
-          const w = at.width;
-          const x0 = l.anchor === 'start' ? l.x : l.x - w;
+          // Selection background plus an ink underline (02 design.colour.use).
+          const { left, right, top, bottom } = l.box;
           g.append(
-            svg('rect', { class: 'label-mark', x: x0 - 2, y: l.y - 12, width: w + 4, height: 16 }),
+            svg('rect', {
+              class: 'label-mark',
+              x: left - 2,
+              y: top,
+              width: right - left + 4,
+              height: bottom - top,
+            }),
+            svg('line', {
+              class: 'label-underline',
+              x1: left - 2,
+              y1: bottom - 0.5,
+              x2: right + 2,
+              y2: bottom - 0.5,
+            }),
           );
         }
         if (p.id) g.append(svg('circle', { class: 'mark', cx: at.x, cy: at.y, r: 4 }));
@@ -810,9 +1010,14 @@ export class RetrievalPanel {
     const text = el('p', 'answer-text');
     // A citation number can occur several times; focus returns to the same occurrence.
     const seen = new Map<number, number>();
+    // A citation and the punctuation right after it never break apart.
+    let group: HTMLElement | undefined;
     for (const part of answerParts(answer.text)) {
       if (typeof part === 'string') {
-        text.append(part);
+        const punctuation = group ? (/^[.,;:)]+/.exec(part)?.[0] ?? '') : '';
+        if (group && punctuation) group.append(punctuation);
+        if (part.length > punctuation.length) text.append(part.slice(punctuation.length));
+        group = undefined;
         continue;
       }
       const source = sources.get(part);
@@ -830,7 +1035,8 @@ export class RetrievalPanel {
         this.open = this.open === part ? undefined : part;
         this.update(this.model, this.selection);
       });
-      text.append(b);
+      group = el('span', 'citation-group', b);
+      text.append(group);
     }
     const lines = answer.sources.length
       ? el('ol', 'sources small', ...answer.sources.map((s) => el('li', 'source-line', s.line)))

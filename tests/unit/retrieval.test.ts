@@ -3,7 +3,9 @@ import { Player } from '../../src/engine/player.ts';
 import {
   answerParts,
   evidence,
-  placeLabels,
+  projectedPoints,
+  projectionLayout,
+  segmentCrosses,
   pointLabel,
   projection,
   promptParts,
@@ -18,6 +20,7 @@ import { createPlayback, ragDerivation } from '../../src/rag/bundled.ts';
 import { corpusOverrides } from '../../src/rag/engine.ts';
 import { loadRegistry, specSources } from '../../src/scenarios/registry.ts';
 import type { Json, Scenario } from '../../src/scenarios/types.ts';
+import type { Box } from '../../src/inspector/retrieval.ts';
 
 const registry = loadRegistry();
 const derivation = ragDerivation();
@@ -80,6 +83,8 @@ describe('retrieval panel model', () => {
     const scored = modelAt('rag-query', 5) as RetrievalModel;
     expect(scored.rows.some((r) => r.outcome)).toBe(false);
     expect(scored.selectionStep).toBe(6);
+    // The threshold is read from retrieve-06 once it is played, not before.
+    expect(scored.selection).toBeUndefined();
     expect(scored.prompt).toBeUndefined();
     const selected = modelAt('rag-query', 6) as RetrievalModel;
     expect(selected.rows.filter((r) => r.outcome?.retained)).toHaveLength(5);
@@ -102,8 +107,7 @@ describe('retrieval panel model', () => {
       expect(model.rows[i]?.point.x).toBeCloseTo(cost - rules, 10);
       expect(model.rows[i]?.point.y).toBeCloseTo(product - technical, 10);
     }
-    expect(model.threshold).toBe(0.7);
-    expect(model.topK).toBe(5);
+    expect(model.selection).toEqual({ threshold: 0.7, topK: 5, rerank: false });
   });
 
   it.each(references)('reproduces the selection, scores, answer and sources of %s', (name, ref) => {
@@ -194,22 +198,52 @@ describe('retrieval panel helpers', () => {
     });
   });
 
-  it('places labels without overlap, moving them down', () => {
-    const labels = placeLabels(
-      [
-        { x: 10, y: 10, width: 50 },
-        { x: 12, y: 12, width: 50 },
-        { x: 200, y: 12, width: 50 },
-      ],
-      400,
-    );
-    expect(labels[0]?.moved).toBe(false);
-    expect(labels[1]?.moved).toBe(true);
-    expect((labels[1]?.y ?? 0) - (labels[0]?.y ?? 0)).toBeGreaterThanOrEqual(16);
-    expect(labels[2]?.moved).toBe(false);
-    // A label that would run past the width goes left of its point.
-    expect(placeLabels([{ x: 390, y: 10, width: 50 }], 400)[0]?.anchor).toBe('end');
-  });
+  const answered = Object.values(registry).filter((s) => s.derived_events?.includes('retrieve-12'));
+  it.each(answered.flatMap((s) => [358, 928, 1344].map((w) => [s.id, w] as const)))(
+    'lays out the projection of %s at %d px with no label over a label, mark, axis or leader',
+    (id, width) => {
+      const model = modelAt(id, 6) as RetrievalModel;
+      const layout = projectionLayout(projectedPoints(model), width);
+      const overlap = (a: Box, b: Box): boolean =>
+        a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      const axisBoxes: Box[] = [
+        {
+          left: layout.axes.x[0],
+          right: layout.axes.x[2],
+          top: layout.axes.x[1] - 1,
+          bottom: layout.axes.x[1] + 1,
+        },
+        {
+          left: layout.axes.y[0] - 1,
+          right: layout.axes.y[0] + 1,
+          top: layout.axes.y[1],
+          bottom: layout.axes.y[3],
+        },
+        ...layout.axisNames.map((a) => a.box),
+      ];
+      layout.labels.forEach((l, i) => {
+        const box = l.box;
+        expect(box.bottom - box.top).toBeGreaterThanOrEqual(16);
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(layout.width);
+        expect(box.bottom).toBeLessThanOrEqual(layout.height);
+        layout.labels.forEach((o, j) => {
+          if (j === i) return;
+          expect(overlap(box, o.box), `label ${i} over label ${j}`).toBe(false);
+          if (o.leader)
+            expect(segmentCrosses(o.leader, box), `leader ${j} through label ${i}`).toBe(false);
+        });
+        layout.marks.forEach((m, j) => {
+          if (j !== i || l.leader) expect(overlap(box, m), `label ${i} over mark ${j}`).toBe(false);
+        });
+        for (const a of axisBoxes) expect(overlap(box, a), `label ${i} over an axis`).toBe(false);
+        // Leaders stay short: within a few lines of the point.
+        if (l.leader) expect(Math.abs(l.leader[3] - l.leader[1])).toBeLessThanOrEqual(8 * 18);
+      });
+      // The layout fits the width unless the plot and its labels cannot.
+      if (width >= 928) expect(layout.width).toBeLessThanOrEqual(width);
+    },
+  );
 
   it('labels points briefly and thresholds with 2 decimals', () => {
     expect(pointLabel('everyday-account@1.0-c50o10-002')).toBe('everyday-account@1.0 · 002');

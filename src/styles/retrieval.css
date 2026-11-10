@@ -36,6 +36,7 @@
   }
 }
 
+.retrieval-projection,
 .retrieval-prompt,
 .retrieval-answer,
 .version-pair {
@@ -51,10 +52,11 @@
 /* Scores: a dot plot in HTML, so it fits the width with text at its real size. */
 .retrieval .dotplot {
   --threshold: 0.7;
-  /* Room right of the track for the value label of a score near 1. */
+  /* Room on both sides of the track for a value label beside a score near 0 or 1. */
   --value-room: 3.5rem;
   display: grid;
-  grid-template-columns: max-content minmax(6rem, 1fr) minmax(0, max-content);
+  /* The track keeps at least 12rem between its value rooms; the outcome wraps. */
+  grid-template-columns: max-content minmax(19rem, 1fr) minmax(10rem, 22rem);
   column-gap: var(--space-2);
   margin: 0 0 var(--space-1);
   padding: 0;
@@ -84,11 +86,20 @@
 .retrieval .track,
 .retrieval .scale {
   position: relative;
-  margin-right: var(--value-room);
+  margin-inline: var(--value-room);
 }
 
-/* The threshold: one line, continuous across rows. */
-.retrieval .track::before {
+/* The dot and its value are positioned inside; the track keeps a line's height for them. */
+.retrieval .dotplot > li > .track {
+  min-height: calc(var(--leading-small) + 0.5rem);
+}
+
+.retrieval .scale--top {
+  padding-bottom: var(--space-1);
+}
+
+/* The threshold, from retrieve-06: one line, continuous across rows. */
+.retrieval .dotplot--threshold .track::before {
   content: '';
   position: absolute;
   top: 0;
@@ -116,13 +127,17 @@
   background: var(--color-accent);
 }
 
-/* Value labels sit on paper so the threshold line passes behind them. */
+/* Value labels sit on the side of the dot away from the threshold, so they never cross it. */
 .retrieval .value {
   position: absolute;
   left: calc(var(--x) * 100% + var(--space-1));
-  padding: 0 2px;
-  background: var(--color-paper);
   color: var(--color-ink);
+  white-space: nowrap;
+}
+
+.retrieval .value--left {
+  left: auto;
+  right: calc((1 - var(--x)) * 100% + var(--space-1));
 }
 
 .retrieval .scale {
@@ -146,38 +161,42 @@
 }
 
 .retrieval .outcome {
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .retrieval .retained .outcome {
   font-weight: var(--weight-strong);
 }
 
-/* Narrow screens: the chunk ID above its track. */
+/* Narrow screens: the chunk ID, its track and its outcome on three lines. */
 @media (max-width: 47.99rem) {
   .retrieval .dotplot {
-    grid-template-columns: minmax(6rem, 1fr) minmax(0, 45%);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .retrieval .dotplot .name {
-    grid-column: 1 / -1;
     text-align: left;
     padding-bottom: 0;
   }
 
-  .retrieval .dotplot > li:first-child > :first-child,
-  .retrieval .dotplot > li:last-child > :first-child {
-    display: none;
+  .retrieval .dotplot > li > .outcome {
+    padding-top: 0;
+    padding-bottom: var(--space-1);
   }
 
-  .retrieval .outcome {
-    white-space: normal;
+  .retrieval .dotplot > li:first-child > :first-child,
+  .retrieval .dotplot > li:last-child > :first-child,
+  .retrieval .dotplot > li:first-child > :last-child,
+  .retrieval .dotplot > li:last-child > :last-child {
+    display: none;
   }
 }
 
 /* Projection: a plain scatter plot, labelled directly. */
 .projection {
   width: 100%;
+  overflow-x: auto;
   margin-bottom: var(--space-1);
 }
 
@@ -238,6 +257,11 @@
   stroke: none;
 }
 
+.projection-plot .label-underline {
+  stroke: var(--color-ink);
+  stroke-width: var(--line-hair);
+}
+
 /* Prompt messages and document blocks. */
 .prompt-message + .prompt-message {
   margin-top: var(--space-2);
@@ -271,6 +295,10 @@
 .answer-text {
   max-width: 48rem;
   margin-bottom: var(--space-1);
+}
+
+.citation-group {
+  white-space: nowrap;
 }
 
 .citation {
