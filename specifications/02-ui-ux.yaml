@@ -262,6 +262,18 @@ controls:
 inspector:
   message_line: Always visible above the tabs. The event's explanation, then sender →
     receiver and operation. Replaces separate Overview and Explanation tabs.
+  error_line: 'On a step that is an error arrow (diagram.error_events), one more line follows
+    the message line: × and the kind in the error colour and weight 600 (for example "×
+    tool execution error"), then that kind''s definition from 07-security-protocols.yaml
+    error_taxonomy in ink. The sender → receiver line then shows the operation without
+    the error mark, so the kind is stated once. Steps that only hand a failure on carry
+    no error line.'
+  earlier_revision: 'On a server/discover request the Payload tab ends with a collapsed
+    control, "Compare with the initialize handshake of revision 2025-11-25", underlined
+    dotted like other folds. Opened, it shows the summary and each message of 04-mcp-scenarios.yaml
+    protocol.earlier_revision_handshake (sender → receiver, operation, request or status
+    line, headers, payload), each labelled with that revision. It starts collapsed and
+    is the only place the earlier revision appears.'
   tabs:
   - Payload
   - Transport
