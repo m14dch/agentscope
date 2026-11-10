@@ -668,6 +668,10 @@ def check_rag(rag, comp, registry, ui):
     if (rc["top_k"]["default"], rc["top_k"]["max"], rc["similarity_threshold"]["default"]) != \
             (p["top_k"]["default"], p["top_k"]["max"], p["similarity_threshold"]["default"]):
         err("02 rag_controls", "top_k or threshold defaults differ from 05 rag-query parameters")
+    chunking = next(sc for sc in rag["scenarios"] if sc["id"] == "rag-index")["parameters"]
+    for name in ("chunk_size_words", "overlap_words"):
+        if (rc[name]["options"], rc[name]["default"]) != (chunking[name]["options"], chunking[name]["default"]):
+            err(f"02 rag_controls.{name}", "options or default differ from 05 rag-index parameters")
     base_docs = R["corpus"]()
     for vid in variants:
         if vid not in refs:

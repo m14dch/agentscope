@@ -388,6 +388,28 @@ rag_controls:
     default: 10
   version_panel: In rag-stale and rag-conflict, show source and indexed document versions
     side by side.
+  placement: 'A row of labelled option groups below the playback controls, shown from step
+    0 in the scenarios that have the parameters (chunk size and overlap in rag-index). A
+    change recomputes the derived events at once (controls.action_rules.parameter_change);
+    the values are not part of the route and return to their defaults with a new scenario.'
+rag_ingestion:
+  shown_in: rag-index, below the workspace, from the step that returns the chunks (index-05);
+    its chunk IDs and vectors are read from the played index-05 and index-07 events, so the
+    screen always equals them.
+  layout: 'Three columns from 64rem, stacked below: the source document (chosen with a
+    Document menu), its chunks, and the selected chunk. The first chunk is selected at start;
+    after a parameter change the selection moves to the chunk of the same document that holds
+    the previously selected chunk''s first word.'
+  overlap: Words that belong to two chunks are set in weight 600 in place, in the document
+    and in each chunk text, so overlap does not depend on colour. The selected chunk's words
+    in the document and its entry in the list have the selection background and an ink underline.
+  chunk: 'The selected chunk''s metadata (the record fields of index-08 plus its chunk ID
+    and word count), then, from index-07 on, one row per named dimension: the lexicon words
+    found with their counts, the sum before normalizing (0.1 plus their weights), and the
+    value with a dot on a 0–1 scale. Before index-07 it names the step that computes the
+    vector.'
+  embedding_note: Above the vector, one plain sentence, the principle of 05-rag-scenarios.yaml
+    that the demo embedding stands in for a learned model.
 accessibility:
 - Keyboard operable controls
 - Visible focus
