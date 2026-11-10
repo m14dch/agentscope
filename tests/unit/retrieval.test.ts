@@ -343,11 +343,32 @@ describe('retrieval panel helpers', () => {
       const members = [p.id, ...(p.also ?? [])].map(
         (id) => model.rows.find((r) => r.chunkId === id) as RetrievalModel['rows'][number],
       );
-      expect(
-        new Set(members.map((r) => `${r.point.x},${r.point.y},${String(r.outcome?.retained)}`))
-          .size,
-      ).toBe(1);
+      const outcome = (r: RetrievalModel['rows'][number]) =>
+        r.outcome?.retained ? 'retained' : r.outcome?.reason;
+      expect(new Set(members.map((r) => `${r.vector.join(',')}|${outcome(r)}`)).size).toBe(1);
     }
+    // The same vector with a different outcome, or a different reason for dropping, stays apart.
+    const row = (chunkId: string, outcome: RetrievalModel['rows'][number]['outcome']) => ({
+      chunkId,
+      documentId: 'd.md',
+      version: '1.2',
+      score: 0.5,
+      untrusted: false,
+      vector: [0.5, 0.5, 0.5, 0.5],
+      point: { x: 0, y: 0 },
+      ...(outcome ? { outcome } : {}),
+    });
+    const apart = projectedPoints({
+      rows: [
+        row('d@1.0-c50o10-001', { retained: false, reason: 'below threshold' }),
+        row('d@1.2-c50o10-001', { retained: false, reason: 'outside topK' }),
+        row('d@1.1-c50o10-001', { retained: true, rank: 1 }),
+        row('d@1.3-c50o10-001', { retained: false, reason: 'outside topK' }),
+      ],
+      selectionStep: 6,
+      query: undefined,
+    });
+    expect(apart.map((p) => p.label)).toEqual(['d@1.0 · 001', 'd@1.2/1.3 · 001', 'd@1.1 · 001']);
     expect(sharedLabel(['savings-account@1.0-c50o10-001', 'savings-account@1.2-c50o10-001'])).toBe(
       'savings-account@1.0/1.2 · 001',
     );

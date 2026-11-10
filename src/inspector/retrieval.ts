@@ -77,7 +77,8 @@ export interface ScoreRow {
   rerank?: number;
   /** From retrieve-06, once reached. */
   outcome?: Outcome;
-  /** The chunk's projected vector. */
+  /** The chunk's vector, and its projection. */
+  vector: number[];
   point: Point;
 }
 
@@ -218,6 +219,7 @@ export function retrievalModel(
       version: String(m['version']),
       score: Number(m['score']),
       untrusted: index.trustOf(documentId) === 'untrusted',
+      vector,
       point: index.project(vector),
     };
     const k = keyword.get(chunkId);
@@ -773,12 +775,16 @@ const score4 = (x: number): string => x.toFixed(4);
 export function projectedPoints(model: RetrievalModel): ProjectedPoint[] {
   const groups: { row: ScoreRow; ids: string[] }[] = [];
   const retained = (r: ScoreRow): boolean => r.outcome?.retained === true;
+  // Both retained, or both dropped for the same reason (or both not yet decided).
+  const outcome = (r: ScoreRow): string =>
+    !r.outcome ? '' : r.outcome.retained ? 'retained' : `dropped: ${r.outcome.reason}`;
   for (const r of model.rows) {
     const same = groups.find(
       (g) =>
-        g.row.point.x === r.point.x &&
-        g.row.point.y === r.point.y &&
-        retained(g.row) === retained(r),
+        r.vector.length > 0 &&
+        g.row.vector.length === r.vector.length &&
+        g.row.vector.every((x, i) => x === r.vector[i]) &&
+        outcome(g.row) === outcome(r),
     );
     if (same) same.ids.push(r.chunkId);
     else groups.push({ row: r, ids: [r.chunkId] });
