@@ -6,11 +6,18 @@
 import { Player, SPEEDS, type Speed } from '../engine/player.ts';
 import type { Mode } from '../diagram/model.ts';
 import { contextModel, hasContext, renderContext } from '../inspector/context.ts';
+import {
+  IngestionPanel,
+  ingestionModel,
+  type SourceDocument,
+  sourceDocuments,
+} from '../inspector/ingestion.ts';
 import { type Boundary, Inspector, occurrences, type Selection } from '../inspector/inspector.ts';
 import { DiagramView } from '../diagram/view.ts';
 import { loadRegistry, participantLabels, specSources } from '../scenarios/registry.ts';
-import { createPlayback } from '../rag/bundled.ts';
-import type { Scenario } from '../scenarios/types.ts';
+import { createPlayback, ragDerivation } from '../rag/bundled.ts';
+import { corpusOverrides } from '../rag/engine.ts';
+import type { Json, Scenario } from '../scenarios/types.ts';
 import {
   formatRoute,
   parseRoute,
@@ -23,8 +30,31 @@ import {
 import '../styles/diagram.css';
 import '../styles/shell.css';
 import '../styles/inspector.css';
+import '../styles/ingestion.css';
 
 const SIMULATED = 'Everything here is simulated. Nothing leaves your browser.';
+
+/**
+ * Parameters offered as controls, per scenario, with their labels (02 rag_controls).
+ * Parameters are not part of the route. The retrieval controls of rag-query (issue #15)
+ * join here.
+ */
+const PARAMETER_CONTROLS: Readonly<
+  Record<string, readonly { name: string; label: string; unit: string }[]>
+> = {
+  'rag-index': [
+    { name: 'chunk_size_words', label: 'Chunk size', unit: 'words' },
+    { name: 'overlap_words', label: 'Overlap', unit: 'words' },
+  ],
+};
+
+/** The principle that the demo embedding stands in for a learned model (05 principles). */
+function embeddingNote(principles: Json | undefined): string {
+  const all = Array.isArray(principles) ? principles.map(String) : [];
+  const note = all.find((p) => p.startsWith('The demo embedding')) ?? '';
+  // Principles are written as list items without a closing period; here it is a sentence.
+  return note && !note.endsWith('.') ? `${note}.` : note;
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -327,6 +357,36 @@ export class Shell {
       speeds,
     );
 
+    const parameterButtons: HTMLButtonElement[] = [];
+    const offered = (PARAMETER_CONTROLS[scenario.id] ?? []).filter(
+      (c) => scenario.parameters?.[c.name]?.options,
+    );
+    const parameters = el('div', {
+      class: 'parameters',
+      role: 'group',
+      'aria-label': 'Parameters',
+    });
+    for (const { name, label, unit } of offered) {
+      const options = scenario.parameters?.[name]?.options ?? [];
+      const group = el('div', {
+        class: 'segmented',
+        role: 'group',
+        'aria-label': `${label} in ${unit}`,
+      });
+      for (const value of options) {
+        const b = button(String(value), () => this.setParameter(name, value), {
+          'aria-label': `${label} ${String(value)} ${unit}`,
+        });
+        b.dataset['parameter'] = name;
+        b.dataset['value'] = JSON.stringify(value);
+        parameterButtons.push(b);
+        group.append(b);
+      }
+      parameters.append(
+        el('span', { class: 'parameter' }, el('span', { class: 'small muted' }, label), group),
+      );
+    }
+
     const diagram = el('div', {
       class: 'diagram-pane',
       role: 'region',
@@ -386,6 +446,10 @@ export class Shell {
       { 'aria-expanded': 'false', 'aria-controls': 'context-panel', class: 'panel-toggle' },
     );
     if (hasContext(scenario.initial_state)) timeline.append(contextToggle, contextBody);
+    // The ingestion panel (02 rag_ingestion), below the timeline so nothing above it moves.
+    const ingestion = scenario.derived_events?.includes('index-05')
+      ? this.ingestionPanel(scenario, (k) => this.go(() => player.jump(k)))
+      : undefined;
 
     const view = new DiagramView(diagram, player, { labels: this.labels, mode: route.mode });
     const state: ScenarioView = {
@@ -405,12 +469,19 @@ export class Shell {
       const phase = event ? scenario.phases.find((p) => p.id === event.phase) : undefined;
       const where = phase ? `Step ${k} of ${n} · ${phase.label}` : `Step ${k} of ${n}`;
       status.textContent = where;
+      slider.max = String(n);
       slider.value = String(k);
       slider.setAttribute('aria-valuetext', where);
       play.textContent = player.status === 'playing' ? 'Pause' : 'Play';
       for (const b of speeds.querySelectorAll<HTMLButtonElement>('button')) {
         b.setAttribute('aria-pressed', String(Number(b.dataset['speed']) === player.speed));
       }
+      const config = player.playback.retrievalConfig;
+      for (const b of parameterButtons) {
+        const current = JSON.stringify(config[b.dataset['parameter'] ?? '']);
+        b.setAttribute('aria-pressed', String(b.dataset['value'] === current));
+      }
+      ingestion?.panel.update(ingestionModel(player.playback.events, k, ingestion.sources));
       for (const b of this.header.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
         b.setAttribute('aria-pressed', String(b.dataset['mode'] === view.mode));
       }
@@ -450,7 +521,14 @@ export class Shell {
       player.dispose();
     };
 
-    this.content.replaceChildren(lesson, controls, workspace, timeline);
+    this.content.replaceChildren(
+      lesson,
+      controls,
+      ...(offered.length ? [parameters] : []),
+      workspace,
+      timeline,
+      ...(ingestion ? [ingestion.panel.root] : []),
+    );
     state.render();
     return state;
   }
@@ -539,6 +617,40 @@ export class Shell {
       e.preventDefault();
       set(share + step);
     });
+  }
+
+  /** The ingestion panel over the documents the scenario indexes (02 rag_ingestion). */
+  private ingestionPanel(
+    scenario: Scenario,
+    jump: (step: number) => void,
+  ): { panel: IngestionPanel; sources: SourceDocument[] } {
+    const { engine } = ragDerivation();
+    const sources = sourceDocuments(engine.corpus(corpusOverrides(scenario.fixture_overrides)), [
+      ...engine.fixtures.documents,
+      ...engine.fixtures.untrusted_documents,
+    ]);
+    const panel = new IngestionPanel({
+      sources,
+      embedding: (text) => engine.embedding(text),
+      note: embeddingNote(this.sources.rag['principles']),
+      jump,
+    });
+    return { panel, sources };
+  }
+
+  /**
+   * Changes a parameter (02 controls.action_rules.parameter_change): the player keeps the
+   * cursor on the same event, and the lineage marks follow the recomputed events.
+   */
+  private setParameter(name: string, value: Json): void {
+    const c = this.current;
+    if (!c) return;
+    c.prompt = undefined;
+    c.player.setParameters({ [name]: value });
+    if (c.selection) {
+      c.view.setSelected(new Set(occurrences(c.player.playback.events, c.selection)));
+    }
+    c.render();
   }
 
   /** Selects a lineage value or clears the selection (02 lineage_selection). */
