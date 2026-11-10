@@ -17,13 +17,18 @@ design:
     label naming the kind.
   - The RAG question changes to the handover's question and the communication layer
     (learning questions, takeaways, prediction prompts) was added to the scenario data
-    (issue #22).
+    (issue 22).
   - Self-hosted fonts stay because the app must work offline; no other dependency is
     added for the design.
   - Supporting colours are introduced only when a need appears (handover 4.1). White
     reading surfaces, information and success are not used yet; white on cream (1.05:1)
     would add a near-invisible box that carries no information.
-  - 'Retained chunks keep the accent in the score plot and the projection (issue #15),
+  - The approved silver-reticle wordmark and its favicon of issue 38 are the only brand
+    marks. They are fixed images in public/brand/ and keep their own colours; they are not
+    recoloured to the tokens, and their colours are not used anywhere else. The app is
+    light only, so the header uses the light variant; the dark variant ships for a dark
+    background but is not shown.
+  - 'Retained chunks keep the accent in the score plot and the projection (issue 15),
     although handover 4.2 reserves Peach Red for the current step: inside a retrieval chart
     the retained chunks are what to look at now. The charts sit below the timeline, apart from
     the diagram''s current arrow and the current group''s accent bar above it, and they show
@@ -85,14 +90,20 @@ design:
       such as lineage values, always together with an ink underline so the mark does not
       depend on colour. Never put accent marks on selection.
     - Error is used only for errors, always with a × and a text label naming the kind.
-    - No other colour values exist outside the tokens, and no large saturated areas.
+    - No other colour values exist outside the tokens, and no large saturated areas. The
+      only exception is the approved brand images (layout brand); their colours stay inside
+      those image files and never appear in styles, scripts or markup.
     - 'Contrast on paper: ink, ink-muted, accent-text and error reach 4.5:1; accent reaches
       3:1 for marks. Ink on selection reaches 4.5:1.'
     - Enforcement - the source is scanned for hex values and colour functions outside the
       tokens, and a browser test checks every computed colour on rendered pages (default,
       focused and selected states, pseudo-elements and SVG gradient stops) is a token or
-      transparent, none or a context paint, and that no shadow or gradient is used.
-    - No shadows, gradients, rounded cards, decorative icons, logos or background textures.
+      transparent, none or a context paint, and that no shadow or gradient is used. The
+      source scan skips exactly public/brand/agentscope-silver-light.svg,
+      agentscope-silver-dark.svg and agentscope-silver-favicon.svg; the browser test needs no
+      exception, because an image's own colours are not computed CSS colours.
+    - No shadows, gradients, rounded cards, decorative icons, logos or background textures,
+      apart from the one wordmark and favicon of layout brand.
       Light theme only in v1.
   labels_and_charts:
   - Label data directly next to what it names; no legends.
@@ -157,6 +168,14 @@ layout:
     the browser'
   - 'Above the diagram: the scenario''s learning question and headline'
   - Bottom panels appear only once they have content; until then only the timeline shows
+  brand: 'The header starts with the wordmark (public/brand/agentscope-silver-light.svg, the
+    variant for the light paper; light theme only) as the page''s level-1 heading, an image
+    with the text alternative "AgentScope" that links to #/. It is 40 px high (five baseline
+    units), its badge flush with the left alignment line and the baseline of its lettering
+    on the baseline of the header row, so it does not crowd the tabs, the controls or the
+    simulated statement. index.html declares agentscope-silver-favicon.svg as an
+    image/svg+xml icon. Both URLs resolve against the base path, are served from the app''s
+    own files and are precached like every other file of the build.'
   offline_indicator: 'After the service worker has cached the build and activated (01-architecture.yaml
     deployment offline_mechanics readiness), the header''s simulated statement ends with "Available
     offline." in the same small ink-muted text. Nothing is shown before that, nor where no service

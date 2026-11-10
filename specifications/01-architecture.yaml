@@ -139,6 +139,7 @@ repo_layout:
 - src/components/
 - public/sw.js
 - public/licenses/
+- public/brand/
 - tests/unit/
 - tests/e2e/
 - ".github/workflows/ci.yml"
@@ -181,7 +182,7 @@ deployment:
     bytes do not match its integrity digest, when any reference or listed file points
     outside the base path (including other origins), or when the page's or the
     manifest's version stamp differs from the deployed commit (a stale deployment). Network errors and stale responses are retried for about a minute first.
-  offline: Bundle all scenarios, documents, fonts and visuals locally. On HTTPS or
+  offline: Bundle all scenarios, documents, fonts, brand images and visuals locally. On HTTPS or
     localhost, a base-scoped service worker precaches the complete versioned build
     from a build-generated asset manifest. Report offline readiness after successful
     caching and activation. Serve the cached shell and assets on reload and keep cache
@@ -190,7 +191,7 @@ deployment:
     asset_manifest: The build writes asset-manifest.json to dist with the version stamp,
       one combined hash over the paths and bytes of every listed file, and the list of
       every file in dist except asset-manifest.json and sw.js (scenarios, fonts, scripts,
-      styles, licences, the page), each as a path relative to the base with its
+      styles, licences, brand images, the page), each as a path relative to the base with its
       Subresource Integrity digest (sha256).
     service_worker: The build generates sw.js at the root of dist with that manifest
       inlined, so every build that changes any file changes the worker and browsers

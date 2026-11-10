@@ -38,6 +38,7 @@ import {
   tabScenarios,
 } from './routes.ts';
 import { offlineIndicator } from './offline.ts';
+import { appUrl } from '../base.ts';
 import '../styles/diagram.css';
 import '../styles/shell.css';
 import '../styles/inspector.css';
@@ -45,6 +46,8 @@ import '../styles/ingestion.css';
 import '../styles/retrieval.css';
 
 const SIMULATED = 'Everything here is simulated. Nothing leaves your browser.';
+/** The approved wordmark for the light paper (02 layout brand); the app is light only. */
+const WORDMARK = 'brand/agentscope-silver-light.svg';
 
 /** A parameter control (02 rag_controls.control_kinds). */
 type ParameterControl =
@@ -273,7 +276,13 @@ export class Shell {
         el('a', { href: `#/${t}`, 'aria-current': t === tab ? 'page' : undefined }, TAB_LABELS[t]),
       ),
     );
-    const brand = el('h1', { class: 'brand' }, el('a', { href: '#/' }, 'AgentScope'));
+    const wordmark = el('img', {
+      src: appUrl(WORDMARK),
+      alt: 'AgentScope',
+      width: '340',
+      height: '88',
+    });
+    const brand = el('h1', { class: 'brand' }, el('a', { href: '#/' }, wordmark));
     const row = el('div', { class: 'shell-bar' }, brand, nav);
     if (scenario && this.tabs[tab].length > 1) row.append(this.picker(tab, scenario));
     if (scenario) row.append(this.modeSwitch());
