@@ -2,6 +2,7 @@ import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import { Shell } from './app/shell';
+import { enableOffline } from './app/offline';
 import { loadRegistry, ScenarioError } from './scenarios/registry';
 
 const app = document.querySelector<HTMLElement>('#app');
@@ -58,3 +59,5 @@ async function render(): Promise<void> {
 
 window.addEventListener('hashchange', () => void render());
 void render();
+// The development server serves modules that are not files of a build: nothing to precache.
+if (import.meta.env.PROD) void enableOffline();

@@ -20,6 +20,7 @@ import {
   type Tab,
   tabScenarios,
 } from './routes.ts';
+import { offlineIndicator } from './offline.ts';
 import '../styles/diagram.css';
 import '../styles/shell.css';
 import '../styles/inspector.css';
@@ -208,7 +209,10 @@ export class Shell {
     const row = el('div', { class: 'shell-bar' }, brand, nav);
     if (scenario && this.tabs[tab].length > 1) row.append(this.picker(tab, scenario));
     if (scenario) row.append(this.modeSwitch());
-    this.header.replaceChildren(row, el('p', { class: 'small muted simulated' }, SIMULATED));
+    this.header.replaceChildren(
+      row,
+      el('p', { class: 'small muted simulated' }, SIMULATED, offlineIndicator()),
+    );
   }
 
   private picker(tab: Tab, scenario: Scenario): HTMLElement {
