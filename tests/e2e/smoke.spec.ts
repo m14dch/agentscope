@@ -6,7 +6,7 @@ test('placeholder page loads under the base path', async ({ page }) => {
     if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`);
   });
   await page.goto('./');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('AgentScope');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveAccessibleName('AgentScope');
   await expect(page.locator('meta[name="agentscope-version"]')).toHaveAttribute(
     'content',
     process.env.AGENTSCOPE_VERSION ?? 'dev',
@@ -16,5 +16,5 @@ test('placeholder page loads under the base path', async ({ page }) => {
 
 test('a hash route serves the same app', async ({ page }) => {
   await page.goto('./#/rag');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('AgentScope');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveAccessibleName('AgentScope');
 });

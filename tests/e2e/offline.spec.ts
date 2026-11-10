@@ -69,6 +69,32 @@ async function walkThrough(page: Page, hash: string): Promise<string> {
   return seen.join('\n');
 }
 
+/**
+ * The header wordmark is decoded and the favicon loads, both under the base path
+ * (02-ui-ux.yaml layout brand); offline they can only come from the cache.
+ */
+async function expectBrandLoaded(page: Page): Promise<void> {
+  const base = new URL(BASE_PATH, test.info().project.use.baseURL).href;
+  const wordmark = page.getByRole('heading', { level: 1 }).getByRole('img', { name: 'AgentScope' });
+  await expect(wordmark).toBeVisible();
+  await expect
+    .poll(() => wordmark.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
+    .toBeGreaterThan(0);
+  expect(await wordmark.evaluate((img: HTMLImageElement) => img.currentSrc)).toBe(
+    `${base}brand/agentscope-silver-light.svg`,
+  );
+  const favicon = await page.evaluate(async () => {
+    const href = document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href ?? '';
+    const response = await fetch(href);
+    return { href, status: response.status, type: response.headers.get('content-type') };
+  });
+  expect(favicon).toEqual({
+    href: `${base}brand/agentscope-silver-favicon.svg`,
+    status: 200,
+    type: expect.stringMatching(/^image\/svg\+xml\b/),
+  });
+}
+
 const normalised = (text: string) => text.replace(/\s+/g, ' ');
 
 test('offline: after one online visit, all three primary scenarios work without a network', async ({
@@ -79,8 +105,9 @@ test('offline: after one online visit, all three primary scenarios work without 
   await loadAndCache(page);
   const reachedNetwork = await goOffline(context);
   await page.reload();
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('AgentScope');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveAccessibleName('AgentScope');
   expect(await page.evaluate(() => navigator.onLine)).toBe(false);
+  await expectBrandLoaded(page);
 
   // MCP: the question, the tool call on the wire and the balance.
   const mcp = await walkThrough(page, '#/mcp/mcp-balance/0/protocol');
@@ -128,7 +155,7 @@ test('pages: the subpath build serves shell, assets, hash navigation and a base-
 
   // The shell, its version stamp and hash navigation within one document.
   await loadAndCache(page);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('AgentScope');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveAccessibleName('AgentScope');
   await expect(page.locator('meta[name="agentscope-version"]')).toHaveAttribute(
     'content',
     manifest.version,
@@ -164,6 +191,7 @@ test('pages: the subpath build serves shell, assets, hash navigation and a base-
   await page.reload();
   await expect(page.locator('.status')).toContainText('Step 3 of ');
   await expect(simulated(page)).toContainText('Available offline.');
+  await expectBrandLoaded(page);
   expect(reachedNetwork.filter((url) => !url.endsWith('/sw.js'))).toEqual([]);
 });
 
@@ -176,7 +204,7 @@ test('nothing about offline is shown before the build is cached', async ({ page,
     await route.fallback();
   });
   await page.goto('./');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('AgentScope');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveAccessibleName('AgentScope');
   await page.waitForTimeout(500);
   await expect(simulated(page)).toHaveText(
     'Everything here is simulated. Nothing leaves your browser.',
@@ -206,7 +234,7 @@ test('a stale file whose bytes do not match its digest fails the install', async
     };
   });
   await page.goto('./');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('AgentScope');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveAccessibleName('AgentScope');
   await page.waitForFunction(() => 'registered' in window);
   const state = await page.evaluate(async () => {
     const worker = (window as unknown as { registered: ServiceWorker | null }).registered;

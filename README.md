@@ -49,6 +49,11 @@ in use.
   actually use is not a token.
 - Label data directly; no legends, shadows, gradients, rounded cards or decorative icons.
 - Font licences ship with the site in `public/licenses/fonts.txt`.
+- The approved silver-reticle wordmark and favicon live in `public/brand/`
+  (`agentscope-silver-{light,dark,favicon}.svg`). The header shows the light wordmark (the app is light
+  only); `index.html` declares the favicon. Both resolve against the base path and are precached. These three
+  files are the only exception to the colour-token rule: they keep their own colours and the source scan skips
+  exactly them. Do not edit them.
 
 ## Deployment
 

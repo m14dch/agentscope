@@ -16,6 +16,20 @@
   line-height: var(--leading-title);
 }
 
+/*
+ * The wordmark (02 layout brand): 40 px high, the image's 12/88 inner margin pulled out on
+ * the left so the badge sits on the alignment line, and lowered by 31/88 of its height so
+ * the lettering's baseline (y 57 of 88) sits on the header row's baseline.
+ */
+.brand img {
+  --wordmark-height: calc(5 * var(--space-1));
+  display: inline-block;
+  height: var(--wordmark-height);
+  width: auto;
+  margin-left: calc(var(--wordmark-height) * -12 / 88);
+  vertical-align: calc(var(--wordmark-height) * -31 / 88);
+}
+
 .brand a,
 .tabs a {
   color: inherit;
