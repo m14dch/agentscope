@@ -137,7 +137,9 @@ def expand_variant(base, var):
     return finalize(scn, var["id"], True)
 
 
-def compose(comp, registry):
+def compose(comp, registry, prefix=True):
+    """The composed scenario; with prefix False its event IDs stay local, as the base of its
+    variants (03 composition_format.variants)."""
     events = []
     for step in comp["compose"]:
         if "copy" in step:
@@ -155,7 +157,7 @@ def compose(comp, registry):
     scn = {k: copy.deepcopy(comp[k]) for k in ("title", "question", "learning_question", "headline", "participants",
                                                 "phases", "initial_state", "derived_events") if k in comp}
     scn["events"] = events
-    return finalize(scn, comp["id"], True)
+    return finalize(scn, comp["id"], prefix)
 
 
 # ---------------------------------------------------------------- checks
@@ -857,6 +859,11 @@ def main():
         registry[var["id"]] = expand_variant(registry[var["extends"]], var)
     comb = cmp_["combined"]
     registry[comb["id"]] = compose(comb, registry)
+    for var in comb.get("variants", []):
+        if var.get("extends") != comb["id"]:
+            err(var["id"], f"extends {var.get('extends')}, not the composed scenario {comb['id']}")
+            continue
+        registry[var["id"]] = expand_variant(compose(comb, registry, False), var)
     if len(registry[comb["id"]]["events"]) != comb["expanded_event_count"]:
         err(comb["id"], "expanded_event_count differs")
     for scn in registry.values():

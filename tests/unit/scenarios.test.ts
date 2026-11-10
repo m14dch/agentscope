@@ -496,10 +496,40 @@ describe('more validation rules', () => {
 describe('bundled registry', () => {
   it('loads the specifications without problems', () => {
     const registry = loadRegistry();
-    expect(Object.keys(registry)).toHaveLength(14);
-    expect(Object.values(registry).reduce((n, s) => n + s.events.length, 0)).toBe(309);
+    expect(Object.keys(registry)).toHaveLength(15);
+    expect(Object.values(registry).reduce((n, s) => n + s.events.length, 0)).toBe(344);
     expect(registry['mcp-balance']?.question).toBe(
       'What is the current balance of my bank account?',
     );
+  });
+
+  it('expands the Combined variant from the composed events (03 composition_format.variants)', () => {
+    const registry = loadRegistry();
+    const base = registry['combined-balance-explanation'] as Scenario;
+    const variant = registry['combined-missing-terms'] as Scenario;
+    expect(Object.keys(registry).slice(-2)).toEqual([base.id, variant.id]);
+    expect(variant.events.map((e) => e.id)).toEqual(
+      base.events.map((e) => e.id.replace(`${base.id}:`, `${variant.id}:`)),
+    );
+    expect(variant.events.every((e) => e.scenario_id === variant.id)).toBe(true);
+    expect(variant.fixture_overrides).toEqual({ exclude_documents: ['savings-account.md'] });
+    expect(variant.title).toBe('Savings terms missing from the index');
+    expect(variant.headline).toMatch(/^With the Savings document missing/);
+    expect(variant.phases.find((p) => p.id === 'answer')?.takeaway).toMatch(/does not cover/);
+    expect(base.phases.find((p) => p.id === 'answer')?.takeaway).not.toMatch(/does not cover/);
+    expect(variant.derived_events).toEqual(base.derived_events);
+    expect(variant).not.toHaveProperty('expected_answer');
+  });
+
+  it('reports a Combined variant that extends another scenario', () => {
+    const specs = structuredClone(sources as SpecSources);
+    const comb = specs.comparison.combined;
+    const [variant] = comb.variants ?? [];
+    if (variant) variant['extends'] = 'rag-query';
+    const { registry, problems } = buildRegistry(specs);
+    expect(problems).toEqual([
+      'combined-missing-terms: extends rag-query, not the composed scenario combined-balance-explanation',
+    ]);
+    expect(registry).not.toHaveProperty('combined-missing-terms');
   });
 });

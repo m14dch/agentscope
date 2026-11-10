@@ -161,7 +161,11 @@ export class Shell {
   private readonly labels = participantLabels();
   private readonly tabs = tabScenarios(this.sources);
   private readonly lessons = new Map<string, string>(
-    [...this.sources.mcp.variants, ...this.sources.rag.variants].map((v) => [v.id, v.lesson]),
+    [
+      ...this.sources.mcp.variants,
+      ...this.sources.rag.variants,
+      ...(this.sources.comparison.combined.variants ?? []),
+    ].map((v) => [v.id, v.lesson]),
   );
   private readonly root: HTMLElement;
   private readonly header: HTMLElement;

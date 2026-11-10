@@ -91,7 +91,7 @@ describe('transport lines', () => {
         expect(all).toHaveLength(Object.keys(http.headers ?? {}).length);
       });
     }
-    expect(count).toBe(60);
+    expect(count).toBe(68);
   });
 
   it('fold the headers a sender repeats from its previous request', () => {
