@@ -3,70 +3,105 @@ import { Player } from '../../src/engine/player.ts';
 import {
   answerStatements,
   combinedModel,
-  type Composition,
   money,
+  partSource,
+  STATEMENT_LABELS,
 } from '../../src/inspector/combined.ts';
-import { createPlayback } from '../../src/rag/bundled.ts';
+import { createPlayback, ragDerivation } from '../../src/rag/bundled.ts';
+import { answerComposition, answerCompositionProblem } from '../../src/rag/derive.ts';
+import type { AnswerPart } from '../../src/rag/engine.ts';
 import { loadRegistry, specSources } from '../../src/scenarios/registry.ts';
 import type { Scenario } from '../../src/scenarios/types.ts';
 
 const registry = loadRegistry();
+const derivation = ragDerivation();
 interface Case {
   id: string;
   expected_answer: string;
   expected_sources: string[];
 }
-const combined = specSources().comparison.combined as unknown as Case & {
-  answer_composition: Composition;
-  variants: Case[];
-};
-const composition = combined.answer_composition;
+const combined = specSources().comparison.combined as unknown as Case & { variants: Case[] };
+const cases = [combined, ...combined.variants];
+const composition = answerComposition(specSources());
+
+const scenario = (id: string): Scenario => registry[id] as Scenario;
+const partsOf = (id: string): AnswerPart[] => derivation.combinedAnswer(scenario(id), {}).parts;
 
 /** The model at a step, or at the last step. */
 function at(id: string, step?: number) {
-  const player = new Player(createPlayback(registry[id] as Scenario));
+  const player = new Player(createPlayback(scenario(id)));
   player.jump(step ?? player.playback.length);
-  return combinedModel(player.playback.events, player.cursor, composition);
+  const parts = registry[id]?.derived_events?.includes('c-08') ? partsOf(id) : [];
+  return combinedModel(player.playback.events, player.cursor, parts);
 }
 
-describe('Combined answer statements (02 combined_answer.statements)', () => {
-  it('labels each statement of both Combined answers by its source', () => {
-    for (const c of [combined, ...combined.variants]) {
-      const statements = answerStatements(c.expected_answer, composition);
-      expect(statements.map((s) => s.source)).toEqual([
-        'tool',
-        'session',
-        'documents',
-        'gap',
-        'comparison',
-      ]);
-      // Joined by single spaces they are exactly the answer.
-      expect(statements.map((s) => s.text).join(' ')).toBe(c.expected_answer);
-      expect(statements[0]?.text).toBe(
-        'Your current balance is CHF 12,500.75 (source: get_customer_balance tool).',
-      );
-      expect(statements[1]?.text).toBe('You have an Everyday account.');
-      expect(statements[2]?.text).toMatch(/^Opening an account: .*\[\d\]\.$/);
-      expect(statements[3]?.text).toMatch(/^The retrieved evidence does not cover .*\.$/);
-    }
-    const [base, gap] = [combined, ...combined.variants].map((c) =>
-      answerStatements(c.expected_answer, composition),
+describe('Combined answer parts (06 answer_composition.rule, 05 answer_rules)', () => {
+  it.each(cases)('$id: the parts compose exactly the expected answer', (c) => {
+    const parts = partsOf(c.id);
+    expect(parts.map((p) => p.text).join(' ')).toBe(c.expected_answer);
+    // The intro sentences come first, with the sources the specifications give them.
+    expect(parts.slice(0, composition.intro.length)).toEqual(
+      composition.intro.map((s) => ({ kind: 'intro', source: s.source, text: s.text })),
     );
-    expect(base?.[4]?.text).toBe(composition.comparisons[0]?.sentence);
-    // The missing Savings terms are stated, and no comparison is made.
-    expect(gap?.[3]?.text).toContain("the Savings account's fee and interest");
-    expect(gap?.[4]?.text).toBe(
-      "Without the Savings account terms I can't say whether another account type would offer better conditions.",
-    );
+    // Each answer group is its own part, then the gap sentence, then the comparison.
+    const kinds = parts.map((p) => p.kind);
+    expect(kinds.filter((k) => k === 'group').length).toBeGreaterThan(1);
+    expect(kinds.slice(-2)).toEqual(['gap', 'comparison']);
   });
 
-  it('keeps an answer without the intro, the gap or a comparison as cited statements', () => {
-    expect(answerStatements('Fees are low [1].', composition)).toEqual([
-      { source: 'documents', text: 'Fees are low [1].' },
-    ]);
-    expect(answerStatements('The retrieved evidence does not cover fees.', composition)).toEqual([
-      { source: 'gap', text: 'The retrieved evidence does not cover fees.' },
-    ]);
+  it('states the missing Savings terms instead of comparing', () => {
+    const parts = partsOf('combined-missing-terms');
+    expect(parts.find((p) => p.kind === 'gap')?.text).toContain(
+      "the Savings account's fee and interest",
+    );
+    expect(parts.at(-1)?.text).toBe(composition.comparisons[1]?.sentence);
+    expect(partsOf(combined.id).at(-1)?.text).toBe(composition.comparisons[0]?.sentence);
+  });
+
+  it('reports a malformed composition by name', () => {
+    expect(answerCompositionProblem(composition)).toBeUndefined();
+    expect(answerCompositionProblem({ ...composition, intro: 'Your balance.' })).toMatch(/^intro/);
+    expect(
+      answerCompositionProblem({ ...composition, intro: [{ source: 'guess', text: 'x' }] }),
+    ).toMatch(/^intro/);
+    expect(answerCompositionProblem({ ...composition, comparisons: [{}] })).toMatch(/comparison/);
+    expect(answerCompositionProblem(undefined)).toBe('missing');
+  });
+});
+
+describe('Combined answer statements (02 combined_answer.statements)', () => {
+  it.each(cases)('$id: one statement per part, labelled by its kind', (c) => {
+    const parts = partsOf(c.id);
+    const statements = answerStatements(c.expected_answer, parts);
+    expect(statements).toEqual(parts.map((p) => ({ source: partSource(p), text: p.text })));
+    expect(statements.map((s) => s.text).join(' ')).toBe(c.expected_answer);
+    const labels = statements.map((s) => STATEMENT_LABELS[s.source ?? 'gap']);
+    expect(labels.slice(0, 2)).toEqual(['Tool data · MCP', 'Session context']);
+    expect(labels.at(-2)).toBe('Not in the evidence');
+    expect(labels.at(-1)).toBe('Comparison');
+    expect(labels.slice(2, -2).every((l) => l === 'Document evidence · RAG')).toBe(true);
+  });
+
+  it('labels every kind of part', () => {
+    expect(
+      (
+        [
+          { kind: 'intro', source: 'tool', text: '' },
+          { kind: 'intro', source: 'session', text: '' },
+          { kind: 'group', text: '' },
+          { kind: 'conflict', text: '' },
+          { kind: 'gap', text: '' },
+          { kind: 'no-evidence', text: '' },
+          { kind: 'note', text: '' },
+          { kind: 'comparison', text: '' },
+        ] as AnswerPart[]
+      ).map(partSource),
+    ).toEqual(['tool', 'session', 'documents', 'documents', 'gap', 'gap', 'note', 'comparison']);
+  });
+
+  it('shows an answer its parts do not compose as one unlabelled statement', () => {
+    const parts = partsOf(combined.id);
+    expect(answerStatements('Something else.', parts)).toEqual([{ text: 'Something else.' }]);
   });
 
   it('writes amounts as the answer does', () => {
@@ -84,7 +119,7 @@ describe('Combined answer model', () => {
     expect(at('mcp-balance')).toBeUndefined();
   });
 
-  it.each([combined, ...combined.variants])(
+  it.each(cases)(
     '$id: links the balance to the tool result and cites the expected sources',
     (c) => {
       const model = at(c.id);
@@ -99,7 +134,8 @@ describe('Combined answer model', () => {
       });
       expect(model?.sources.map((s) => s.line)).toEqual(c.expected_sources);
       expect(model?.statements.map((s) => s.text).join(' ')).toBe(c.expected_answer);
-      const events = createPlayback(registry[c.id] as Scenario).events;
+      expect(model?.statements.every((s) => s.source)).toBe(true);
+      const events = createPlayback(scenario(c.id)).events;
       expect(events[29]?.operation).toBe('tools/call result');
       expect(events[32]?.id).toBe(`${c.id}:c-06`);
     },

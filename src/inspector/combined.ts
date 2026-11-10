@@ -4,6 +4,7 @@
  * tool result and each citation its chunk. The model is pure and read from the played
  * events; the view renders it.
  */
+import type { AnswerPart } from '../rag/engine.ts';
 import type { Json, ScenarioEvent } from '../scenarios/types.ts';
 import {
   appendCited,
@@ -21,7 +22,7 @@ const obj = (v: Json | undefined): Obj =>
 const list = (v: Json | undefined): Json[] => (Array.isArray(v) ? v : []);
 
 /** Where a statement of the answer comes from. */
-export type StatementSource = 'tool' | 'session' | 'documents' | 'gap' | 'comparison';
+export type StatementSource = 'tool' | 'session' | 'documents' | 'gap' | 'note' | 'comparison';
 
 /** The label of each source, in the column beside its statements. */
 export const STATEMENT_LABELS: Readonly<Record<StatementSource, string>> = {
@@ -29,50 +30,41 @@ export const STATEMENT_LABELS: Readonly<Record<StatementSource, string>> = {
   session: 'Session context',
   documents: 'Document evidence · RAG',
   gap: 'Not in the evidence',
+  note: 'Note',
   comparison: 'Comparison',
 };
 
 export interface Statement {
-  source: StatementSource;
+  /** Absent only when the parts do not compose the shown answer (then it is one statement). */
+  source?: StatementSource;
   text: string;
 }
 
-/** 06 combined.answer_composition, as far as the statements need it. */
-export interface Composition {
-  intro: string;
-  comparisons: readonly { sentence: string }[];
+/** The source of an answer part, by its kind (02 combined_answer.statements). */
+export function partSource(part: AnswerPart): StatementSource {
+  switch (part.kind) {
+    case 'intro':
+      return part.source;
+    case 'group':
+    case 'conflict':
+      return 'documents';
+    case 'gap':
+    case 'no-evidence':
+      return 'gap';
+    case 'note':
+      return 'note';
+    case 'comparison':
+      return 'comparison';
+  }
 }
 
-/** How 05 answer_rules start the sentence naming unsupported aspects. */
-const GAP_START = 'The retrieved evidence does not cover';
-
 /**
- * The answer as statements in order (02 combined_answer.statements): the intro's sentences
- * (the one naming the tool is tool data, the rest session context), the cited statements,
- * the sentence naming unsupported aspects, and the comparison sentence that applies. Joined
- * by single spaces they are the answer.
+ * The shown answer as statements: the parts the engine composed it from, each labelled by
+ * its kind. If their join is not the shown answer, the answer is one unlabelled statement.
  */
-export function answerStatements(text: string, composition: Composition): Statement[] {
-  const out: Statement[] = [];
-  let rest = text;
-  const { intro } = composition;
-  if (intro && rest.startsWith(intro)) {
-    for (const sentence of intro.split(/(?<=\.)\s+/)) {
-      const tool = /\(source: [^)]+ tool\)/.test(sentence);
-      out.push({ source: tool ? 'tool' : 'session', text: sentence });
-    }
-    rest = rest.slice(intro.length).trimStart();
-  }
-  const comparison = composition.comparisons
-    .map((c) => c.sentence)
-    .find((sentence) => rest.endsWith(sentence));
-  if (comparison) rest = rest.slice(0, rest.length - comparison.length).trimEnd();
-  const gapAt = rest.indexOf(GAP_START);
-  const cited = (gapAt < 0 ? rest : rest.slice(0, gapAt)).trim();
-  if (cited) out.push({ source: 'documents', text: cited });
-  if (gapAt >= 0) out.push({ source: 'gap', text: rest.slice(gapAt).trim() });
-  if (comparison) out.push({ source: 'comparison', text: comparison });
-  return out;
+export function answerStatements(answer: string, parts: readonly AnswerPart[]): Statement[] {
+  if (parts.map((p) => p.text).join(' ') !== answer) return [{ text: answer }];
+  return parts.map((p) => ({ source: partSource(p), text: p.text }));
 }
 
 /** The tool result the answer's live data comes from. */
@@ -154,14 +146,14 @@ function toolResult(events: readonly ScenarioEvent[], cursor: number): ToolResul
 export function combinedModel(
   events: readonly ScenarioEvent[],
   cursor: number,
-  composition: Composition,
+  parts: readonly AnswerPart[],
 ): CombinedModel | undefined {
   const shown = events.findIndex((e) => e.id === 'c-08' || e.id.endsWith(':c-08'));
   if (shown < 0 || cursor < shown + 1) return undefined;
   const answer = shownAnswer(events[shown]);
   const tool = toolResult(events, cursor);
   return {
-    statements: answerStatements(answer.text, composition),
+    statements: answerStatements(answer.text, parts),
     sources: answer.sources,
     ...(tool ? { tool } : {}),
   };
@@ -187,7 +179,6 @@ function focusKey<T extends HTMLElement>(node: T, key: string): T {
 }
 
 export interface CombinedContext {
-  composition: Composition;
   /** The index the scenario searches, for the chunks the citations open. */
   index: () => SearchedIndex;
   /** Moves the cursor to a step (1-based). */
@@ -300,11 +291,11 @@ export class CombinedPanel {
       }
       const item = el(
         'li',
-        `statement statement--${st.source}`,
-        el('span', 'statement-source small', STATEMENT_LABELS[st.source]),
+        'statement',
+        el('span', 'statement-source small', st.source ? STATEMENT_LABELS[st.source] : ''),
         text,
       );
-      item.dataset['source'] = st.source;
+      if (st.source) item.dataset['source'] = st.source;
       return item;
     });
     const statements = el('ol', 'statements', ...items);

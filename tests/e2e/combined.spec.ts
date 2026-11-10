@@ -3,6 +3,10 @@
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import type { Page } from '@playwright/test';
+import { readSpecSources } from '../../scripts/spec-sources';
+import { partSource, STATEMENT_LABELS } from '../../src/inspector/combined';
+import { RagDerivation } from '../../src/rag/derive';
+import type { JsonObject, Scenario } from '../../src/scenarios/types';
 import { expect, test } from './fixtures';
 
 interface Case {
@@ -71,13 +75,14 @@ async function shownStatements(page: Page): Promise<[string, string][]> {
   );
 }
 
-const LABELS = [
-  'Tool data · MCP',
-  'Session context',
-  'Document evidence · RAG',
-  'Not in the evidence',
-  'Comparison',
-];
+const derivation = new RagDerivation(readSpecSources('specifications'));
+
+/** The statements the engine composes for a case: [label, text] per answer part. */
+function expectedStatements(fixtureOverrides?: JsonObject): [string, string][] {
+  return derivation
+    .combinedAnswer({} as Scenario, {}, fixtureOverrides)
+    .parts.map((p) => [STATEMENT_LABELS[partSource(p)], p.text]);
+}
 
 test('combined-walkthrough: tool data and document evidence stay apart from question to answer', async ({
   page,
@@ -134,19 +139,26 @@ test('combined-walkthrough: tool data and document evidence stay apart from ques
   await expect(status(page)).toHaveText('Step 35 of 35 · Answer');
   await expect(answerPanel(page)).toBeVisible();
   const shown = await shownStatements(page);
-  expect(shown.map(([label]) => label)).toEqual(LABELS);
+  expect(shown).toEqual(expectedStatements());
   expect(shown.map(([, text]) => text).join(' ')).toBe(combined.expected_answer);
-  expect(shown[0]?.[1]).toBe(
+  expect(shown[0]).toEqual([
+    'Tool data · MCP',
     'Your current balance is CHF 12,500.75 (source: get_customer_balance tool).',
-  );
-  const documents = shown[2]?.[1] ?? '';
+  ]);
+  const documents = shown
+    .filter(([label]) => label === 'Document evidence · RAG')
+    .map(([, text]) => text)
+    .join(' ');
   expect(documents).toContain('the Everyday account costs CHF 5 per month');
   expect(documents).toContain('the Savings account has no monthly fee, pays 0.50% annual interest');
   expect(documents).toContain(
     'the Everyday account includes a debit card for payments and cash withdrawals [3]',
   );
   expect(documents).toContain('the Savings account has no debit card');
-  expect(shown[4]?.[1]).toMatch(/^Whether the Savings account would be better/);
+  expect(shown.at(-1)).toEqual([
+    'Comparison',
+    expect.stringMatching(/^Whether the Savings account would be better/),
+  ]);
   await expect(answerPanel(page).locator('.source-line')).toHaveText(combined.expected_sources);
   // The sources in the order of their statements: tool data first, then the documents.
   await expect(answerPanel(page).locator('.combined-source h5')).toHaveText([
@@ -207,14 +219,20 @@ test('combined-walkthrough: tool data and document evidence stay apart from ques
   await expect(page.locator('.headline')).toHaveText(missing.lesson ?? '');
   await jump(page, 35);
   const gap = await shownStatements(page);
-  expect(gap.map(([label]) => label)).toEqual(LABELS);
+  expect(gap).toEqual(
+    expectedStatements((missing as unknown as { fixture_overrides: JsonObject }).fixture_overrides),
+  );
   expect(gap.map(([, text]) => text).join(' ')).toBe(missing.expected_answer);
-  expect(gap[3]?.[1]).toBe(
-    "The retrieved evidence does not cover the Savings account's fee and interest, the Savings account's minimum balance, the Savings account's card access, the Savings account's withdrawal rules and transfers between the accounts.",
-  );
-  expect(gap[4]?.[1]).toBe(
-    "Without the Savings account terms I can't say whether another account type would offer better conditions.",
-  );
+  expect(gap.slice(-2)).toEqual([
+    [
+      'Not in the evidence',
+      "The retrieved evidence does not cover the Savings account's fee and interest, the Savings account's minimum balance, the Savings account's card access, the Savings account's withdrawal rules and transfers between the accounts.",
+    ],
+    [
+      'Comparison',
+      "Without the Savings account terms I can't say whether another account type would offer better conditions.",
+    ],
+  ]);
   await expect(answerPanel(page).locator('.source-line')).toHaveText(missing.expected_sources);
   await expect(answerPanel(page)).not.toContainText('savings-account.md');
 });
@@ -228,4 +246,43 @@ test('on narrow screens each label sits above its statement', async ({ page }) =
     expect(label && text && label.y + label.height <= text.y + 1).toBe(true);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('a failed tool call is labelled as failed in context, and labels keep their separator', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 820, height: 900 });
+  await open(page, '#/mcp/mcp-jsonrpc-error/16');
+  await page.getByRole('button', { name: 'Model context' }).click();
+  const tool = seen(page).locator('.context-list > li').filter({ hasText: 'tool ·' });
+  await expect(tool).toContainText('Tool call failed · get_balance');
+  await expect(tool).not.toContainText('Tool data');
+  await expect(
+    agentState(page).locator('li').filter({ hasText: 'Tool message stored in conversation' }),
+  ).toContainText('Tool call failed · Tool message stored in conversation');
+
+  // At 820 px no separator after a label wraps onto a line of its own.
+  for (const hash of ['#/mcp/mcp-not-found/26', '#/combined/combined-balance-explanation/33']) {
+    await open(page, hash);
+    await page.getByRole('button', { name: 'Model context' }).click();
+    const orphans = await page.locator('#context-panel').evaluate((panel) =>
+      [...panel.querySelectorAll('.source-label')].flatMap((label) => {
+        const after = label.nextSibling;
+        if (!after || after.nodeType !== Node.TEXT_NODE) return ['no separator'];
+        const at = (after.textContent ?? '').indexOf('·');
+        if (at < 0) return ['no separator'];
+        const range = document.createRange();
+        range.setStart(after, at);
+        range.setEnd(after, at + 1);
+        const dot = range.getClientRects()[0];
+        const last = [...label.getClientRects()].at(-1);
+        return dot && last && Math.abs(dot.top - last.top) < 2 ? [] : [label.textContent ?? ''];
+      }),
+    );
+    expect(orphans, hash).toEqual([]);
+    // An isError result of an existing tool is still tool data, named an error result.
+    if (hash.includes('mcp-not-found'))
+      await expect(seen(page)).toContainText('Tool data · get_customer_balance error result');
+  }
+  await expect(seen(page)).toContainText('Tool data · get_customer_balance result');
 });

@@ -561,7 +561,7 @@ export class Shell {
         )
       : undefined;
     // The Combined answer's provenance (02 combined_answer).
-    const combined = combinedPanel(scenario, player, this.sources, {
+    const combined = combinedPanel(scenario, player, {
       jump: (k) => this.go(() => player.jump(k)),
       leave: () => slider.focus({ preventScroll: true }),
     });
