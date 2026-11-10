@@ -418,9 +418,12 @@ compare_view:
     more events in it has: at its j-th step each pane is at its j-th event of that phase, or stays on
     its last event of the phase when it has no more, saying "Done with <phase>; <other pane>
     continues." A phase in which neither pane has events has no steps. A pane without events in the
-    phase stays where it was and shows its placeholder (06 compare.placeholders) instead of a message.
-    Both panes therefore always show the same semantic phase. This needs each scenario''s events to
-    visit the semantic phases in their order, which a unit test checks.'
+    phase (counted at the default parameters) keeps its events so far but shows no position from an
+    earlier phase: its position line reads "No step in <phase> · <k> of <n> played", its diagram marks
+    no current step or group, and its placeholder (06 compare.placeholders, which the validators require
+    for exactly these phases) replaces the message. Both panes therefore always show the same semantic
+    phase. This needs each scenario''s events to visit the semantic phases in their order, which a unit
+    test checks.'
   controls: 'One set of shared controls drives the timeline: Start (compare step 1), Previous, Play or
     Pause, Next, Reset, the speeds and the keys of controls.keyboard, under controls.action_rules (Play
     advances one compare step per interval). Next therefore steps whichever panes still have events in
@@ -438,9 +441,12 @@ compare_view:
     Missing parts take defaults and a step beyond the timeline is clamped (navigation.routes); stepping
     replaces the history entry.'
   accessibility: 'Each pane is a region named by its tab label (RAG, MCP); each pane''s slider is
-    labelled "<tab> step" with its position as value text. After each change of position one polite
-    live region announces the phase and both positions, for example "Information acquisition. RAG step
-    6 of 10, done with this phase. MCP step 13 of 28." Controls keep focus while stepping.'
+    labelled "<tab> step" with its position as value text. One polite live region announces the phase
+    and both positions after each manual change of position while paused, and once when playback pauses
+    or ends; it stays quiet while playing. For example "Information acquisition. RAG step 6 of 10. MCP
+    step 14 of 28.", "Information acquisition. RAG step 6 of 10, done with this phase. MCP step 16 of
+    28." or, for a pane with a placeholder, "Preparation. RAG: Index built earlier by rag-index. MCP
+    step 4 of 28." Controls keep focus while stepping.'
 rag_controls:
   top_k:
     min: 1

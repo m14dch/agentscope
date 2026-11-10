@@ -108,9 +108,17 @@ describe('compare timeline', () => {
         expect(shownPhase(step, other)).toBe(shownPhase(step, side));
       }
     }
-    // The left pane's last retrieval event moves MCP back to its start of the phase.
+    // RAG's step 6 is its 5th event of information acquisition: compare step 14, where MCP is
+    // at its 5th event of that phase too (its step 14).
     const rest = timeline.stepOf(0, 6);
-    expect(timeline.at(rest).phase).toBe('information-acquisition');
+    expect(rest).toBe(14);
+    expect(timeline.at(rest)).toMatchObject({
+      phase: 'information-acquisition',
+      panes: [
+        { cursor: 6, status: 'stepping' },
+        { cursor: 14, status: 'stepping' },
+      ],
+    });
     expect(timeline.stepOf(0, 999)).toBe(timeline.length);
     expect(timeline.stepOf(1, -1)).toBe(0);
   });
@@ -145,26 +153,52 @@ describe('compare timeline', () => {
 });
 
 describe('compare data', () => {
-  const broken = (change: (c: SpecSources['comparison']['compare']) => void): string[] => {
+  type Change = (copy: SpecSources, compare: Record<string, unknown>) => void;
+  const problems = (change: Change): string[] => {
     const copy = structuredClone(sources) as SpecSources;
-    change(copy.comparison.compare);
-    return loadScenarios(copy).problems;
+    change(copy, copy.comparison.compare as unknown as Record<string, unknown>);
+    return loadScenarios(copy).problems.filter((p) => p.startsWith('compare.'));
   };
 
-  it('needs a placeholder exactly for each semantic phase a scenario has no events in', () => {
-    expect(
-      broken((c) => {
-        c.placeholders = {};
-      }),
-    ).toContainEqual(expect.stringContaining('compare.placeholders'));
-    expect(
-      broken((c) => {
-        c.placeholders = { 'rag-query': { preparation: 'x', answer: 'y' } };
-      }),
-    ).toContainEqual(expect.stringContaining('compare.placeholders'));
+  it('accepts the bundled data', () => {
+    expect(problems(() => undefined)).toEqual([]);
   });
 
-  it('states every aspect as a sentence', () => {
+  it('needs a placeholder exactly for each semantic phase a scenario plays no event in', () => {
+    expect(problems((_, c) => (c['placeholders'] = {}))).toEqual([
+      'compare.placeholders: rag-query placeholders must cover exactly: preparation',
+    ]);
+    expect(
+      problems((_, c) => (c['placeholders'] = { 'rag-query': { preparation: 'x', answer: 'y' } })),
+    ).toEqual(['compare.placeholders: rag-query placeholders must cover exactly: preparation']);
+    expect(problems((_, c) => (c['placeholders'] = { 'rag-query': { preparation: ' ' } }))).toEqual(
+      ['compare.placeholders: rag-query placeholder for preparation is empty'],
+    );
+    expect(
+      problems(
+        (_, c) =>
+          (c['placeholders'] = { 'rag-query': { preparation: 'x' }, 'rag-index': { answer: 'y' } }),
+      ),
+    ).toEqual(['compare.placeholders: rag-index is not in phase_mapping']);
+    expect(problems((_, c) => (c['placeholders'] = 'x'))).toContainEqual(
+      'compare.placeholders: must map scenario IDs to placeholders',
+    );
+  });
+
+  it('counts only the events played at the default parameters', () => {
+    // With its only context event optional and off by default, rag-query plays nothing in
+    // context assembly, so that phase needs a placeholder too.
+    expect(
+      problems((copy) => {
+        const scn = copy.rag.scenarios.find((s) => s.id === 'rag-query');
+        scn?.optional_steps?.push({ events: ['retrieve-09'], enabled_by: 'rerank' });
+      }),
+    ).toEqual([
+      'compare.placeholders: rag-query placeholders must cover exactly: preparation, context-assembly',
+    ]);
+  });
+
+  it('states every aspect as one sentence with its label', () => {
     expect(compare.aspects?.map((a) => a.label)).toEqual([
       'Data source',
       'Freshness expectations',
@@ -172,11 +206,21 @@ describe('compare data', () => {
       'Actions vs retrieval',
       'Trust boundaries',
     ]);
-    for (const a of compare.aspects ?? []) expect(a.sentence).toMatch(/^[A-Z].*\.$/);
-    expect(
-      broken((c) => {
-        c.aspects = [{ label: 'Data source', sentence: ' ' }];
-      }),
-    ).toContainEqual(expect.stringContaining('compare.aspects'));
+    for (const a of compare.aspects ?? [])
+      expect(a.sentence).toMatch(/^[A-Z][^.]*(\.[^ .][^.]*)*\.$/);
+    const wrong = (aspects: unknown) => problems((_, c) => (c['aspects'] = aspects));
+    expect(wrong([])).toEqual(['compare.aspects: needs at least one aspect']);
+    expect(wrong(undefined)).toEqual(['compare.aspects: needs at least one aspect']);
+    for (const aspect of [
+      { label: 'Data source', sentence: ' ' },
+      { label: 'Data source' },
+      { label: 'Data source', sentence: 3 },
+      { label: 'Data source', sentence: 'A sentence.', note: 'extra' },
+      'Data source',
+    ]) {
+      expect(wrong([aspect]), JSON.stringify(aspect)).toEqual([
+        'compare.aspects: aspect 0 needs exactly a label and a sentence',
+      ]);
+    }
   });
 });

@@ -59,10 +59,13 @@ compare:
       tool call.
   - label: Actions vs retrieval
     sentence: In MCP the model requests a tool and the agent runs it, and a tool may read or change data
-      (get_customer_balance only reads); in RAG the agent retrieves text before the model is involved.
+      (here the adapter maps get_customer_balance to a GET); in RAG the agent retrieves text before the
+      model is involved.
   - label: Trust boundaries
-    sentence: Retrieved chunks and tool results both reach the model as lower-trust data; only MCP crosses
-      into the bank's systems, through an MCP server that uses its own credentials, never the user's.
+    sentence: RAG searches published documents under document-level access filters and gives the model
+      the retrieved text as untrusted data; MCP crosses into the bank's systems through an MCP server
+      that uses its own backend credential, never passing on the user's token, and its tool results also
+      reach the model as untrusted data.
   notes:
   - In MCP the model takes part in information acquisition by requesting a tool; in RAG the agent retrieves
     before the model is involved.
