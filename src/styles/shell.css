@@ -1,0 +1,205 @@
+/* App shell (02-ui-ux.yaml layout): one quiet frame around the diagram. */
+.shell {
+  padding: var(--space-2) var(--page-margin) var(--space-3);
+}
+
+.shell-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+
+.brand {
+  margin: 0;
+  font-size: var(--size-title);
+  line-height: var(--leading-title);
+}
+
+.brand a,
+.tabs a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tabs a[aria-current='page'] {
+  font-weight: var(--weight-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.simulated {
+  margin: var(--space-1) 0 0;
+}
+
+/* Scenario picker: a menu below its summary. */
+.picker {
+  position: relative;
+}
+
+.picker summary {
+  cursor: pointer;
+  font-size: var(--size-small);
+}
+
+.picker ul {
+  position: absolute;
+  z-index: 1;
+  margin: var(--space-1) 0 0;
+  padding: var(--space-1) var(--space-2);
+  width: min(32rem, 90vw);
+  list-style: none;
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-rule);
+}
+
+.picker li {
+  display: flex;
+  flex-direction: column;
+  padding-block: var(--space-1);
+}
+
+.picker li + li {
+  border-top: var(--line-hair) solid var(--color-rule);
+}
+
+.picker a {
+  color: inherit;
+}
+
+.picker a[aria-current='true'] {
+  font-weight: var(--weight-strong);
+}
+
+.segmented {
+  display: inline-flex;
+}
+
+.segmented button + button {
+  border-left: none;
+}
+
+.lesson {
+  margin-block: var(--space-2);
+  max-width: 48rem;
+}
+
+.lesson h2 {
+  margin: 0;
+  font-size: var(--size-text);
+  line-height: var(--leading-text);
+}
+
+.headline {
+  margin: 0;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.status {
+  margin-left: var(--space-1);
+}
+
+/* Diagram and inspector side by side from 64rem; the splitter resizes them. */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--space-2) var(--inspector-width, 24rem);
+  border-top: var(--line-hair) solid var(--color-rule);
+  border-bottom: var(--line-hair) solid var(--color-rule);
+}
+
+.diagram-pane,
+.inspector {
+  max-height: calc(100vh - 19rem);
+  min-height: 16rem;
+  overflow: auto;
+}
+
+.inspector {
+  padding: var(--space-2) 0;
+}
+
+.splitter {
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* A hairline in the middle of the handle. */
+.splitter::before {
+  content: '';
+  display: block;
+  width: var(--line-hair);
+  height: 100%;
+  margin-inline: auto;
+  background: var(--color-rule);
+}
+
+.message {
+  margin-top: 0;
+}
+
+.prediction {
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--line-hair) solid var(--color-rule);
+}
+
+.prediction p {
+  margin: 0 0 var(--space-1);
+}
+
+.prompt {
+  font-weight: var(--weight-strong);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.timeline input {
+  width: 100%;
+}
+
+.compare-sides {
+  padding: 0;
+  list-style: none;
+}
+
+.compare-sides li {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 63.99rem) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .splitter {
+    display: none;
+  }
+
+  .diagram-pane {
+    max-height: 70vh;
+  }
+
+  .inspector {
+    max-height: none;
+    border-top: var(--line-hair) solid var(--color-rule);
+  }
+}

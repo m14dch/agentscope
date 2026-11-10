@@ -18,6 +18,12 @@ const SCENARIOS = [
   ['combined-balance-explanation', 35],
 ] as const;
 
+/** The shell route for a scenario at a step, in either mode. */
+function route(id: string, step: number, mode: 'architecture' | 'protocol'): string {
+  const tab = id.startsWith('mcp-') ? 'mcp' : id.startsWith('rag-') ? 'rag' : 'combined';
+  return `#/${tab}/${id}/${step}${mode === 'protocol' ? '/protocol' : ''}`;
+}
+
 async function open(page: Page, hash: string): Promise<void> {
   await page.goto(`./${hash}`);
   // The view lays out again with the real font, then marks itself measured.
@@ -60,9 +66,9 @@ for (const [width, height, device] of [
   test(`no overlapping labels in any scenario at ${device} width`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     for (const [id, steps] of SCENARIOS) {
-      await open(page, `#/diagram/${id}/${steps}/protocol`);
+      await open(page, route(id, steps, 'protocol'));
       expect(await overlaps(page), `${id} protocol`).toEqual([]);
-      await open(page, `#/diagram/${id}/${steps}/architecture`);
+      await open(page, route(id, steps, 'architecture'));
       // Expand every group.
       const groups = page.locator('[data-group]');
       const count = await groups.count();
@@ -79,7 +85,7 @@ test('the diagram scrolls horizontally on a narrow screen instead of squeezing',
   page,
 }) => {
   await page.setViewportSize({ width: 600, height: 900 });
-  await open(page, '#/diagram/mcp-balance/28/protocol');
+  await open(page, route('mcp-balance', 28, 'protocol'));
   const region = page.getByRole('region', { name: /Sequence diagram/ });
   const { scroll, client, pageWidth } = await region.evaluate((el) => ({
     scroll: el.scrollWidth,
@@ -91,20 +97,20 @@ test('the diagram scrolls horizontally on a narrow screen instead of squeezing',
 });
 
 test('switching mode keeps the cursor on the same step', async ({ page }) => {
-  await open(page, '#/diagram/mcp-balance/14/protocol');
+  await open(page, route('mcp-balance', 14, 'protocol'));
   await expect(page.locator('[data-current]')).toHaveAttribute('data-index', '13');
   await page.getByRole('button', { name: 'Architecture' }).click();
-  await expect(page.getByText('Step 14 of 28')).toBeVisible();
+  await expect(page.locator('.status').filter({ hasText: 'Step 14 of 28' })).toBeVisible();
   await expect(page.locator('[data-current]')).toHaveAttribute('data-phase', 'tool');
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: 'Protocol' }).click();
-  await expect(page.getByText('Step 15 of 28')).toBeVisible();
+  await expect(page.locator('.status').filter({ hasText: 'Step 15 of 28' })).toBeVisible();
   await expect(page.locator('[data-current]')).toHaveAttribute('data-index', '14');
-  await expect(page).toHaveURL(/#\/diagram\/mcp-balance\/15\/protocol$/);
+  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/15\/protocol$/);
 });
 
 test('future steps are hidden in protocol mode', async ({ page }) => {
-  await open(page, '#/diagram/mcp-balance/3/protocol');
+  await open(page, route('mcp-balance', 3, 'protocol'));
   await expect(page.locator('.step')).toHaveCount(3);
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('.step')).toHaveCount(4);
@@ -116,7 +122,7 @@ test('future steps are hidden in protocol mode', async ({ page }) => {
 test('groups expand and collapse with the keyboard, and stay open while stepping', async ({
   page,
 }) => {
-  await open(page, '#/diagram/mcp-balance/14/architecture');
+  await open(page, route('mcp-balance', 14, 'architecture'));
   const group = page.locator('[data-group="tool"]');
   await group.focus();
   await page.keyboard.press('Enter');
@@ -134,7 +140,7 @@ test('groups expand and collapse with the keyboard, and stay open while stepping
 test('meaning survives in greyscale: the current step and errors carry non-colour cues', async ({
   page,
 }, info) => {
-  await open(page, '#/diagram/mcp-not-found/23/protocol');
+  await open(page, route('mcp-not-found', 23, 'protocol'));
   const style = (selector: string) =>
     page
       .locator(selector)
@@ -167,9 +173,9 @@ test('with reduced motion the diagram region scrolls to the current step instant
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 1280, height: 700 });
-  await open(page, '#/diagram/mcp-multiple-tools/1/protocol');
+  await open(page, route('mcp-multiple-tools', 1, 'protocol'));
   await page.evaluate(() => {
-    location.hash = '#/diagram/mcp-multiple-tools/40/protocol';
+    location.hash = '#/mcp/mcp-multiple-tools/40/protocol';
   });
   await page.locator('[data-current][data-index="39"]').waitFor();
   const state = await page.evaluate(() => {
@@ -192,7 +198,7 @@ test('toggling a group keeps the scroll position and focus', async ({ page }) =>
   // Instant scrolling, so the opening scroll has finished before measuring.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 1280, height: 700 });
-  await open(page, '#/diagram/combined-balance-explanation/35/architecture');
+  await open(page, route('combined-balance-explanation', 35, 'architecture'));
   const region = page.locator('.diagram-scroller');
   const before = await region.evaluate((el) => el.scrollTop);
   const last = page.locator('[data-group="answer"]');
@@ -204,20 +210,20 @@ test('toggling a group keeps the scroll position and focus', async ({ page }) =>
 });
 
 test('focus stays on the same group while stepping', async ({ page }) => {
-  await open(page, '#/diagram/mcp-balance/14/architecture');
+  await open(page, route('mcp-balance', 14, 'architecture'));
   await page.locator('[data-group="tool"]').focus();
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByText('Step 15 of 28')).toBeVisible();
+  await expect(page.locator('.status').filter({ hasText: 'Step 15 of 28' })).toBeVisible();
   await expect(page.locator('[data-group="tool"]')).toBeFocused();
 });
 
 test('arrow keys scroll the focused diagram region instead of stepping', async ({ page }) => {
   await page.setViewportSize({ width: 600, height: 900 });
-  await open(page, '#/diagram/mcp-balance/5/protocol');
+  await open(page, route('mcp-balance', 5, 'protocol'));
   const region = page.locator('.diagram-scroller');
   await region.focus();
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByText('Step 5 of 28')).toBeVisible();
+  await expect(page.locator('.status').filter({ hasText: 'Step 5 of 28' })).toBeVisible();
   await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
 });
