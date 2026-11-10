@@ -176,12 +176,34 @@ deployment:
   version_stamp: The built page carries <meta name="agentscope-version"> with the commit
     SHA it was built from in CI ("dev" for local builds); the browser tests check it.
   post_deploy_check: After each deployment, fetch the live page and every script and link
-    it references. Fail the workflow when the page or any reference does not return 200,
-    when any reference points outside the base path (including other origins), or when
-    the page's version stamp differs from the deployed commit (a stale deployment).
-    Network errors and stale responses are retried for about a minute first.
+    it references, the asset manifest, the service worker and every file the manifest
+    lists. Fail the workflow when any of them does not return 200, when any reference or
+    listed file points outside the base path (including other origins), or when the
+    page's or the manifest's version stamp differs from the deployed commit (a stale
+    deployment). Network errors and stale responses are retried for about a minute first.
   offline: Bundle all scenarios, documents, fonts and visuals locally. On HTTPS or
     localhost, a base-scoped service worker precaches the complete versioned build
     from a build-generated asset manifest. Report offline readiness after successful
     caching and activation. Serve the cached shell and assets on reload and keep cache
     cleanup scoped to this app. First hosted visit requires connectivity.
+  offline_mechanics:
+    asset_manifest: The build writes asset-manifest.json to dist with the version stamp,
+      a content hash of every built file and the list of every file in dist (scenarios,
+      fonts, scripts, styles, licences, the page), as paths relative to the base.
+    service_worker: The build generates sw.js at the root of dist with that manifest
+      inlined, so every build that changes any file changes the worker and browsers
+      install the new version. The page registers it with the base path as its scope;
+      the development server registers nothing.
+    cache: One cache per build, named agentscope:<scope URL>:<version>:<hash>. Install
+      fetches the base URL and every listed file past the HTTP cache and fails if any
+      of them fails, so a worker only activates with a complete cache. A new worker
+      activates at once and takes control of open pages.
+    cleanup: 'Activation deletes only caches whose name starts with agentscope:<scope URL>:
+      and is not the current one; caches of other apps and other scopes on the same
+      origin are kept.'
+    serving: Precached GET requests in the scope, and navigations to the base URL or
+      index.html with any hash, are answered from the cache, falling back to the network
+      on a miss. Every other request goes to the network untouched.
+    readiness: Once a worker is active, the page asks it to confirm that every listed
+      file is in its cache; only a confirmed answer shows the indicator (02-ui-ux.yaml
+      layout offline_indicator).
