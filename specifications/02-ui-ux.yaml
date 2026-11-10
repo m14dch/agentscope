@@ -401,6 +401,46 @@ lineage_selection:
     and the later steps up to the current one as jump links, at most five, followed by
     how many more there are; selecting the value marks every one of them in the diagram,
     so a long list adds no information. Steps after the current one are not revealed.
+compare_view:
+  shown_in: The Compare tab (navigation.tab_contents), built from 06-comparison-scenarios.yaml compare.
+  layout: 'The headline, the shared controls, the phase line, then two panes: the left scenario
+    (rag-query, headed RAG) and the right scenario (mcp-balance, headed MCP), side by side from 64rem
+    and stacked below, left first. Then one row per entry of compare.aspects: its label in small
+    ink-muted text beside its sentence, the label above the sentence below 48rem. Nothing makes the
+    page scroll horizontally at any width; each diagram scrolls inside its own region.'
+  pane: 'Each pane shows its scenario''s question, its position ("Step <k> of <n> · <scenario phase
+    label>") with its own step slider, the current event''s explanation with sender → receiver and
+    operation (inspector.message_line), its sequence diagram, and a link "Inspect step <k> in <tab>"
+    to the scenario''s own route at that step and mode, where the inspector, the context panel and the
+    RAG panels are. Compare has no inspector, panels or splitter of its own.'
+  timeline: 'The shared timeline follows 06 semantic_phases in order. Compare step 0 is before any
+    event, both panes at step 0. Each semantic phase then lasts as many compare steps as the pane with
+    more events in it has: at its j-th step each pane is at its j-th event of that phase, or stays on
+    its last event of the phase when it has no more, saying "Done with <phase>; <other pane>
+    continues." A phase in which neither pane has events has no steps. A pane without events in the
+    phase stays where it was and shows its placeholder (06 compare.placeholders) instead of a message.
+    Both panes therefore always show the same semantic phase. This needs each scenario''s events to
+    visit the semantic phases in their order, which a unit test checks.'
+  controls: 'One set of shared controls drives the timeline: Start (compare step 1), Previous, Play or
+    Pause, Next, Reset, the speeds and the keys of controls.keyboard, under controls.action_rules (Play
+    advances one compare step per interval). Next therefore steps whichever panes still have events in
+    the current phase, and moves both to the next phase once neither has. A shared slider jumps to any
+    compare step. A pane''s own slider moves that pane: the position becomes the first compare step at
+    which that pane is at the chosen step, and the other pane follows to the same semantic phase.'
+  phase_line: 'Above the panes, the compare step ("Step <s> of <m> · <phase label>") and the semantic
+    phase labels in order, the current one in weight 600 and marked as the current step for assistive
+    technology; the others in ink-muted. Before step 1 no phase is current.'
+  defaults: 'Both scenarios play at their default parameters; Compare offers no parameter controls.
+    Prediction prompts are not shown in Compare, since a shared step would answer a question asked in
+    one pane only; each scenario''s own tab shows them. The mode switch in the top bar sets both
+    diagrams; architecture mode is the default, so each narrower pane starts from the phase groups.'
+  route: '#/compare/<compare id>/<compare step>[/protocol], for example #/compare/compare-rag-mcp/12.
+    Missing parts take defaults and a step beyond the timeline is clamped (navigation.routes); stepping
+    replaces the history entry.'
+  accessibility: 'Each pane is a region named by its tab label (RAG, MCP); each pane''s slider is
+    labelled "<tab> step" with its position as value text. After each change of position one polite
+    live region announces the phase and both positions, for example "Information acquisition. RAG step
+    6 of 10, done with this phase. MCP step 13 of 28." Controls keep focus while stepping.'
 rag_controls:
   top_k:
     min: 1

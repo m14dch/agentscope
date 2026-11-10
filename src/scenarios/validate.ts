@@ -323,6 +323,19 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
     if ([...keys].some((k) => actual[k] !== mapping[k])) {
       err('compare.phase_mapping', `${sid} mapping differs from scenario phases`);
     }
+    // A pane with no events in a semantic phase shows a placeholder (02 compare_view.timeline).
+    const mapped = new Set(Object.values(mapping));
+    const missing = sources.comparison.semantic_phases
+      .map((p) => p.id)
+      .filter((p) => !mapped.has(p));
+    const placeholders = Object.keys(sources.comparison.compare.placeholders?.[sid] ?? {});
+    if ([...placeholders].sort().join() !== [...missing].sort().join()) {
+      err('compare.placeholders', `${sid} placeholders must cover exactly ${missing.join(', ')}`);
+    }
+  }
+  const aspects = sources.comparison.compare.aspects ?? [];
+  if (!aspects.length || aspects.some((a) => !a.label.trim() || !a.sentence.trim())) {
+    err('compare.aspects', 'each aspect needs a label and a sentence');
   }
   if (!problems.length) problems.push(...replayProblems(registry));
   return { registry, problems };

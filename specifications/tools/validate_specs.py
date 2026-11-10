@@ -871,11 +871,19 @@ def main():
     for sid, mapping in cmp_["compare"]["phase_mapping"].items():
         if mapping != {p["id"]: p["semantic_phase"] for p in registry[sid]["phases"]}:
             err("compare.phase_mapping", f"{sid} mapping differs from scenario phases")
+        # A pane with no events in a semantic phase shows a placeholder (02 compare_view.timeline).
+        missing = [p["id"] for p in cmp_["semantic_phases"] if p["id"] not in mapping.values()]
+        placeholders = cmp_["compare"].get("placeholders", {}).get(sid, {})
+        if sorted(placeholders) != sorted(missing):
+            err("compare.placeholders", f"{sid} placeholders must cover exactly {missing}")
     final_mcp = registry["mcp-balance"]["events"][-1]["payload"]
     if "CHF 12,500.75" not in final_mcp:
         err("mcp-balance", "final answer lacks CHF 12,500.75")
     if not str(cmp_["compare"].get("headline", "")).strip():
         err("compare", "missing headline")
+    if any(set(a) != {"label", "sentence"} or not all(str(v).strip() for v in a.values())
+           for a in cmp_["compare"].get("aspects", [])) or not cmp_["compare"].get("aspects"):
+        err("compare.aspects", "each aspect needs a label and a sentence")
     check_rag(rag, comb, registry, load("02-ui-ux.yaml"))
 
     total = sum(len(s["events"]) for s in registry.values())
