@@ -105,6 +105,8 @@ e2e_tests:
   steps:
   - Build and serve dist under a repository subpath.
   - Verify shell, assets, hash navigation, service-worker scope and offline reload.
+  - Verify the header wordmark and the favicon load under the subpath and after an offline
+    reload.
   - Fail on external requests or runtime API traffic.
 quality_gates:
   min_supported_events: 100
