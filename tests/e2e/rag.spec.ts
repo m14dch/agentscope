@@ -12,6 +12,9 @@ interface Reference {
   selected: { chunkId: string; score: number; rerankScore?: number }[];
   answer: string;
   sources: string[];
+  ranking?: { chunkId: string; score: number; embedding: number[] }[];
+  query_embedding?: number[];
+  keyword_hits?: { chunkId: string; keywordScore: number; score: number }[];
 }
 interface Rag {
   fixtures: RagFixtures;
@@ -346,6 +349,12 @@ test.describe('rag-walkthrough', () => {
       .find((c) => c.id === 'account-opening@1.2-c50o10-002');
     await expect(opened.locator('.evidence-chunk')).toHaveText(chunk?.text ?? '');
     await expect(opened.locator('.chunk-mark')).toHaveText(chunk?.text ?? '');
+    // A citation never breaks from the punctuation after it.
+    await expect(retrieval(page).locator('.citation-group').first()).toHaveText('[1];');
+    await expect(retrieval(page).locator('.citation-group').first()).toHaveCSS(
+      'white-space',
+      'nowrap',
+    );
     // Activating it again closes it.
     await citation.click();
     await expect(opened).toBeEmpty();
@@ -384,6 +393,9 @@ test.describe('rag-walkthrough', () => {
     await expect(scoreRow(page, 'savings-account@1.2-c50o10-002').locator('.outcome')).toHaveText(
       /^retained, rank 2 · rerank 0\.7457$/,
     );
+    await expect(retrieval(page).locator('.rerank-note')).toHaveText(
+      'With reranking, the 5 best chunks by reranker score are retained, so a retained chunk can have a lower cosine score than a dropped one.',
+    );
 
     // Full documents replace the chunks in the prompt and in the citations.
     await page.getByRole('button', { name: 'Fetch full documents' }).click();
@@ -406,9 +418,15 @@ test.describe('rag-walkthrough', () => {
     await open(page, '#/rag/rag-query/5');
     await expect(retrieval(page)).toBeVisible();
     await expect(retrieval(page).locator('.dotplot .retained')).toHaveCount(0);
+    // The threshold comes from retrieve-06, which is not played yet.
+    await expect(retrieval(page).locator('.threshold-label')).toHaveCount(0);
+    await expect(retrieval(page).locator('.dotplot--threshold')).toHaveCount(0);
     await expect(retrieval(page).locator('.retrieval-prompt')).toHaveCount(0);
     await retrieval(page).getByRole('button', { name: 'step 6' }).click();
     await expect(page.locator('.status')).toHaveText('Step 6 of 10 · Search and filter');
+    await expect(retrieval(page).locator('.threshold-label')).toHaveText('threshold 0.70');
+    // Without reranking no note repeats what the rows and the threshold already say.
+    await expect(retrieval(page).locator('.retrieval-scores p')).toHaveCount(0);
     await expect(retrieval(page).locator('.dotplot .retained')).toHaveCount(5);
     // The prompt is assembled at step 7 and sent at step 8.
     await page.getByRole('button', { name: 'Next' }).click();
@@ -443,6 +461,9 @@ test.describe('rag-walkthrough', () => {
       '.projection-plot [data-chunk="everyday-account@1.2-c50o10-002"]',
     );
     await expect(point.locator('.label-mark')).toHaveCount(1);
+    // The selection background always comes with an ink underline (02 design.colour.use).
+    await expect(point.locator('.label-underline')).toHaveCount(1);
+    await expect(point.locator('.label-underline')).toHaveCSS('stroke', 'rgb(37, 49, 34)');
     await expect(retrieval(page).locator('.projection-plot .label-mark')).toHaveCount(1);
     await page.keyboard.press('Escape');
     await expect(retrieval(page).locator('.chunk-mark, .label-mark')).toHaveCount(0);
@@ -510,6 +531,119 @@ test.describe('reference_results on screen', () => {
       await page.keyboard.press('End');
       await expect(page.locator('.status')).toHaveText(/^Step (\d+) of \1 · Answer$/);
       expect(await onScreen(page)).toEqual(expected(ref));
+
+      // The full ranking and the vectors behind the projection, where the entry gives them.
+      const rows = retrieval(page).locator('.dotplot li[data-chunk]');
+      if (ref.ranking) {
+        const shown = await rows.evaluateAll((lis) =>
+          lis.map((li) => [
+            (li as HTMLElement).dataset['chunk'],
+            Number(li.querySelector('.score-value')?.textContent),
+          ]),
+        );
+        expect(shown).toEqual(ref.ranking.map((r) => [r.chunkId, r.score]));
+        for (const r of ref.ranking) {
+          const [product, cost, rules, technical] = r.embedding as [number, number, number, number];
+          await expect(
+            retrieval(page).locator(`.projection-plot [data-chunk="${r.chunkId}"]`),
+          ).toHaveAttribute(
+            'aria-label',
+            new RegExp(
+              `^${r.chunkId}: x ${(cost - rules).toFixed(4)}, y ${(product - technical).toFixed(4)}`,
+            ),
+          );
+        }
+      }
+      if (ref.query_embedding) {
+        const [product, cost, rules, technical] = ref.query_embedding as [
+          number,
+          number,
+          number,
+          number,
+        ];
+        await expect(retrieval(page).locator('.projection-plot .query')).toHaveAttribute(
+          'aria-label',
+          `The question: x ${(cost - rules).toFixed(4)}, y ${(product - technical).toFixed(4)}`,
+        );
+      }
+      if (ref.keyword_hits) {
+        const hits = await rows.evaluateAll((lis) =>
+          lis.flatMap((li) => {
+            const k = /keyword (\d(?:\.\d+)?)/.exec(
+              li.querySelector('.outcome')?.textContent ?? '',
+            );
+            return k
+              ? [
+                  {
+                    chunkId: (li as HTMLElement).dataset['chunk'] ?? '',
+                    keywordScore: Number(k[1]),
+                    score: Number(li.querySelector('.score-value')?.textContent),
+                  },
+                ]
+              : [];
+          }),
+        );
+        expect(hits.sort((a, b) => (a.chunkId < b.chunkId ? -1 : 1))).toEqual(ref.keyword_hits);
+      }
     });
+  }
+});
+
+test.describe('retrieval panel geometry', () => {
+  for (const width of [1024, 1440]) {
+    for (const hash of ['#/rag/rag-hybrid/15', '#/rag/rag-conflict/10']) {
+      test(`${hash} at ${width} px: every text stays in its column`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await open(page, hash);
+        await expect(retrieval(page).locator('.answer-text')).toBeVisible();
+        const problems = await retrieval(page).evaluate((root) => {
+          const out: string[] = [];
+          const box = (e: Element) => e.getBoundingClientRect();
+          const plot = root.querySelector('.dotplot') as Element;
+          const projection = root.querySelector('.retrieval-projection') as Element;
+          const p = box(plot);
+          for (const li of plot.querySelectorAll('li[data-chunk]')) {
+            const id = (li as HTMLElement).dataset['chunk'];
+            const track = li.querySelector('.track') as HTMLElement;
+            if (track.clientWidth < 192) out.push(`${id}: track ${track.clientWidth}px`);
+            for (const part of li.children) {
+              const b = box(part);
+              const e = part as HTMLElement;
+              if (b.right > p.right + 0.5 || b.left < p.left - 0.5)
+                out.push(`${id}: ${e.className} leaves the plot`);
+              // The track lends its value rooms to the value label, checked below.
+              if (!e.classList.contains('track') && e.scrollWidth > e.clientWidth + 1)
+                out.push(`${id}: ${e.className} overflows`);
+              if (b.bottom > box(projection).top)
+                out.push(`${id}: ${e.className} reaches the projection`);
+            }
+            const value = box(li.querySelector('.value') as Element);
+            if (value.left < box(track).left - 56 || value.right > box(track).right + 56)
+              out.push(`${id}: value leaves its track`);
+          }
+          // Projection labels never overlap each other.
+          const labels = [...root.querySelectorAll('.point-label')].map((t) =>
+            (t as SVGGraphicsElement).getBoundingClientRect(),
+          );
+          labels.forEach((a, i) =>
+            labels.forEach((b, j) => {
+              if (
+                j > i &&
+                a.left < b.right - 1 &&
+                a.right > b.left + 1 &&
+                a.top < b.bottom - 1 &&
+                a.bottom > b.top + 1
+              )
+                out.push(`projection labels ${i} and ${j} overlap`);
+            }),
+          );
+          return out;
+        });
+        expect(problems).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+          width,
+        );
+      });
+    }
   }
 });
