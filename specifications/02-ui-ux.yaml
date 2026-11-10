@@ -256,7 +256,7 @@ controls:
     Space: toggle play/pause
   keyboard_scope: The keys act anywhere on the page except where focus needs them itself
     (Space on buttons, links and menus; the arrow keys on text fields, the step slider,
-    the splitter and the diagram's scroll region)
+    the splitter, the inspector tabs and the diagram's scroll region)
   reduced_motion: true
 inspector:
   message_line: Always visible above the tabs. The event's explanation, then sender →
@@ -284,6 +284,29 @@ inspector:
     In-process calls have no transport envelope.
   security_tab: Lists the event's security_boundaries with risk and mitigation from
     07-security-protocols.yaml.
+  lineage_tab: 'Lists the event''s tracked_values: each key with its value or values,
+    and the step where that value first appeared, as a link that jumps there.'
+  tab_rules: The tabs follow the ARIA tabs pattern (arrow keys move between tabs while
+    one has focus). The chosen tab stays chosen while stepping as long as the step has
+    content for it; otherwise the first tab with content shows. A step with no content
+    for any tab shows the message line only.
+  syntax: 'JSON without hue: keys and punctuation in ink-muted, values in ink, so the
+    data reads first. Long values wrap; code never needs horizontal scrolling at 200%
+    zoom.'
+  folding: 'Objects and arrays expand and collapse; all start expanded except folded
+    boilerplate: the jsonrpc and _meta members of MCP messages, folded to one line naming
+    them, and in Transport the headers identical to those of the previous network request
+    from the same sender, folded to one line counting them.'
+  changed_fields: On an LLM request, the messages and fields that the previous LLM request
+    of the scenario did not have are highlighted; on other events nothing is marked as
+    changed. Leaf values equal to one of the event's tracked values are highlighted the
+    same way.
+  redaction: Values containing <REDACTED…> are shown as stored, followed by the label
+    redacted.
+  pair_link: A request links to its response and a response to its request by step
+    number; the link jumps there.
+  technical_notes: Shown below the payload, only when present.
+  copy: Copies the payload as formatted JSON.
 context_panel:
   layout: Agent state and model-visible context side by side; only the change since
     the previous step is highlighted, in place
