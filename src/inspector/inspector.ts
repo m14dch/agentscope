@@ -207,6 +207,7 @@ export class Inspector {
     panel.id = 'inspector-panel';
     // Reachable by keyboard even when it holds nothing focusable (Security, Lineage).
     panel.tabIndex = 0;
+    focusKey(panel, 'panel');
     for (const id of available) {
       const tab = focusKey(el('button', 'tab', TAB_LABELS[id]), `tab:${id}`);
       tab.type = 'button';

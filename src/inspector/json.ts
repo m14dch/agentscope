@@ -52,11 +52,11 @@ export interface TreeOptions {
 
 const REDACTED = /<REDACTED[^>]*>/;
 
-/** Builds the tree for a value. */
 /** MCP boilerplate (02 inspector.folding): the top-level jsonrpc member and every _meta. */
 export const mcpBoilerplate = (key: string, parentPath: string): boolean =>
   key === '_meta' || (key === 'jsonrpc' && parentPath === '');
 
+/** Builds the tree for a value. */
 export function jsonTree(value: Json, options: TreeOptions = {}): TreeNode {
   return build(value, '', undefined, false, options, undefined);
 }
