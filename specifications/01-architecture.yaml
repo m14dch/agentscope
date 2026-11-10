@@ -164,7 +164,8 @@ deployment:
     dispatch from main) upload that tested dist and deploy it; pull requests and manual
     runs from other branches never deploy. A failed check blocks deployment. Superseded
     pull request runs are cancelled; deployments of main run one at a time, and a newer
-    one waits rather than cancelling one in progress.
+    one waits rather than cancelling one in progress (a waiting run is replaced by a
+    newer one, so the latest commit deploys).
   github_pages: Use GitHub Actions as the Pages source. Upload dist as the Pages artifact
     and deploy it with the official Pages actions.
   base_path: Use /<repo>/ for a project site and / for a root site or custom domain.
