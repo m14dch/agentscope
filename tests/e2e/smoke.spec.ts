@@ -7,7 +7,10 @@ test('placeholder page loads under the base path', async ({ page }) => {
   });
   await page.goto('./');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('AgentScope');
-  await expect(page.locator('meta[name="agentscope-version"]')).toHaveAttribute('content', 'dev');
+  await expect(page.locator('meta[name="agentscope-version"]')).toHaveAttribute(
+    'content',
+    process.env.AGENTSCOPE_VERSION ?? 'dev',
+  );
   expect(failed).toEqual([]);
 });
 

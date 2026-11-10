@@ -1,22 +1,35 @@
 name: CI
 
-# Runs on every pull request, and is called by pages.yml before each deployment.
+# One workflow for checks and deployment. Every run builds dist/ once and runs the browser
+# tests against it; runs on main other than pull requests then deploy exactly that dist/.
 on:
   pull_request:
-  workflow_call:
+  push:
+    branches: [main]
+  workflow_dispatch: # deploys only when started from main
 
 permissions:
   contents: read
 
-# Superseded pull request runs are cancelled; runs called by a deployment never are.
+# Superseded pull request runs are cancelled; runs on main queue so that a newer deployment
+# waits instead of cancelling one in progress. Per-ref groups keep other runs out of that queue.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  DEPLOY: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+
 jobs:
+  # The job keeps its name: it is the check pull requests report.
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read # configure-pages on deployable runs
+    outputs:
+      deploy: ${{ env.DEPLOY }}
     steps:
       - uses: actions/checkout@v7
 
@@ -47,6 +60,22 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Fails if Pages is not enabled. The base path is '/agentscope' for this project
+      # site and '' for a root site or custom domain.
+      - id: pages
+        if: env.DEPLOY == 'true'
+        uses: actions/configure-pages@v6
+
+      # The build and the browser tests share the base path, so the tests load the site
+      # under the URL structure it is deployed to. Pull requests use /agentscope/.
+      - name: Base path and version
+        env:
+          PAGES_BASE: ${{ steps.pages.outputs.base_path }}
+        run: |
+          if [ "$DEPLOY" = true ]; then base="${PAGES_BASE:-/}"; else base=/agentscope/; fi
+          echo "AGENTSCOPE_BASE=$base" >> "$GITHUB_ENV"
+          echo "AGENTSCOPE_VERSION=$GITHUB_SHA" >> "$GITHUB_ENV"
+
       - name: Build
         run: npm run build
 
@@ -68,3 +97,47 @@ jobs:
       - name: End-to-end tests
         timeout-minutes: 6
         run: npm run test:e2e
+
+      # Only after every check passed: the deployed site is the tested dist/.
+      - uses: actions/upload-pages-artifact@v5
+        if: env.DEPLOY == 'true'
+        with:
+          path: dist
+
+  deploy:
+    needs: check
+    if: needs.check.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    # Longer than deploy-pages' own 10-minute timeout, so its error is reported.
+    timeout-minutes: 15
+    # Deployments never overlap, even with runs from other refs.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Check the live site
+        run: node scripts/check-deployment.ts "$PAGE_URL" --expect-version "$GITHUB_SHA"
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
