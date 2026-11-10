@@ -113,6 +113,18 @@ navigation:
   - Compare
   - Combined
   default: MCP
+  tab_contents:
+    MCP: 04-mcp-scenarios.yaml scenarios, then its variants
+    RAG: 05-rag-scenarios.yaml rag-query, rag-index, then its variants
+    Compare: 06-comparison-scenarios.yaml compare
+    Combined: 06-comparison-scenarios.yaml combined
+  routes: '#/<tab>/<scenario>/<step>, with /protocol appended in protocol mode (for example
+    #/mcp/mcp-balance/14/protocol). Missing parts take defaults: the tab''s first scenario,
+    step 0, architecture mode. A step beyond the scenario is clamped. An unknown tab or
+    scenario shows an error naming it, with a link to the tab. Stepping replaces the
+    history entry; changing tab or scenario adds one.'
+  scenario_picker: One menu per tab listing its scenarios by title; each variant shows
+    its lesson on a second line. The current scenario is marked.
 layout:
   desktop:
   - 'Top bar: navigation, scenario, architecture/protocol toggle'
@@ -121,7 +133,15 @@ layout:
     panel open at a time, all but the timeline collapsed at start'
   - 'Header: one persistent statement that everything is simulated and nothing leaves
     the browser'
+  - 'Above the diagram: the scenario''s learning question and headline'
+  - Bottom panels appear only once they have content; until then only the timeline shows
   tablet: Stack inspector below horizontally scrollable diagram
+  breakpoint: Side by side from 64rem; stacked below
+  splitter: The boundary between diagram and inspector is a separator that resizes them
+    by pointer drag or, when focused, the arrow keys; the inspector keeps 20rem to 60% of
+    the width
+  timeline: A step slider from 0 to the number of steps, labelled with the step and its
+    phase
   minimum_lifeline_width_px: 110
 diagram:
   participants: Scenario-defined and ordered; labels from the participant registry
@@ -200,6 +220,9 @@ learning:
   prediction: When the next event carries a prediction prompt, show the prompt before
     the step runs, together with a Continue control. The step itself answers it; nothing
     is scored and the prompt never blocks keyboard navigation.
+  prediction_rules: Next (button or →) on a step whose next event has a prediction shows
+    the prompt instead of advancing; Next or Continue then runs the step. Play pauses
+    there and shows the prompt. Previous, jump, start and reset never show a prompt.
   simulated_behaviour: Model output is labelled as simulated wherever it appears; nothing
     suggests a live decision.
 controls:
@@ -231,6 +254,8 @@ controls:
     ArrowRight: next
     ArrowLeft: previous
     Space: toggle play/pause
+  keyboard_scope: The keys act anywhere on the page except where focus needs them itself
+    (buttons, menus, the step slider, the splitter, the diagram's scroll region)
   reduced_motion: true
 inspector:
   message_line: Always visible above the tabs. The event's explanation, then sender →
