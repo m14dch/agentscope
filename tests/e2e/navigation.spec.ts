@@ -160,28 +160,65 @@ test('diagram and inspector sit side by side on desktop and stack on tablet', as
   await open(page, '#/mcp/mcp-balance/5');
   const diagram = page.getByRole('region', { name: /Sequence diagram/ });
   const inspector = page.getByRole('complementary', { name: 'Current step' });
-  let d = await diagram.boundingBox();
-  let i = await inspector.boundingBox();
-  expect(i && d && i.x > d.x && Math.abs(i.y - d.y) < 2).toBe(true);
+  const box = async (l: typeof diagram) =>
+    (await l.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
+  let d = await box(diagram);
+  let i = await box(inspector);
+  expect(i.x, 'inspector right of the diagram').toBeGreaterThan(d.x + d.width - 1);
+  expect(Math.abs(i.y - d.y), 'tops aligned').toBeLessThan(2);
   await page.setViewportSize({ width: 820, height: 1180 });
-  d = await diagram.boundingBox();
-  i = await inspector.boundingBox();
-  expect(i && d && i.y >= d.y + d.height - 1).toBe(true);
+  d = await box(diagram);
+  i = await box(inspector);
+  expect(i.y, 'inspector below the diagram').toBeGreaterThanOrEqual(d.y + d.height - 1);
 });
 
-test('the splitter resizes the inspector with the keyboard, within its limits', async ({
+test('the splitter resizes the inspector with the keyboard, within 20rem and 60%', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await open(page, '#/mcp/mcp-balance/5');
   const inspector = page.getByRole('complementary', { name: 'Current step' });
-  const before = (await inspector.boundingBox())?.width ?? 0;
+  const workspace = page.locator('.workspace');
+  const width = async () => (await inspector.boundingBox())?.width ?? 0;
   const splitter = page.getByRole('separator', { name: 'Resize the inspector' });
+  await expect(splitter).toHaveAttribute('aria-valuenow', '30');
+  const before = await width();
   await splitter.focus();
   await splitter.press('ArrowLeft');
-  const wider = (await inspector.boundingBox())?.width ?? 0;
-  expect(wider).toBeGreaterThan(before);
-  await expect(status(page)).toContainText('Step 5 of 28');
-  for (let i = 0; i < 40; i += 1) await splitter.press('ArrowRight');
-  expect((await inspector.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(320 - 1);
+  expect(await width()).toBeGreaterThan(before);
+  await expect(page.locator('.status')).toContainText('Step 5 of 28');
+  await splitter.press('Home');
+  await expect(splitter).toHaveAttribute('aria-valuenow', '60');
+  const total = (await workspace.boundingBox())?.width ?? 0;
+  expect(await width()).toBeLessThanOrEqual(total * 0.6 + 1);
+  // A narrower window keeps the inspector within 60%.
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  const narrower = (await workspace.boundingBox())?.width ?? 0;
+  expect(await width()).toBeLessThanOrEqual(narrower * 0.6 + 1);
+  await splitter.press('End');
+  expect(await width()).toBeGreaterThanOrEqual(320 - 1);
+});
+
+test('Space during a prediction plays on, like the Play button', async ({ page }) => {
+  await open(page, '#/mcp/mcp-balance/10');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.locator('.prediction')).toBeVisible();
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press(' ');
+  await expect(page.locator('.status')).toContainText('Step 11 of 28', { timeout: 5000 });
+  await page.keyboard.press(' ');
+});
+
+test('after choosing a tab or a scenario, focus moves to the new page heading', async ({
+  page,
+}) => {
+  await open(page, '#/mcp/mcp-balance/0');
+  await page.getByRole('link', { name: 'RAG' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.lesson h2')).toBeFocused();
+  await page.locator('.picker summary').focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.picker')).not.toHaveAttribute('open', '');
+  await expect(page.locator('.picker summary')).toBeFocused();
 });

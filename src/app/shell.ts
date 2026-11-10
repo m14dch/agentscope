@@ -52,11 +52,23 @@ function button(
 /** Whether the focused element needs this key for itself (02 controls.keyboard_scope). */
 function keyBelongsToFocus(target: EventTarget | null, key: string): boolean {
   if (!(target instanceof Element)) return false;
-  // The diagram region scrolls with the arrow keys; a focused group inside it does not.
-  if (target.matches('.diagram-scroller')) return true;
-  if (target.closest('input, select, textarea, [role="separator"], [contenteditable="true"]'))
-    return true;
-  return key === ' ' && !!target.closest('button, a, summary, [role="button"]');
+  if (target.closest('textarea, select, [contenteditable="true"]')) return true;
+  if (key === ' ') {
+    // Space activates buttons, links and menus and types into text fields.
+    return !!target.closest('button, a, summary, [role="button"], input:not([type="range"])');
+  }
+  // The arrow keys move text cursors, the step slider and the splitter, and scroll the
+  // diagram region; a focused group inside the region leaves them to stepping.
+  return !!target.closest('input, [role="separator"]') || target.matches('.diagram-scroller');
+}
+
+/** Decodes percent-encoding for display; text is inserted with textContent only. */
+function decode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
 }
 
 interface ScenarioView {
@@ -81,6 +93,8 @@ export class Shell {
   private readonly header: HTMLElement;
   private readonly content: HTMLElement;
   private current: ScenarioView | undefined;
+  /** Whether a page has been shown; the first one does not take focus. */
+  private shown = false;
   private route: Route | undefined;
 
   constructor(root: HTMLElement) {
@@ -102,6 +116,20 @@ export class Shell {
 
   /** Shows the page for a location hash. */
   show(hash: string): void {
+    // A link in the header was used: its page replaces the header, so focus moves to the
+    // new page's heading instead of falling back to the document.
+    const active = document.activeElement;
+    const moveFocus =
+      this.shown && (!active || active === document.body || this.header.contains(active));
+    this.shown = true;
+    this.render(hash);
+    if (moveFocus)
+      this.content
+        .querySelector<HTMLElement>('h2, [role="alert"] a')
+        ?.focus({ preventScroll: true });
+  }
+
+  private render(hash: string): void {
     const parsed = parseRoute(hash, this.tabs);
     const tab = parsed.ok ? parsed.route.tab : parsed.tab;
     if (!parsed.ok) {
@@ -109,7 +137,7 @@ export class Shell {
       this.renderHeader(tab, undefined);
       const link = el('a', { href: `#/${tab}` }, `Go to ${TAB_LABELS[tab]}`);
       this.content.replaceChildren(
-        el('p', { class: 'error', role: 'alert' }, `× ${parsed.message}. `, link),
+        el('p', { class: 'error', role: 'alert' }, `× ${decode(parsed.message)}. `, link),
       );
       this.route = undefined;
       return;
@@ -187,10 +215,20 @@ export class Shell {
       el('summary', {}, el('span', { class: 'muted' }, 'Scenario: '), scenario.title),
       el('ul', {}, ...items),
     );
-    // Close the menu once a scenario is chosen.
+    // Close the menu once a scenario is chosen, on Escape and on a click elsewhere.
     details.addEventListener('click', (e) => {
       if ((e.target as Element).closest('a')) details.open = false;
     });
+    details.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !details.open) return;
+      details.open = false;
+      details.querySelector('summary')?.focus();
+    });
+    const outside = (e: PointerEvent): void => {
+      if (!details.isConnected) document.removeEventListener('pointerdown', outside);
+      else if (details.open && !details.contains(e.target as Node)) details.open = false;
+    };
+    document.addEventListener('pointerdown', outside);
     return details;
   }
 
@@ -231,7 +269,7 @@ export class Shell {
       el(
         'section',
         { class: 'lesson' },
-        el('h2', {}, compare.headline),
+        el('h2', { tabindex: '-1' }, compare.headline),
         el(
           'ul',
           { class: 'compare-sides' },
@@ -249,11 +287,10 @@ export class Shell {
     const lesson = el(
       'section',
       { class: 'lesson' },
-      el('h2', {}, scenario.learning_question),
+      el('h2', { tabindex: '-1' }, scenario.learning_question),
       el('p', { class: 'headline' }, scenario.headline),
     );
-    const status = el('span', { class: 'small muted status', 'aria-live': 'polite' });
-    const play = button('Play', () => player.toggle(), { 'aria-pressed': 'false' });
+    const play = button('Play', () => player.toggle());
     const speeds = el('div', { class: 'segmented', role: 'group', 'aria-label': 'Speed' });
     for (const speed of SPEEDS) {
       const b = button(`${speed}×`, () => player.setSpeed(speed as Speed), {
@@ -264,14 +301,13 @@ export class Shell {
     }
     const controls = el(
       'div',
-      { class: 'controls', role: 'toolbar', 'aria-label': 'Playback' },
+      { class: 'controls', role: 'group', 'aria-label': 'Playback' },
       button('Start', () => this.go(() => player.start())),
       button('Previous', () => this.go(() => player.previous())),
       play,
       button('Next', () => this.next()),
       button('Reset', () => this.go(() => player.reset())),
       speeds,
-      status,
     );
 
     const diagram = el('div', {
@@ -286,7 +322,16 @@ export class Shell {
       'aria-orientation': 'vertical',
       'aria-label': 'Resize the inspector',
     });
-    const inspector = el('aside', { class: 'inspector', 'aria-label': 'Current step' });
+    // The prompt slot announces a prediction once; the message slot is quiet.
+    const promptSlot = el('div', { 'aria-live': 'polite' });
+    const messageSlot = el('div');
+    const inspector = el(
+      'aside',
+      { class: 'inspector', 'aria-label': 'Current step' },
+      promptSlot,
+      messageSlot,
+    );
+    let shownPrompt: number | undefined;
     const workspace = el('div', { class: 'workspace' }, diagram, splitter, inspector);
     this.attachSplitter(workspace, splitter);
 
@@ -298,8 +343,9 @@ export class Shell {
       'aria-label': 'Step',
     });
     slider.addEventListener('input', () => this.go(() => player.jump(Number(slider.value))));
-    const sliderLabel = el('span', { class: 'small muted' });
-    const timeline = el('footer', { class: 'timeline' }, slider, sliderLabel);
+    // The one place that states the step and its phase; the slider carries it for assistive tech.
+    const status = el('span', { class: 'small muted status' });
+    const timeline = el('footer', { class: 'timeline' }, slider, status);
 
     const view = new DiagramView(diagram, player, { labels: this.labels, mode: route.mode });
     const state: ScenarioView = {
@@ -320,16 +366,20 @@ export class Shell {
       status.textContent = where;
       slider.value = String(k);
       slider.setAttribute('aria-valuetext', where);
-      sliderLabel.textContent = where;
       play.textContent = player.status === 'playing' ? 'Pause' : 'Play';
-      play.setAttribute('aria-pressed', String(player.status === 'playing'));
       for (const b of speeds.querySelectorAll<HTMLButtonElement>('button')) {
         b.setAttribute('aria-pressed', String(Number(b.dataset['speed']) === player.speed));
       }
       for (const b of this.header.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
         b.setAttribute('aria-pressed', String(b.dataset['mode'] === view.mode));
       }
-      inspector.replaceChildren(...this.inspectorContent(state));
+      const promptAt =
+        state.prompt === k && player.playback.event(k + 1)?.prediction ? k : undefined;
+      if (promptAt !== shownPrompt) {
+        shownPrompt = promptAt;
+        promptSlot.replaceChildren(...this.promptContent(state));
+      }
+      messageSlot.replaceChildren(...this.messageContent(state));
       this.syncUrl();
     };
 
@@ -353,21 +403,23 @@ export class Shell {
     return state;
   }
 
-  private inspectorContent(state: ScenarioView): Node[] {
+  private promptContent(state: ScenarioView): Node[] {
+    const next = state.player.playback.event(state.player.cursor + 1);
+    if (state.prompt !== state.player.cursor || !next?.prediction) return [];
+    return [
+      el(
+        'div',
+        { class: 'prediction' },
+        el('p', { class: 'small muted' }, 'Before the next step'),
+        el('p', { class: 'prompt' }, next.prediction.prompt),
+        button('Continue', () => this.next()),
+      ),
+    ];
+  }
+
+  private messageContent(state: ScenarioView): Node[] {
     const { player, scenario } = state;
     const nodes: Node[] = [];
-    const next = player.playback.event(player.cursor + 1);
-    if (state.prompt === player.cursor && next?.prediction) {
-      nodes.push(
-        el(
-          'div',
-          { class: 'prediction', role: 'status' },
-          el('p', { class: 'small muted' }, 'Before the next step'),
-          el('p', { class: 'prompt' }, next.prediction.prompt),
-          button('Continue', () => this.next()),
-        ),
-      );
-    }
     const event = player.playback.event(player.cursor);
     if (!event) {
       nodes.push(
@@ -409,22 +461,29 @@ export class Shell {
 
   private attachSplitter(workspace: HTMLElement, splitter: HTMLElement): void {
     const MIN_REM = 20;
-    const MAX_SHARE = 0.6;
+    const MAX_SHARE = 60;
     const rem = (): number => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const set = (px: number): void => {
-      const total = workspace.clientWidth;
-      const clamped = Math.round(Math.min(Math.max(px, MIN_REM * rem()), total * MAX_SHARE));
-      workspace.style.setProperty('--inspector-width', `${clamped}px`);
-      splitter.setAttribute('aria-valuenow', String(Math.round((clamped / total) * 100)));
-      splitter.setAttribute('aria-valuemin', String(Math.round(((MIN_REM * rem()) / total) * 100)));
-      splitter.setAttribute('aria-valuemax', String(MAX_SHARE * 100));
+    const minShare = (): number =>
+      Math.min(MAX_SHARE, ((MIN_REM * rem()) / Math.max(1, workspace.clientWidth)) * 100);
+    let share = 30;
+    // The width is a share of the workspace, clamped in CSS too, so it stays within limits
+    // when the window is resized (02 layout.splitter).
+    const set = (value: number): void => {
+      share = Math.round(Math.min(Math.max(value, minShare()), MAX_SHARE));
+      workspace.style.setProperty(
+        '--inspector-width',
+        `clamp(${MIN_REM}rem, ${share}%, ${MAX_SHARE}%)`,
+      );
+      splitter.setAttribute('aria-valuenow', String(share));
+      splitter.setAttribute('aria-valuemin', String(Math.round(minShare())));
+      splitter.setAttribute('aria-valuemax', String(MAX_SHARE));
+      splitter.setAttribute('aria-valuetext', `Inspector ${share}% of the width`);
     };
-    const width = (): number =>
-      workspace.querySelector('.inspector')?.getBoundingClientRect().width ?? 0;
+    requestAnimationFrame(() => set(share));
     splitter.addEventListener('pointerdown', (down) => {
       splitter.setPointerCapture(down.pointerId);
-      const right = workspace.getBoundingClientRect().right;
-      const move = (e: PointerEvent): void => set(right - e.clientX);
+      const box = workspace.getBoundingClientRect();
+      const move = (e: PointerEvent): void => set(((box.right - e.clientX) / box.width) * 100);
       const up = (): void => {
         splitter.removeEventListener('pointermove', move);
         splitter.removeEventListener('pointerup', up);
@@ -433,9 +492,10 @@ export class Shell {
       splitter.addEventListener('pointerup', up);
     });
     splitter.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const step = { ArrowLeft: 2, ArrowRight: -2, Home: MAX_SHARE, End: -MAX_SHARE }[e.key];
+      if (step === undefined) return;
       e.preventDefault();
-      set(width() + (e.key === 'ArrowLeft' ? 2 : -2) * rem());
+      set(share + step);
     });
   }
 
@@ -445,10 +505,8 @@ export class Shell {
     if (keyBelongsToFocus(e.target, e.key)) return;
     if (e.key === 'ArrowRight') this.next();
     else if (e.key === 'ArrowLeft') this.go(() => c.player.previous());
-    else if (e.key === ' ') {
-      c.prompt = undefined;
-      c.player.toggle();
-    } else return;
+    else if (e.key === ' ') c.player.toggle();
+    else return;
     e.preventDefault();
   };
 }
