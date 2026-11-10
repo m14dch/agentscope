@@ -16,6 +16,7 @@ const SCENARIOS = [
   ['rag-hybrid', 13],
   ['rag-prompt-injection', 10],
   ['combined-balance-explanation', 35],
+  ['combined-missing-terms', 35],
 ] as const;
 
 /** The shell route for a scenario at a step, in either mode. */

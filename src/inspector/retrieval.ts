@@ -256,29 +256,33 @@ export function retrievalModel(
     };
   }
   const shownAt = find(events, 'retrieve-12');
-  if (reached(shownAt, cursor)) {
-    const raw = list(payload(shownAt)['sources']).map((s) => obj(s));
-    const lines = sourceLines(
-      raw.map((s) => ({
-        id: String(s['chunkId'] ?? ''),
-        documentId: String(s['documentId']),
-        version: String(s['version']),
-        text: '',
-        document: s['chunkId'] === undefined,
-      })),
-    );
-    model.answer = {
-      text: String(payload(shownAt)['answer']),
-      sources: raw.map((s, i) => ({
-        citation: Number(s['citation']),
-        ...(s['chunkId'] !== undefined ? { chunkId: String(s['chunkId']) } : {}),
-        documentId: String(s['documentId']),
-        version: String(s['version']),
-        line: lines[i] ?? '',
-      })),
-    };
-  }
+  if (reached(shownAt, cursor)) model.answer = shownAnswer(events[shownAt]);
   return model;
+}
+
+/** The answer an event shows the user (retrieve-12, c-08): its text and its sources. */
+export function shownAnswer(event: ScenarioEvent | undefined): { text: string; sources: Source[] } {
+  const payload = obj(event?.payload as Json | undefined);
+  const raw = list(payload['sources']).map((s) => obj(s));
+  const lines = sourceLines(
+    raw.map((s) => ({
+      id: String(s['chunkId'] ?? ''),
+      documentId: String(s['documentId']),
+      version: String(s['version']),
+      text: '',
+      document: s['chunkId'] === undefined,
+    })),
+  );
+  return {
+    text: String(payload['answer']),
+    sources: raw.map((s, i) => ({
+      citation: Number(s['citation']),
+      ...(s['chunkId'] !== undefined ? { chunkId: String(s['chunkId']) } : {}),
+      documentId: String(s['documentId']),
+      version: String(s['version']),
+      line: lines[i] ?? '',
+    })),
+  };
 }
 
 /** The answer split into text and citation numbers, in order. */
@@ -1166,36 +1170,12 @@ export class RetrievalPanel {
   private answer(answer: NonNullable<RetrievalModel['answer']>, index: SearchedIndex): HTMLElement {
     const sources = new Map(answer.sources.map((s) => [s.citation, s]));
     const text = el('p', 'answer-text');
-    // A citation number can occur several times; focus returns to the same occurrence.
-    const seen = new Map<number, number>();
-    // A citation and the punctuation right after it never break apart.
-    let group: HTMLElement | undefined;
-    for (const part of answerParts(answer.text)) {
-      if (typeof part === 'string') {
-        const punctuation = group ? (/^[.,;:)]+/.exec(part)?.[0] ?? '') : '';
-        if (group && punctuation) group.append(punctuation);
-        if (part.length > punctuation.length) text.append(part.slice(punctuation.length));
-        group = undefined;
-        continue;
-      }
-      const source = sources.get(part);
-      const nth = (seen.get(part) ?? 0) + 1;
-      seen.set(part, nth);
-      const b = focusKey(el('button', 'citation', `[${part}]`), `citation:${part}:${nth}`);
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(this.open === part));
-      b.setAttribute(
-        'aria-label',
-        `Citation ${part}: ${source?.line.replace(/^\[\d+\] /, '') ?? ''}`,
-      );
-      b.setAttribute('aria-controls', 'retrieval-evidence');
-      b.addEventListener('click', () => {
-        this.open = this.open === part ? undefined : part;
+    appendCited(text, answer.text, new Map(), (n, nth) =>
+      citationButton(n, nth, sources.get(n), this.open === n, 'retrieval-evidence', () => {
+        this.open = this.open === n ? undefined : n;
         this.update(this.model, this.selection);
-      });
-      group = el('span', 'citation-group', b);
-      text.append(group);
-    }
+      }),
+    );
     const lines = answer.sources.length
       ? el('ol', 'sources small', ...answer.sources.map((s) => el('li', 'source-line', s.line)))
       : el('p', 'small muted', 'No sources: the answer cites nothing.');
@@ -1203,7 +1183,7 @@ export class RetrievalPanel {
     const view = open ? evidence(open, index) : undefined;
     const holder = el('div', 'evidence');
     holder.id = 'retrieval-evidence';
-    if (view) holder.append(this.evidence(view));
+    if (view) holder.append(renderEvidence(view));
     return el(
       'div',
       'retrieval-answer',
@@ -1214,51 +1194,97 @@ export class RetrievalPanel {
       holder,
     );
   }
+}
 
-  private evidence(view: EvidenceView): HTMLElement {
-    const { source, chunk } = view;
-    const end = chunk ? chunk.startWord + chunk.words.length : 0;
-    const docText = el('p', 'evidence-text');
-    if (chunk) {
-      const before = view.documentWords.slice(0, chunk.startWord).join(' ');
-      const inside = view.documentWords.slice(chunk.startWord, end).join(' ');
-      const after = view.documentWords.slice(end).join(' ');
-      docText.append(
-        before ? `${before} ` : '',
-        el('span', 'chunk-mark', inside),
-        after ? ` ${after}` : '',
-      );
-    } else docText.append(view.documentWords.join(' '));
-    const documentColumn = el(
-      'div',
-      'retrieval-column',
-      el('h5', 'small muted', `Source document ${source.documentId} v${source.version}`),
-      docText,
-    );
-    const title = chunk
-      ? `[${source.citation}] chunk ${source.chunkId ?? ''}`
-      : `[${source.citation}] ${source.documentId} v${source.version}, full document`;
-    const columns: HTMLElement[] = [documentColumn];
-    if (chunk)
-      columns.unshift(
-        el(
-          'div',
-          'retrieval-column',
-          el(
-            'h5',
-            'small muted',
-            `Chunk, words ${chunk.startWord}–${Math.max(end - 1, chunk.startWord)}`,
-          ),
-          el('p', 'evidence-text evidence-chunk', chunk.words.join(' ')),
-        ),
-      );
-    return el(
-      'div',
-      undefined,
-      el('h5', 'evidence-title', title),
-      el('div', 'retrieval-columns', ...columns),
-    );
+/**
+ * Appends text whose '[n]' citations become the given controls; a citation and the
+ * punctuation right after it never break apart. `seen` counts each number's occurrences
+ * (shared across calls for one answer), so focus can return to the same occurrence.
+ */
+export function appendCited(
+  parent: HTMLElement,
+  text: string,
+  seen: Map<number, number>,
+  control: (n: number, nth: number) => HTMLElement,
+): void {
+  let group: HTMLElement | undefined;
+  for (const part of answerParts(text)) {
+    if (typeof part === 'string') {
+      const punctuation = group ? (/^[.,;:)]+/.exec(part)?.[0] ?? '') : '';
+      if (group && punctuation) group.append(punctuation);
+      if (part.length > punctuation.length) parent.append(part.slice(punctuation.length));
+      group = undefined;
+      continue;
+    }
+    const nth = (seen.get(part) ?? 0) + 1;
+    seen.set(part, nth);
+    group = el('span', 'citation-group', control(part, nth));
+    parent.append(group);
   }
+}
+
+/** A citation button: pressed while open; it controls the element that shows its evidence. */
+export function citationButton(
+  n: number,
+  nth: number,
+  source: Source | undefined,
+  open: boolean,
+  controls: string,
+  toggle: () => void,
+): HTMLButtonElement {
+  const b = focusKey(el('button', 'citation', `[${n}]`), `citation:${n}:${nth}`);
+  b.type = 'button';
+  b.setAttribute('aria-pressed', String(open));
+  b.setAttribute('aria-label', `Citation ${n}: ${source?.line.replace(/^\[\d+\] /, '') ?? ''}`);
+  b.setAttribute('aria-controls', controls);
+  b.addEventListener('click', toggle);
+  return b;
+}
+
+/** What a citation opens: the chunk beside its source document, with the chunk marked. */
+export function renderEvidence(view: EvidenceView): HTMLElement {
+  const { source, chunk } = view;
+  const end = chunk ? chunk.startWord + chunk.words.length : 0;
+  const docText = el('p', 'evidence-text');
+  if (chunk) {
+    const before = view.documentWords.slice(0, chunk.startWord).join(' ');
+    const inside = view.documentWords.slice(chunk.startWord, end).join(' ');
+    const after = view.documentWords.slice(end).join(' ');
+    docText.append(
+      before ? `${before} ` : '',
+      el('span', 'chunk-mark', inside),
+      after ? ` ${after}` : '',
+    );
+  } else docText.append(view.documentWords.join(' '));
+  const documentColumn = el(
+    'div',
+    'retrieval-column',
+    el('h5', 'small muted', `Source document ${source.documentId} v${source.version}`),
+    docText,
+  );
+  const title = chunk
+    ? `[${source.citation}] chunk ${source.chunkId ?? ''}`
+    : `[${source.citation}] ${source.documentId} v${source.version}, full document`;
+  const columns: HTMLElement[] = [documentColumn];
+  if (chunk)
+    columns.unshift(
+      el(
+        'div',
+        'retrieval-column',
+        el(
+          'h5',
+          'small muted',
+          `Chunk, words ${chunk.startWord}–${Math.max(end - 1, chunk.startWord)}`,
+        ),
+        el('p', 'evidence-text evidence-chunk', chunk.words.join(' ')),
+      ),
+    );
+  return el(
+    'div',
+    undefined,
+    el('h5', 'evidence-title', title),
+    el('div', 'retrieval-columns', ...columns),
+  );
 }
 
 /** The version panel: source and indexed versions side by side. */

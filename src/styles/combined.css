@@ -1,0 +1,47 @@
+/*
+ * The Combined answer's provenance (02 combined_answer): each statement beside a label naming
+ * its source, so label and position carry the provenance; colour carries none of it.
+ */
+.statements {
+  max-width: 64rem;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.statement {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.statement-source {
+  font-weight: var(--weight-strong);
+}
+
+.statement-text {
+  max-width: 48rem;
+  margin: 0;
+}
+
+/* From 64rem the labels form a column of their own to the left of the statements. */
+@media (min-width: 64rem) {
+  .statement {
+    grid-template-columns: 12rem minmax(0, 1fr);
+  }
+}
+
+.balance {
+  padding: 0 0.125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.combined-source p {
+  margin: 0 0 var(--space-2);
+}
+
+.combined .evidence pre {
+  max-width: 40rem;
+}
