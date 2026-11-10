@@ -50,8 +50,21 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The runner image ships Google Chrome, so Chromium's system libraries are already
+      # there; installing them with --with-deps goes through apt mirrors that have stalled
+      # for the whole job. The browser download is cached per lockfile.
+      - name: Cache Playwright browser
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 3
+        run: npx playwright install chromium
 
       - name: End-to-end tests
+        timeout-minutes: 6
         run: npm run test:e2e
