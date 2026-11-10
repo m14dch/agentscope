@@ -6,6 +6,7 @@ import {
   projectedPoints,
   projectionLayout,
   segmentCrosses,
+  segmentsMeet,
   pointLabel,
   projection,
   promptParts,
@@ -117,6 +118,9 @@ describe('retrieval panel model', () => {
       player.cursor,
       index(scenario, player),
     ) as RetrievalModel;
+    // The prompt assembled at retrieve-09 is exactly what retrieve-10 sends.
+    const sent = player.playback.events.find((e) => e.id.endsWith('retrieve-10'));
+    expect(model.prompt?.after).toEqual((sent?.payload as { messages: unknown[] }).messages);
     const retained = model.rows
       .filter((r) => r.outcome?.retained)
       .sort(
@@ -171,6 +175,8 @@ describe('retrieval panel model', () => {
     expect(first?.chunkId).toBeUndefined();
     expect(first?.line).toBe('[1] account-opening.md v1.2, full document');
     expect(first && evidence(first, idx)?.chunk).toBeUndefined();
+    const sent = player.playback.events.find((e) => e.id.endsWith('retrieve-10'));
+    expect(model.prompt?.after).toEqual((sent?.payload as { messages: unknown[] }).messages);
   });
 });
 
@@ -199,7 +205,7 @@ describe('retrieval panel helpers', () => {
   });
 
   const answered = Object.values(registry).filter((s) => s.derived_events?.includes('retrieve-12'));
-  it.each(answered.flatMap((s) => [358, 928, 1344].map((w) => [s.id, w] as const)))(
+  it.each(answered.flatMap((s) => [358, 720, 752, 928, 1344].map((w) => [s.id, w] as const)))(
     'lays out the projection of %s at %d px with no label over a label, mark, axis or leader',
     (id, width) => {
       const model = modelAt(id, 6) as RetrievalModel;
@@ -237,13 +243,29 @@ describe('retrieval panel helpers', () => {
           if (j !== i || l.leader) expect(overlap(box, m), `label ${i} over mark ${j}`).toBe(false);
         });
         for (const a of axisBoxes) expect(overlap(box, a), `label ${i} over an axis`).toBe(false);
-        // Leaders stay short: within a few lines of the point.
-        if (l.leader) expect(Math.abs(l.leader[3] - l.leader[1])).toBeLessThanOrEqual(8 * 18);
+        // Leaders stay short and cross no axis name and no other leader.
+        const leader = l.leader;
+        if (leader) {
+          expect(Math.abs(leader[3] - leader[1])).toBeLessThanOrEqual(8 * 18);
+          for (const a of layout.axisNames)
+            expect(segmentCrosses(leader, a.box), `leader ${i} through an axis name`).toBe(false);
+          layout.labels.forEach((o, j) => {
+            if (j !== i && o.leader)
+              expect(segmentsMeet(leader, o.leader), `leaders ${i} and ${j} meet`).toBe(false);
+          });
+        }
       });
-      // The layout fits the width unless the plot and its labels cannot.
-      if (width >= 928) expect(layout.width).toBeLessThanOrEqual(width);
+      // From a 768 px viewport (720 px of content) the layout fits without scrolling.
+      if (width >= 720) expect(layout.width).toBeLessThanOrEqual(width);
     },
   );
+
+  it('finds where segments meet', () => {
+    expect(segmentsMeet([0, 0, 10, 10], [0, 10, 10, 0])).toBe(true);
+    expect(segmentsMeet([0, 0, 10, 0], [0, 1, 10, 1])).toBe(false);
+    // Overlapping collinear leaders from one point meet.
+    expect(segmentsMeet([0, 0, 0, 20], [0, 0, 0, 40])).toBe(true);
+  });
 
   it('labels points briefly and thresholds with 2 decimals', () => {
     expect(pointLabel('everyday-account@1.0-c50o10-002')).toBe('everyday-account@1.0 · 002');

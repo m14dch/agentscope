@@ -133,6 +133,36 @@ function messages(v: Json | undefined): PromptMessage[] {
 }
 
 /**
+ * retrieve-09's prompt_after filled in: its system message, and its user template with the
+ * question and one document block per evidence item, written as retrieve-10 writes them.
+ */
+function assembledPrompt(
+  event: ScenarioEvent | undefined,
+  before: readonly PromptMessage[],
+  chunks: ReadonlyMap<string, Chunk>,
+): PromptMessage[] {
+  const after = obj(obj(event?.payload as Json | undefined)['prompt_after']);
+  const texts = list(event?.tracked_values?.['retrievedText']).map(String);
+  const blocks = list(after['document_blocks']).map((raw, i) => {
+    const b = obj(raw);
+    const chunkId = b['chunkId'] === undefined ? undefined : String(b['chunkId']);
+    const chunk = chunkId === undefined ? undefined : chunks.get(chunkId);
+    const documentId = String(b['documentId'] ?? chunk?.documentId ?? '');
+    const version = String(b['version'] ?? chunk?.version ?? '');
+    const attr = chunkId === undefined ? '' : ` chunk="${chunkId}"`;
+    return `<document id="${documentId}" version="${version}"${attr} trust="${String(b['trust'])}">\n${texts[i] ?? ''}\n</document>`;
+  });
+  const question = before.find((m) => m.role === 'user')?.content ?? '';
+  const user = String(after['user_template'] ?? '')
+    .replace('<question>', question)
+    .replace('<document blocks>', blocks.length ? blocks.join('\n') : '(none)');
+  return [
+    { role: 'system', content: String(after['system'] ?? '') },
+    { role: 'user', content: user },
+  ];
+}
+
+/**
  * The panel's content at a cursor, or undefined before the scored chunks are returned (or
  * in a scenario without them).
  */
@@ -216,9 +246,10 @@ export function retrievalModel(
   const assembled = find(events, 'retrieve-09');
   const sentAt = find(events, 'retrieve-10');
   if (reached(assembled, cursor)) {
+    const before = messages(payload(assembled)['prompt_before']);
     model.prompt = {
-      before: messages(payload(assembled)['prompt_before']),
-      after: messages(payload(sentAt)['messages']),
+      before,
+      after: assembledPrompt(events[assembled], before, chunks),
       sentStep: sentAt + 1,
       sent: reached(sentAt, cursor),
     };
@@ -387,6 +418,38 @@ export function segmentCrosses(s: readonly [number, number, number, number], b: 
   return true;
 }
 
+/** Whether two segments meet (touching or overlapping counts). */
+export function segmentsMeet(
+  a: readonly [number, number, number, number],
+  b: readonly [number, number, number, number],
+): boolean {
+  const [x1, y1, x2, y2] = a;
+  const [x3, y3, x4, y4] = b;
+  const cross = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) =>
+    (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+  const on = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) =>
+    Math.min(ax, bx) - 0.5 <= cx &&
+    cx <= Math.max(ax, bx) + 0.5 &&
+    Math.min(ay, by) - 0.5 <= cy &&
+    cy <= Math.max(ay, by) + 0.5;
+  const d1 = cross(x3, y3, x4, y4, x1, y1);
+  const d2 = cross(x3, y3, x4, y4, x2, y2);
+  const d3 = cross(x1, y1, x2, y2, x3, y3);
+  const d4 = cross(x1, y1, x2, y2, x4, y4);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)))
+    return true;
+  const eps = 1e-6;
+  return (
+    (Math.abs(d1) < eps && on(x3, y3, x4, y4, x1, y1)) ||
+    (Math.abs(d2) < eps && on(x3, y3, x4, y4, x2, y2)) ||
+    (Math.abs(d3) < eps && on(x1, y1, x2, y2, x3, y3)) ||
+    (Math.abs(d4) < eps && on(x1, y1, x2, y2, x4, y4))
+  );
+}
+
+/** Leaders longer than this many lines make a layout unacceptable where another fits. */
+const MAX_LEADER_LINES = 8;
+
 /** Places the labels in the given order (projectionLayout); cost counts unplaced labels first. */
 function placeInOrder(
   order: readonly number[],
@@ -394,6 +457,7 @@ function placeInOrder(
   pixels: readonly { x: number; y: number }[],
   marks: readonly Box[],
   fixed: readonly Box[],
+  names: readonly Box[],
   width: number,
 ): { labels: PlacedLabel[]; cost: number } {
   const placed: Box[] = [];
@@ -408,7 +472,7 @@ function placeInOrder(
     // A leader starts at its point, so marks on top of that point cannot block it.
     const apart = others.filter((m) => !overlaps(m, own));
     let chosen: PlacedLabel | undefined;
-    for (let k = 0; k <= 30 && !chosen; k += 1) {
+    for (let k = 0; k <= MAX_LEADER_LINES && !chosen; k += 1) {
       for (const dy of k === 0 ? [0] : [-k * LINE, k * LINE]) {
         for (const anchor of ['start', 'end'] as const) {
           const x = anchor === 'start' ? p.x + GAP + 2 : p.x - GAP - 2;
@@ -422,7 +486,9 @@ function placeInOrder(
           const blocked =
             [...placed, ...fixed, ...others, own].some((b) => overlaps(box, b)) ||
             leaders.some((s) => segmentCrosses(s, box)) ||
-            (leader !== undefined && [...placed, ...apart].some((b) => segmentCrosses(leader, b)));
+            (leader !== undefined &&
+              ([...placed, ...apart, ...names].some((b) => segmentCrosses(leader, b)) ||
+                leaders.some((s) => segmentsMeet(s, leader))));
           if (blocked) continue;
           chosen = { x, y, anchor, box, ...(leader ? { leader } : {}) };
           cost += dy * dy;
@@ -433,7 +499,7 @@ function placeInOrder(
     }
     if (!chosen) {
       // Keeps every point labelled if the search runs out; such a layout is never chosen
-      // while another order places every label.
+      // while another one places every label.
       cost += 1e6;
       chosen = {
         x: p.x + GAP + 2,
@@ -449,22 +515,13 @@ function placeInOrder(
   return { labels, cost };
 }
 
-/**
- * Lays out the projection (02 rag_retrieval.projection) for an available width: a square
- * plot from −1 to 1 with room left and right for labels, axes named at their ends, and a
- * label beside every point. A label goes right or left of its point; where it would overlap
- * another label, a point mark, an axis, an axis name or a leader line, it moves up or down by
- * a line, nearest first, beside a leader line. The layout is wider than `available` only
- * when the plot and its labels cannot fit.
- */
-export function projectionLayout(
+/** One layout of the plot with a given side, left edge and total width. */
+function layoutAt(
   points: readonly ProjectedPoint[],
-  available: number,
-): ProjectionLayout {
-  const longest = Math.max(8, ...points.map((p) => p.label.length)) * CODE_CHAR;
-  const margin = Math.ceil(longest + GAP + 8);
-  const side = Math.round(Math.max(480, Math.min(560, available - 2 * margin)));
-  const width = side + 2 * margin;
+  side: number,
+  margin: number,
+  width: number,
+): { layout: ProjectionLayout; cost: number } {
   const top = 40;
   const px = (x: number): number => margin + ((x + 1) / 2) * side;
   const py = (y: number): number => top + ((1 - y) / 2) * side;
@@ -497,10 +554,11 @@ export function projectionLayout(
     top: p.y - MARK,
     bottom: p.y + MARK,
   }));
+  const names = axisNames.map((a) => a.box);
   const fixed: Box[] = [
     { left: axes.x[0], right: axes.x[2], top: cy - 1, bottom: cy + 1 },
     { left: cx - 1, right: cx + 1, top: axes.y[1], bottom: axes.y[3] },
-    ...axisNames.map((a) => a.box),
+    ...names,
   ];
   // Greedy placement depends on the order; try a few and keep the one with the fewest
   // unplaced labels, then the shortest leaders (squared, so no leader grows long).
@@ -523,7 +581,7 @@ export function projectionLayout(
   ];
   let best: { labels: PlacedLabel[]; cost: number } | undefined;
   for (const order of orders) {
-    const result = placeInOrder(order, points, pixels, marks, fixed, width);
+    const result = placeInOrder(order, points, pixels, marks, fixed, names, width);
     if (!best || result.cost < best.cost) best = result;
     if (best.cost === 0) break;
   }
@@ -535,7 +593,49 @@ export function projectionLayout(
       ...axisNames.map((a) => a.box.bottom + 4),
     ),
   );
-  return { width, height, pixels, marks, labels, axes, axisNames };
+  return {
+    layout: { width, height, pixels, marks, labels, axes, axisNames },
+    cost: best?.cost ?? 0,
+  };
+}
+
+/** The plot's smallest side (02 rag_retrieval.projection). */
+const MIN_SIDE = 260;
+
+/**
+ * Lays out the projection (02 rag_retrieval.projection) for an available width: a square
+ * plot from −1 to 1, axes named at their ends, and a label beside every point. A label goes
+ * right or left of its point; where it would overlap another label, a point mark, an axis,
+ * an axis name or a leader line, it moves up or down by a line, nearest first, beside a
+ * leader line that crosses nothing. The plot takes the largest side (at most 560 px, at
+ * least 260 px) and the position within the width at which every label fits; only when
+ * none fits is the layout wider than `available`, with room for labels on both sides.
+ */
+export function projectionLayout(
+  points: readonly ProjectedPoint[],
+  available: number,
+): ProjectionLayout {
+  for (let side = Math.min(560, Math.floor(available) - 16); side >= MIN_SIDE; side -= 20) {
+    const free = Math.floor(available) - side;
+    // Labels run mostly left of the cluster of account chunks, so try the plot right of
+    // centre first, then centred, then left of centre.
+    for (const share of [0.7, 0.5, 0.85, 0.3]) {
+      const { layout, cost } = layoutAt(
+        points,
+        side,
+        Math.round(free * share),
+        Math.floor(available),
+      );
+      if (cost < 1e6) return layout;
+    }
+  }
+  const longest = Math.max(8, ...points.map((p) => p.label.length)) * CODE_CHAR;
+  const margin = Math.ceil(longest + GAP + 8);
+  // Too narrow (phones): a wider layout that scrolls, with room for labels on both sides.
+  let wide = layoutAt(points, 480, margin, 480 + 2 * margin);
+  for (let side = 500; wide.cost >= 1e6 && side <= 640; side += 20)
+    wide = layoutAt(points, side, margin, side + 2 * margin);
+  return wide.layout;
 }
 
 /** One document's source version and the versions the index holds. */

@@ -590,7 +590,7 @@ test.describe('reference_results on screen', () => {
 });
 
 test.describe('retrieval panel geometry', () => {
-  for (const width of [1024, 1440]) {
+  for (const width of [800, 1024, 1440]) {
     for (const hash of ['#/rag/rag-hybrid/15', '#/rag/rag-conflict/10']) {
       test(`${hash} at ${width} px: every text stays in its column`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
@@ -637,6 +637,25 @@ test.describe('retrieval panel geometry', () => {
                 out.push(`projection labels ${i} and ${j} overlap`);
             }),
           );
+          // Nor any point mark (the label's own one included).
+          const marks = [...root.querySelectorAll('.projection-plot .mark')].map((m) =>
+            (m as SVGGraphicsElement).getBoundingClientRect(),
+          );
+          labels.forEach((a, i) =>
+            marks.forEach((m, j) => {
+              if (
+                a.left < m.right - 1 &&
+                a.right > m.left + 1 &&
+                a.top < m.bottom - 1 &&
+                a.bottom > m.top + 1
+              )
+                out.push(`projection label ${i} over mark ${j}`);
+            }),
+          );
+          // From 768 px the projection fits without scrolling (02 labels_and_charts).
+          const holder = root.querySelector('.projection') as HTMLElement;
+          if (holder.scrollWidth > holder.clientWidth + 1)
+            out.push(`projection scrolls: ${holder.scrollWidth} > ${holder.clientWidth}`);
           return out;
         });
         expect(problems).toEqual([]);

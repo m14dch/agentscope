@@ -94,8 +94,9 @@
   min-height: calc(var(--leading-small) + 0.5rem);
 }
 
-.retrieval .scale--top {
-  padding-bottom: var(--space-1);
+/* The threshold's label keeps clear of the top end of its line. */
+.retrieval .dotplot > li > .scale--top {
+  min-height: calc(var(--leading-small) + var(--space-1));
 }
 
 /* The threshold, from retrieve-06: one line, continuous across rows. */
@@ -156,6 +157,7 @@
 }
 
 .retrieval .scale--top .threshold-label {
+  top: 0;
   left: calc(var(--threshold) * 100%);
   color: var(--color-ink);
 }
