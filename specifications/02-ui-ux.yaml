@@ -12,8 +12,9 @@ design:
   - Diagrams sit on the light reading surface; the dark olive surface is not used (owner
     decision), so one set of colour rules applies everywhere.
   - Peach Red marks the current step (one exception, retained chunks in the retrieval
-    charts, is recorded in the last decision below); Naples Yellow marks what the learner selected or
-    tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
+    charts, is recorded in the decision "Retained chunks keep the accent in the score plot and the
+    projection (issue 15)" below);
+    Naples Yellow marks what the learner selected or tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
     label naming the kind.
   - The RAG question changes to the handover's question and the communication layer
     (learning questions, takeaways, prediction prompts) was added to the scenario data
@@ -510,10 +511,15 @@ rag_retrieval:
   projection: 'A plain scatter plot of 05 fixtures.projection_2d (x = cost − rules, y = product
     − technical, both from −1 to 1, equal scales): the axes are named by meaning at their
     ends (rules ← → cost, technical ↓ ↑ product), every chunk point and the question''s point
-    (retrieve-03) are labelled directly, and retained points are filled in the accent. A label
-    sits right or left of its point; where it would overlap another label, a point, the
-    question''s mark, an axis, an axis name or a leader line, it moves up or down by a line,
-    nearest first, beside a leader line kept as short as that allows. A leader line crosses
+    (retrieve-03) are labelled directly, and retained points are filled in the accent. Chunks
+    with identical vectors and the same outcome (the versions of one chunk in rag-conflict)
+    share one label at their common point, naming each version once (for example
+    "savings-account@1.0/1.2 · 001"); each chunk is still its own point for assistive
+    technology. A label sits right or left of its point; where it would overlap another label,
+    a point, the question''s mark, an axis, an axis name or a leader line, it moves up or down
+    by a line, nearest first, beside a leader line kept as short as that allows: of the
+    candidate layouts in which every label fits (several horizontal positions of the plot and
+    orders of placement), the one whose leaders are shortest is drawn. A leader line crosses
     no label, point, axis name or other leader line. The plot keeps a side of at least 260
     px and only the room its outermost labels need on each side. A lineage-selected
     chunk''s label has the selection background and an ink underline. Each point is exposed to
