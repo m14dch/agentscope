@@ -108,6 +108,8 @@ e2e_tests:
   - Fail on external requests or runtime API traffic.
 quality_gates:
   min_supported_events: 100
+  min_supported_events_rule: Counted over the events played at each scenario's default
+    parameters, so optional steps that are off do not count
   desktop_and_tablet: true
   keyboard_navigation: true
   reduced_motion: true

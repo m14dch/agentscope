@@ -238,6 +238,46 @@ function checkScenario(
     if (e.protocol === 'MCP') checkMcp(e, byId, ctx, where, err);
   }
   if (complete.length === list(scn.events).length) checkVisibility(scn, err);
+  checkDerived(scn, byId, err);
+}
+
+/** derived_events and optional_steps name the scenario's events (03 scenario_format). */
+function checkDerived(
+  scn: Scenario,
+  byId: Map<string, ScenarioEvent>,
+  err: (w: string, m: string) => void,
+): void {
+  const sid = scn.id;
+  const local = new Set(
+    [...byId.keys()].map((id) => (id.startsWith(`${sid}:`) ? id.slice(sid.length + 1) : id)),
+  );
+  for (const id of list(scn.derived_events).map(text)) {
+    if (!local.has(id)) err(sid, `derived_events names unknown event ${id}`);
+  }
+  const steps: unknown = (scn as unknown as Obj)['optional_steps'];
+  if (steps === undefined) return;
+  if (!Array.isArray(steps)) {
+    err(sid, 'optional_steps must be a list');
+    return;
+  }
+  const parameters = obj(scn.parameters);
+  for (const step of steps.map(obj)) {
+    const by = text(step['enabled_by']);
+    const parameter = Object.hasOwn(parameters, by) ? obj(parameters[by]) : {};
+    if (typeof parameter['default'] !== 'boolean')
+      err(sid, `optional step enabled_by ${by} is not a boolean parameter`);
+    const events = list(step['events']).map(text);
+    for (const id of events) {
+      if (!local.has(id)) {
+        err(sid, `optional_steps names unknown event ${id}`);
+        continue;
+      }
+      const pair = (byId.get(id) ?? byId.get(`${sid}:${id}`))?.pair_id;
+      const partner = pair?.startsWith(`${sid}:`) ? pair.slice(sid.length + 1) : pair;
+      if (partner !== undefined && !events.includes(partner))
+        err(sid, `optional step ${id} and its pair ${partner} are in different entries`);
+    }
+  }
 }
 
 export function validateRegistry(registry: Registry, ctx: ValidationContext): string[] {

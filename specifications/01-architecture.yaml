@@ -111,9 +111,9 @@ source_of_truth:
   scenario: Event data and fixtures; no independent hardcoded payloads in UI
   state: Initial snapshot plus deterministic event reducer
   view: Derived from current snapshot and selected event
-  derived_payloads: RAG events listed in a scenario's derived_events are recomputed
-    by rag_engine from fixtures and parameters. The YAML shows their default-parameter
-    values.
+  derived_payloads: RAG events listed in a scenario's derived_events have their payload,
+    explanation and tracked values recomputed by rag_engine from fixtures, fixture_overrides
+    and parameters. The YAML shows the base scenario's default-parameter values.
 repo_layout:
 - specifications/
 - specifications/tools/validate_specs.py

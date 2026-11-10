@@ -8,6 +8,7 @@ schema.json, and recomputes all RAG reference results from the fixtures.
 Usage:
     python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json
     python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json --dump-registry out.json
+    python3 specifications/tools/validate_specs.py --mcp-schema path/to/schema.json --dump-rag out.json
 
 Download schema.json from the URL in 04-mcp-scenarios.yaml protocol.schema.
 Requires PyYAML and jsonschema.
@@ -127,6 +128,8 @@ def expand_variant(base, var):
             phases[pid]["takeaway"] = override["takeaway"]
     if "question" in var:
         scn["question"] = var["question"]
+    if "fixture_overrides" in var:
+        scn["fixture_overrides"] = copy.deepcopy(var["fixture_overrides"])
     scn["title"] = var["title"]
     if not str(var.get("lesson", "")).strip():
         err(var["id"], "variant has no lesson")
@@ -150,7 +153,7 @@ def compose(comp, registry):
         else:
             events += copy.deepcopy(step["insert"])
     scn = {k: copy.deepcopy(comp[k]) for k in ("title", "question", "learning_question", "headline", "participants",
-                                                "phases", "initial_state") if k in comp}
+                                                "phases", "initial_state", "derived_events") if k in comp}
     scn["events"] = events
     return finalize(scn, comp["id"], True)
 
@@ -250,9 +253,34 @@ def check_scenario(scn, ctx):
         if e["protocol"] == "MCP":
             check_mcp(e, by_id, ctx, where)
     check_visibility(scn)
+    check_derived(scn, by_id)
     for k in ("question",):
         if k in scn and not isinstance(scn[k], str):
             err(sid, "question must be a string")
+
+
+def check_derived(scn, by_id):
+    """derived_events and optional_steps name the scenario's events (03 scenario_format.optional_fields)."""
+    sid = scn["id"]
+    local = {eid.split(":", 1)[1] if eid.startswith(f"{sid}:") else eid for eid in by_id}
+    for eid in scn.get("derived_events", []):
+        if eid not in local:
+            err(sid, f"derived_events names unknown event {eid}")
+    steps = scn.get("optional_steps", [])
+    if not isinstance(steps, list):
+        err(sid, "optional_steps must be a list")
+        return
+    for step in steps:
+        param = scn.get("parameters", {}).get(step.get("enabled_by"))
+        if not param or not isinstance(param.get("default"), bool):
+            err(sid, f"optional step enabled_by {step.get('enabled_by')} is not a boolean parameter")
+        for eid in step.get("events", []):
+            if eid not in local:
+                err(sid, f"optional_steps names unknown event {eid}")
+                continue
+            pair = by_id.get(eid if eid in by_id else f"{sid}:{eid}", {}).get("pair_id")
+            if pair is not None and pair.split(":", 1)[-1] not in step.get("events", []):
+                err(sid, f"optional step {eid} and its pair {pair.split(':', 1)[-1]} are in different entries")
 
 
 def check_mcp(e, by_id, ctx, where):
@@ -367,7 +395,7 @@ def rag_engine(rag):
             while True:
                 t = " ".join(w[i:i + size])
                 out.append({"id": f"{doc.rsplit('.', 1)[0]}@{ver}-c{size}o{ov}-{n:03d}", "documentId": doc,
-                            "version": ver, "text": t, "embedding": embed(t)})
+                            "version": ver, "startWord": i, "text": t, "embedding": embed(t)})
                 if i + size >= len(w):
                     break
                 i += size - ov
@@ -395,7 +423,7 @@ def rag_engine(rag):
 
     facts = fx["answer_facts"]
     groups = fx["answer_groups"]
-    injected = rag["variants"][-1]["untrusted_document_instruction"]
+    injected = [d["injected_instruction"] for d in fx["untrusted_documents"] if "injected_instruction" in d]
 
     def join(items):
         return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
@@ -455,7 +483,7 @@ def rag_engine(rag):
             parts += conflicts
         if missing:
             parts.append(f"The retrieved evidence does not cover {join(missing)}.")
-        if any(injected in c["text"] for c in sel):
+        if any(i in c["text"] for c in sel for i in injected):
             parts.append("Note: a retrieved document contained instructions addressed to the assistant; they were treated as data and ignored.")
         cites = []
 
@@ -466,16 +494,29 @@ def rag_engine(rag):
             return str(cites.index(c) + 1)
         return re.sub("\x00([^\x00]+)\x00", number, " ".join(parts)), cites, supported
 
+    def parents(sel, docs):
+        """The parent documents of the retained chunks (derived_event_rules.evidence)."""
+        out = []
+        for c in sel:
+            key = (c["documentId"], c["version"])
+            if any((p["documentId"], p["version"]) == key for p in out):
+                continue
+            text = next(t for d, v, t in docs if (d, v) == key)
+            out.append({"id": f"{c['documentId'].rsplit('.', 1)[0]}@{c['version']}", "documentId": c["documentId"],
+                        "version": c["version"], "text": " ".join(norm(text).split()), "document": True})
+        return out
+
     def source_lines(cites):
-        return [f"[{i + 1}] {c['documentId']} v{c['version']}, chunk {c['id']}" for i, c in enumerate(cites)]
+        return [f"[{i + 1}] {c['documentId']} v{c['version']}, "
+                + ("full document" if c.get("document") else f"chunk {c['id']}") for i, c in enumerate(cites)]
 
     def source_objects(cites):
-        return [{"citation": i + 1, "chunkId": c["id"], "documentId": c["documentId"], "version": c["version"]}
-                for i, c in enumerate(cites)]
+        return [{"citation": i + 1, **({} if c.get("document") else {"chunkId": c["id"]}),
+                 "documentId": c["documentId"], "version": c["version"]} for i, c in enumerate(cites)]
 
-    return {"corpus": corpus, "retrieve": retrieve, "answer": answer, "chunks": chunks,
-            "source_lines": source_lines, "source_objects": source_objects, "default_k": default_k,
-            "default_thr": default_thr, "params": params}
+    return {"corpus": corpus, "retrieve": retrieve, "answer": answer, "chunks": chunks, "parents": parents,
+            "norm": norm, "toks": toks, "source_lines": source_lines, "source_objects": source_objects,
+            "default_k": default_k, "default_thr": default_thr, "params": params}
 
 
 def corpus_kwargs(variant):
@@ -493,6 +534,123 @@ def corpus_kwargs(variant):
     if fo.get("exclude_documents"):
         kw["exclude"] = tuple(fo["exclude_documents"])
     return kw
+
+
+def threshold_text(x):
+    """Thresholds in explanations are rounded to 2 decimals (05 derived_event_rules.inputs)."""
+    return str(round(x, 2))
+
+
+def user_message(question, evidence, untrusted):
+    """retrieve-10's user message (05 derived_event_rules.retrieve-10)."""
+    def block(c):
+        trust = "untrusted" if c["documentId"] in untrusted else "official"
+        chunk = "" if c.get("document") else f' chunk="{c["id"]}"'
+        return f'<document id="{c["documentId"]}" version="{c["version"]}"{chunk} trust="{trust}">\n{c["text"]}\n</document>'
+    blocks = "\n".join(block(c) for c in evidence) if evidence else "(none)"
+    return f"Question: {question}\n\nRetrieved documents:\n{blocks}"
+
+
+def check_derived_defaults(R, rag, registry, ranked, sel):
+    """Every derived event of rag-index and rag-query at the default parameters; an optional step
+    with its enabling parameter on (05 derived_event_rules)."""
+    fx = rag["fixtures"]
+    untrusted = {d["id"] for d in fx["untrusted_documents"]}
+    chunking = next(sc for sc in rag["scenarios"] if sc["id"] == "rag-index")["parameters"]
+    size, ov = chunking["chunk_size_words"]["default"], chunking["overlap_words"]["default"]
+    docs = R["corpus"]()
+    all_chunks = R["chunks"](docs, size, ov)
+    ids = [c["id"] for c in all_chunks]
+
+    def expect(where, got, want):
+        if got != want:
+            err(where, f"{got!r} differs from the derivation {want!r}")
+
+    idx = {e["id"]: e for e in registry["rag-index"]["events"]}
+    expect("rag-index/index-04", {k: idx["index-04"]["payload"][k] for k in ("chunk_size_words", "overlap_words")},
+           {"chunk_size_words": size, "overlap_words": ov})
+    expect("rag-index/index-05", idx["index-05"]["payload"]["chunks"],
+           [{"chunkId": c["id"], "documentId": c["documentId"], "version": c["version"],
+             "startWord": c["startWord"], "text": c["text"]} for c in all_chunks])
+    expect("rag-index/index-05", idx["index-05"]["explanation"],
+           f"{len(all_chunks)} chunks, each pointing back to its source document.")
+    expect("rag-index/index-05", idx["index-05"]["tracked_values"]["chunkId"], ids)
+    expect("rag-index/index-06", idx["index-06"]["payload"]["inputs"], ids)
+    expect("rag-index/index-07", idx["index-07"]["payload"]["embeddings"],
+           [{"chunkId": c["id"], "embedding": c["embedding"]} for c in all_chunks])
+    expect("rag-index/index-08", idx["index-08"]["payload"]["records"], len(ids))
+    expect("rag-index/index-09", idx["index-09"]["payload"]["upserted"], len(ids))
+    expect("rag-index/index-10", (idx["index-10"]["payload"]["documents"], idx["index-10"]["payload"]["chunks"]),
+           (len({d for d, _, _ in docs}), len(ids)))
+
+    scn = registry["rag-query"]
+    ev = {e["id"]: e for e in scn["events"]}
+    params = {k: p["default"] for k, p in scn["parameters"].items()}
+    thr, k = params["similarity_threshold"], params["top_k"]
+    got = [c["id"] for c in sel]
+    sel_docs = sorted({c["documentId"] for c in sel})
+    expect("rag-query/retrieve-05", ev["retrieve-05"]["payload"]["matches"],
+           [{"chunkId": c["id"], "documentId": c["documentId"], "version": c["version"], "score": c["score"]}
+            for c in ranked])
+    expect("rag-query/retrieve-05", ev["retrieve-05"]["tracked_values"]["chunkId"], [c["id"] for c in ranked])
+    # hybrid-02 with keyword_retrieval on, hybrid-03 with rerank on.
+    hits = sorted([c for c in ranked if c["keyword"] > 0], key=lambda c: c["id"])
+    expect("rag-query/hybrid-02", ev["hybrid-02"]["payload"]["hits"],
+           [{"chunkId": c["id"], "keywordScore": c["keyword"], "score": c["score"]} for c in hits])
+    below = sorted([c for c in hits if c["score"] < thr], key=lambda c: (c["score"], c["id"]))
+    if not hits:
+        text = "No chunk contains a query term."
+    elif not below:
+        text = f"Exact-term hits. All of them reach the similarity threshold of {threshold_text(thr)}."
+    else:
+        present = set(R["toks"](below[0]["text"]))
+        terms = [f"'{t}'" for t in sorted(set(R["toks"](fx["query"])) - set(fx["keyword_retrieval"]["stopwords"]))
+                 if t in present]
+        terms = terms[0] if len(terms) == 1 else ", ".join(terms[:-1]) + " and " + terms[-1]
+        if len(below) == 1:
+            text = (f"Exact-term hits. One hit scores below the similarity threshold of {threshold_text(thr)}: "
+                    f"{below[0]['id']}, a lexical false positive that matches only {terms} and that the "
+                    "threshold later removes.")
+        else:
+            text = (f"Exact-term hits. {len(below)} hits score below the similarity threshold of {threshold_text(thr)}: "
+                    f"lexical false positives that the threshold later removes, such as {below[0]['id']}, which "
+                    f"matches only {terms}.")
+    expect("rag-query/hybrid-02", ev["hybrid-02"]["explanation"], text)
+    above = sorted([c for c in ranked if c["score"] >= thr], key=lambda c: (-c["rerank"], c["id"]))
+    expect("rag-query/hybrid-03", ev["hybrid-03"]["payload"]["candidates"],
+           [{"chunkId": c["id"], "score": c["score"], "keywordScore": c["keyword"], "rerankScore": c["rerank"]}
+            for c in above])
+    expect("rag-query/hybrid-03", ev["hybrid-03"]["explanation"],
+           "Drop chunks below the similarity threshold, then order by the reranker score, which also counts "
+           "the query terms in each chunk.")
+    expect("rag-query/retrieve-06", ev["retrieve-06"]["payload"],
+           {"top_k": k, "similarity_threshold": thr, "rerank": params["rerank"], "retained": got,
+            "discarded": [{"chunkId": c["id"], "score": c["score"],
+                           "reason": "below threshold" if c["score"] < thr else "outside topK"}
+                          for c in ranked if c["id"] not in got]})
+    best = "the best one" if k == 1 else f"the {k} best"
+    expect("rag-query/retrieve-06", ev["retrieve-06"]["explanation"],
+           f"Keep chunks with a score of at least {threshold_text(thr)}, then {best}. Ties are broken by chunk ID."
+           + ("" if sel else f" No chunk reaches {threshold_text(thr)}, so nothing is retained."))
+    expect("rag-query/retrieve-06", ev["retrieve-06"]["tracked_values"], {"chunkId": got})
+    # retrieve-07 and retrieve-08 with fetch_full_documents on.
+    parents = R["parents"](sel, docs)
+    expect("rag-query/retrieve-07", ev["retrieve-07"]["payload"]["documents"],
+           [{"documentId": p["documentId"], "version": p["version"]} for p in parents])
+    expect("rag-query/retrieve-08", ev["retrieve-08"]["payload"]["documents"],
+           [{"documentId": p["documentId"], "version": p["version"], "words": len(p["text"].split()),
+             "text": p["text"]} for p in parents])
+    tracked = {"sourceDocumentId": sel_docs, "chunkId": got, "retrievedText": [c["text"] for c in sel]}
+    after = ev["retrieve-09"]["payload"]["prompt_after"]
+    expect("rag-query/retrieve-09", after["document_blocks"],
+           [{"chunkId": c["id"], "trust": "untrusted" if c["documentId"] in untrusted else "official"} for c in sel])
+    expect("rag-query/retrieve-09", ev["retrieve-09"]["tracked_values"], tracked)
+    messages = ev["retrieve-10"]["payload"]["messages"]
+    expect("rag-query/retrieve-10", messages[0]["content"], after["system"])
+    expect("rag-query/retrieve-10", messages[1]["content"], user_message(scn["question"], sel, untrusted))
+    expect("rag-query/retrieve-10", ev["retrieve-10"]["tracked_values"], tracked)
+    for eid in ("retrieve-11", "retrieve-12"):
+        expect(f"rag-query/{eid}", ev[eid]["tracked_values"], {"sourceDocumentId": sel_docs, "chunkId": got})
 
 
 def check_rag(rag, comp, registry, ui):
@@ -557,6 +715,11 @@ def check_rag(rag, comp, registry, ui):
             ev = {e["id"]: e for e in registry["rag-hybrid"]["events"]}
             if ev.get("rag-hybrid:hybrid-02", {}).get("payload", {}).get("hits") != hits:
                 err("rag-hybrid/hybrid-02", "keyword hits differ")
+            above = [c for c in ranked if c["score"] >= rp["similarity_threshold"]]
+            candidates = [{"chunkId": c["id"], "score": c["score"], "keywordScore": c["keyword"],
+                           "rerankScore": c["rerank"]} for c in sorted(above, key=lambda c: (-c["rerank"], c["id"]))]
+            if ev.get("rag-hybrid:hybrid-03", {}).get("payload", {}).get("candidates") != candidates:
+                err("rag-hybrid/hybrid-03", "reranked candidates differ")
         if name == "rag-query":
             if qv != ref["query_embedding"]:
                 err("reference_results.rag-query", "query embedding differs")
@@ -576,32 +739,21 @@ def check_rag(rag, comp, registry, ui):
                 err("rag-query/retrieve-11", "model message differs from the composed answer and sources")
             if ev["retrieve-12"]["payload"]["answer"] != a or ev["retrieve-12"]["payload"]["sources"] != R["source_objects"](cites):
                 err("rag-query/retrieve-12", "answer or sources differ")
-            user = ev["retrieve-10"]["payload"]["messages"][1]["content"]
-            for c in sel:
-                if c["text"] not in user:
-                    err("rag-query/retrieve-10", f"prompt lacks text of {c['id']}")
-            idx = {e["id"]: e for e in registry["rag-index"]["events"]}
-            stored = [(c["chunkId"], c["text"]) for c in idx["index-05"]["payload"]["chunks"]]
-            all_chunks = R["chunks"](R["corpus"](), 50, 10)
-            if stored != [(c["id"], c["text"]) for c in all_chunks]:
-                err("rag-index/index-05", "chunks differ from computed chunks")
-            if [x["embedding"] for x in idx["index-07"]["payload"]["embeddings"]] != [c["embedding"] for c in all_chunks]:
-                err("rag-index/index-07", "vectors differ from computed vectors")
+            check_derived_defaults(R, rag, registry, ranked, sel)
 
     # Combined: answer, sources and every derived payload.
-    intro = "Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have an Everyday account."
+    composition = comp["answer_composition"]
+    intro = composition["intro"]
     cases = [("combined", comp, comp)] + [(v["id"], v, comp) for v in comp.get("variants", [])]
     for label, case, base in cases:
         if not str(case.get("lesson" if case is not base else "headline", "")).strip():
             err(label, "missing lesson" if case is not base else "missing headline")
         _, ranked, sel = R["retrieve"](R["corpus"](**corpus_kwargs(case if case is not base else None)))
         a, cites, sup = R["answer"](sel, intro=intro)
-        if {"everyday-fee", "everyday-access", "savings-fee-interest", "savings-access"} <= sup:
-            a += (" Whether the Savings account would be better depends on how you use your money: it would avoid the "
-                  "CHF 5 monthly fee and earn 0.50% annual interest, but it has no debit card, so it suits money you "
-                  "rarely need rather than everyday card payments.")
-        elif "savings-fee-interest" not in sup:
-            a += " Without the Savings account terms I can't say whether another account type would offer better conditions."
+        applies = next((c for c in composition["comparisons"]
+                        if set(c.get("requires", [])) <= sup and not set(c.get("lacks", [])) & sup), None)
+        if applies:
+            a += " " + applies["sentence"]
         if a != case["expected_answer"] or R["source_lines"](cites) != case["expected_sources"]:
             err(label, "combined answer or sources differ from recomputation")
         if case is not base and case.get("expected_selected") != [c["id"] for c in sel]:
@@ -614,14 +766,51 @@ def check_rag(rag, comp, registry, ui):
                     err(f"{label}/{eid}", "tracked chunkId values are neither the ranking nor the retrieved chunks")
             if ev["c-03"]["payload"]["document_blocks"] != [c["id"] for c in sel]:
                 err(label, "c-03 document blocks differ from the retrieved chunks")
-            prompt = ev["c-04"]["payload"]["messages"][1]["content"]
-            for c in sel:
-                if c["text"] not in prompt:
-                    err(label, f"c-04 prompt lacks text of {c['id']}")
+            untrusted = {d["id"] for d in rag["fixtures"]["untrusted_documents"]}
+            for eid in ("c-04", "c-06"):
+                if ev[eid]["payload"]["messages"][1]["content"] != user_message(comp["question"], sel, untrusted):
+                    err(label, f"{eid} user message differs from the derivation")
+            query = {e["id"]: e for e in registry["rag-query"]["events"]}
+            for eid in ("retrieve-05", "retrieve-06"):
+                if any(ev[eid].get(f) != query[eid].get(f) for f in ("payload", "explanation", "tracked_values")):
+                    err(label, f"{eid} differs from rag-query's derivation at the defaults")
+            applies_expl = applies["explanation"] if applies else composition["explanation"]
+            if ev["c-07"]["explanation"] != applies_expl:
+                err(label, "c-07 explanation differs from answer_composition")
             if ev["c-07"]["payload"]["message"]["content"] != a + "\n\nSources:\n" + "\n".join(R["source_lines"](cites)):
                 err(label, "c-07 model message differs")
             if ev["c-08"]["payload"]["answer"] != a or ev["c-08"]["payload"]["sources"] != R["source_objects"](cites):
                 err(label, "c-08 answer or sources differ")
+
+
+def dump_rag(rag, comp):
+    """Rankings, selections and answers over a grid of parameters for every corpus a scenario
+    or variant uses (golden test of the TypeScript RAG engine)."""
+    R = rag_engine(rag)
+    chunking = next(sc for sc in rag["scenarios"] if sc["id"] == "rag-index")["parameters"]
+    cases = [("rag-query", None)] + [(v["id"], v) for v in rag["variants"] + comp.get("variants", [])]
+    out = []
+    for name, variant in cases:
+        docs = R["corpus"](**corpus_kwargs(variant))
+        for size in chunking["chunk_size_words"]["options"]:
+            for ov in chunking["overlap_words"]["options"]:
+                ranking = None
+                for top_k in (1, 5, 8):
+                    for thr in (0, 0.7, 0.95):
+                        for rerank in (False, True):
+                            _, ranked, sel = R["retrieve"](docs, size=size, ov=ov, top_k=top_k, thr=thr, rerank=rerank)
+                            if ranking is None:
+                                ranking = [[c["id"], c["score"], c["keyword"], c["rerank"], c["embedding"]] for c in ranked]
+                                out.append({"case": name, "size": size, "overlap": ov, "ranking": ranking})
+                            for fetch in (False, True):
+                                evidence = R["parents"](sel, docs) if fetch else sel
+                                a, cites, _ = R["answer"](evidence)
+                                out.append({"case": name, "size": size, "overlap": ov, "top_k": top_k,
+                                            "threshold": thr, "rerank": rerank, "fetch": fetch,
+                                            "selected": [c["id"] for c in sel],
+                                            "evidence": [c["id"] for c in evidence], "answer": a,
+                                            "sources": R["source_lines"](cites)})
+    return out
 
 
 # ---------------------------------------------------------------- main
@@ -629,6 +818,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mcp-schema", required=True, help="schema.json of the pinned MCP revision")
     ap.add_argument("--dump-registry", metavar="PATH", help="write the expanded registry as JSON (golden test)")
+    ap.add_argument("--dump-rag", metavar="PATH", help="write RAG results over a parameter grid as JSON (golden test)")
     args = ap.parse_args()
     product, arch, engine = load("00-product.yaml"), load("01-architecture.yaml"), load("03-simulation-engine.yaml")
     mcp, rag, cmp_ = load("04-mcp-scenarios.yaml"), load("05-rag-scenarios.yaml"), load("06-comparison-scenarios.yaml")
@@ -682,6 +872,8 @@ def main():
     total = sum(len(s["events"]) for s in registry.values())
     if args.dump_registry:
         Path(args.dump_registry).write_text(json.dumps(registry, ensure_ascii=False, indent=1))
+    if args.dump_rag:
+        Path(args.dump_rag).write_text(json.dumps(dump_rag(rag, comb), ensure_ascii=False))
     if errors:
         print("\n".join(errors))
         print(f"\n{len(errors)} problem(s) in {len(registry)} expanded scenarios")

@@ -46,7 +46,7 @@ test('every payload renders exactly as the event holds it, and Copy copies it', 
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   for (const [scenario, steps] of [
     ['mcp/mcp-not-found', 28],
-    ['rag/rag-query', 12],
+    ['rag/rag-query', 10],
   ] as const) {
     for (let step = 1; step <= steps; step += 1) {
       await open(page, `#/${scenario}/${step}/protocol`);
@@ -175,7 +175,7 @@ test('focus stays on the equivalent control when the step changes', async ({ pag
 });
 
 test('lineage lists each key once with all its values', async ({ page }) => {
-  await open(page, '#/rag/rag-query/10/protocol');
+  await open(page, '#/rag/rag-query/8/protocol');
   await tab(page, 'Lineage').click();
   const rows = page.locator('.lineage-row');
   const keys = await rows.locator('> .json-key').allTextContents();

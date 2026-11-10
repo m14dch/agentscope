@@ -34,6 +34,20 @@ function defaults(scenario: Scenario): Record<string, Json> {
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
+/** An event's ID within its scenario, without the '<scenario id>:' prefix of an expansion. */
+export function localId(scenario: Scenario, e: ScenarioEvent): string {
+  return e.id.startsWith(`${scenario.id}:`) ? e.id.slice(scenario.id.length + 1) : e.id;
+}
+
+/** Local IDs of the optional steps whose enabling parameter is off (03 optional_steps). */
+function disabledSteps(scenario: Scenario, config: RetrievalConfig): Set<string> {
+  return new Set(
+    (scenario.optional_steps ?? []).flatMap((step) =>
+      config[step.enabled_by] === true ? [] : step.events,
+    ),
+  );
+}
+
 export class Playback {
   private config: RetrievalConfig;
   private events_: readonly ScenarioEvent[];
@@ -61,9 +75,17 @@ export class Playback {
     return this.config;
   }
 
-  /** A frozen copy, so later changes to the registry cannot reach the snapshots. */
+  /**
+   * The derived events without the optional steps whose parameter is off, numbered from 1;
+   * a frozen copy, so later changes to the registry cannot reach the snapshots.
+   */
   private frozenEvents(config: RetrievalConfig): readonly ScenarioEvent[] {
-    return deepFreeze(structuredClone(this.derive(this.scenario, config)));
+    const off = disabledSteps(this.scenario, config);
+    const events = structuredClone(this.derive(this.scenario, config)).filter(
+      (e) => !off.has(localId(this.scenario, e)),
+    );
+    events.forEach((e, i) => (e.sequence = i + 1));
+    return deepFreeze(events);
   }
 
   /** The events as currently derived (frozen). */

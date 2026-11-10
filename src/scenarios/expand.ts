@@ -132,6 +132,8 @@ export function expandVariant(base: Scenario, variant: Variant, problems: string
     else phase.takeaway = override.takeaway;
   }
   if (variant.question !== undefined) scn.question = variant.question;
+  if (variant.fixture_overrides !== undefined)
+    scn.fixture_overrides = structuredClone(variant.fixture_overrides);
   scn.title = variant.title;
   // A variant is presented by its lesson.
   scn.headline = variant.lesson ?? '';
@@ -146,6 +148,7 @@ const COMPOSED_FIELDS = [
   'participants',
   'phases',
   'initial_state',
+  'derived_events',
 ] as const;
 
 export function compose(comp: Composition, registry: Registry, problems: string[]): Scenario {

@@ -116,7 +116,8 @@ export class DiagramView {
    * scrolls to the current step only when the cursor or the mode changed.
    */
   private render(): void {
-    const scenario = this.player.playback.scenario;
+    // The events as played: derived from the parameters, without disabled optional steps.
+    const scenario = { ...this.player.playback.scenario, events: [...this.player.playback.events] };
     const focused = document.activeElement;
     const focusKey =
       focused instanceof SVGElement && this.root.contains(focused)

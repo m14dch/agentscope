@@ -187,6 +187,7 @@ describe('composition', () => {
       phases: [{ id: 'q', label: 'Q', semantic_phase: 'preparation', takeaway: 'One message.' }],
       initial_state: {},
       expanded_event_count: 3,
+      derived_events: ['own'],
       compose: [
         {
           copy: {
@@ -209,6 +210,7 @@ describe('composition', () => {
       ['c:own', 'q', 3],
     ]);
     expect(scn.events[1]?.explanation).toBe('Reused.');
+    expect(scn.derived_events).toEqual(['own']);
     expect(validateRegistry({ c: scn }, ctx)).toEqual([]);
   });
 });
@@ -392,6 +394,47 @@ describe('more validation rules', () => {
     expect(problems).toEqual(['v: parameter_overrides names unknown parameter nope']);
   });
 
+  it("copies a variant's fixture_overrides for the scenario's engine", () => {
+    const b = base();
+    const overrides = { add_documents: ['x.md'] };
+    const scn = expandVariant(
+      b,
+      { id: 'v', title: 'V', extends: 'base', lesson: 'L.', fixture_overrides: overrides },
+      [],
+    );
+    expect(scn.fixture_overrides).toEqual(overrides);
+    expect(scn.fixture_overrides).not.toBe(overrides);
+    expect(b.fixture_overrides).toBeUndefined();
+  });
+
+  it('checks that derived events and optional steps name events and boolean parameters', () => {
+    const scn = base();
+    scn.parameters = { top_k: { default: 5 }, on: { default: false } };
+    scn.derived_events = ['e2', 'nope'];
+    scn.optional_steps = [
+      { events: ['e1', 'e2'], enabled_by: 'on' },
+      { events: ['gone'], enabled_by: 'top_k' },
+    ];
+    expect(validateRegistry({ base: scn }, ctx)).toEqual([
+      'base: derived_events names unknown event nope',
+      'base: optional step enabled_by top_k is not a boolean parameter',
+      'base: optional_steps names unknown event gone',
+    ]);
+  });
+
+  it('keeps both events of a pair in one optional-step entry', () => {
+    const scn = base();
+    scn.parameters = { on: { default: false } };
+    scn.optional_steps = [
+      { events: ['e1'], enabled_by: 'on' },
+      { events: ['e2'], enabled_by: 'on' },
+    ];
+    expect(validateRegistry({ base: scn }, ctx)).toEqual([
+      'base: optional step e1 and its pair e2 are in different entries',
+      'base: optional step e2 and its pair e1 are in different entries',
+    ]);
+  });
+
   it('checks boundaries, enums, correlation IDs, prediction length and scenario fields', () => {
     const scn = base();
     delete (scn as Partial<Scenario>).initial_state;
@@ -454,7 +497,7 @@ describe('bundled registry', () => {
   it('loads the specifications without problems', () => {
     const registry = loadRegistry();
     expect(Object.keys(registry)).toHaveLength(14);
-    expect(Object.values(registry).reduce((n, s) => n + s.events.length, 0)).toBe(294);
+    expect(Object.values(registry).reduce((n, s) => n + s.events.length, 0)).toBe(309);
     expect(registry['mcp-balance']?.question).toBe(
       'What is the current balance of my bank account?',
     );

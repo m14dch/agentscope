@@ -49,7 +49,7 @@ test('a deep link restores tab, scenario, step and mode after reload', async ({ 
   await expect(page).toHaveURL(/#\/rag\/rag-hybrid\/6\/protocol$/);
   await page.reload();
   await page.locator('[data-measured] svg.diagram').waitFor();
-  await expect(status(page)).toContainText('Step 6 of 15');
+  await expect(status(page)).toContainText('Step 6 of 13');
   await expect(page.getByRole('button', { name: 'Protocol' })).toHaveAttribute(
     'aria-pressed',
     'true',

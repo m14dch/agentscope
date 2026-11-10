@@ -102,9 +102,13 @@ export interface Scenario {
   events: ScenarioEvent[];
   initial_state: JsonObject;
   parameters?: Record<string, ParameterSpec>;
+  /** Local IDs of the events the scenario's engine recomputes from parameters and fixtures. */
   derived_events?: string[];
+  /** Events that play only while their boolean parameter is on. */
   optional_steps?: OptionalStep[];
   context_rule?: string;
+  /** A variant's fixture changes, copied on expansion for the scenario's engine. */
+  fixture_overrides?: JsonObject;
 }
 
 export type VariantOperation =
@@ -155,6 +159,7 @@ export interface Composition {
   initial_state: JsonObject;
   compose: CompositionStep[];
   expanded_event_count: number;
+  derived_events?: string[];
   variants?: (Omit<Variant, 'extends'> & JsonObject)[];
 }
 
