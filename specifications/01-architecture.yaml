@@ -176,12 +176,46 @@ deployment:
   version_stamp: The built page carries <meta name="agentscope-version"> with the commit
     SHA it was built from in CI ("dev" for local builds); the browser tests check it.
   post_deploy_check: After each deployment, fetch the live page and every script and link
-    it references. Fail the workflow when the page or any reference does not return 200,
-    when any reference points outside the base path (including other origins), or when
-    the page's version stamp differs from the deployed commit (a stale deployment).
-    Network errors and stale responses are retried for about a minute first.
+    it references, the asset manifest, the service worker and every file the manifest
+    lists. Fail the workflow when any of them does not return 200, when a listed file's
+    bytes do not match its integrity digest, when any reference or listed file points
+    outside the base path (including other origins), or when the page's or the
+    manifest's version stamp differs from the deployed commit (a stale deployment). Network errors and stale responses are retried for about a minute first.
   offline: Bundle all scenarios, documents, fonts and visuals locally. On HTTPS or
     localhost, a base-scoped service worker precaches the complete versioned build
     from a build-generated asset manifest. Report offline readiness after successful
     caching and activation. Serve the cached shell and assets on reload and keep cache
     cleanup scoped to this app. First hosted visit requires connectivity.
+  offline_mechanics:
+    asset_manifest: The build writes asset-manifest.json to dist with the version stamp,
+      one combined hash over the paths and bytes of every listed file, and the list of
+      every file in dist except asset-manifest.json and sw.js (scenarios, fonts, scripts,
+      styles, licences, the page), each as a path relative to the base with its
+      Subresource Integrity digest (sha256).
+    service_worker: The build generates sw.js at the root of dist with that manifest
+      inlined, so every build that changes any file changes the worker and browsers
+      install the new version. The page registers it with the base path as its scope;
+      the development server registers nothing.
+    cache: One cache per build, named agentscope:<scope URL>:<version>:<hash>. Install
+      fetches the base URL (with the digest of index.html) and every listed file past
+      the HTTP cache with its integrity digest, and fails if any of them fails or does
+      not match, so a stale file from a CDN never enters the cache and the browser tries
+      again at its next update check. A redirected response is stored as a plain
+      response, so navigations can use it. A worker only activates with a complete
+      cache; a new worker activates at once and takes control of open pages.
+    cleanup: 'Activation deletes only caches whose name starts with agentscope:<scope URL>:
+      other than the current one and the newest previous one (the last created, in Cache
+      Storage order), so a tab still running the previous build can load its files; caches
+      of other apps and other scopes on the same origin are kept.'
+    serving: Precached GET requests in the scope, and navigations to the base URL or
+      index.html with any hash, are answered from the current cache. Any other GET
+      request in the scope, and a miss, is looked up in this scope's other caches
+      (newest first) and then sent to the network. Requests outside the scope and other
+      methods go to the network untouched. The first load after a deployment therefore
+      shows the previous build while the new worker installs, and the next load shows
+      the current one; there is no update notice (signal-to-noise).
+    readiness: Once a worker is activated, the page asks it to confirm that every listed
+      file is in its cache; only a confirmed answer shows the indicator (02-ui-ux.yaml
+      layout offline_indicator).
+    failed_load: 'If a lazily loaded part of the app (the #/design specimen) fails to load,
+      the page shows an error naming it and suggesting a reload, never a blank page.'

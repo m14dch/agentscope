@@ -47,7 +47,10 @@ test('blocks requests from a service worker', async ({ page, context, externalRe
   );
   await page.goto('./');
   await page.evaluate(async () => {
-    const reg = await navigator.serviceWorker.register('./__guard-test-sw.js', { scope: './' });
+    // A scope of its own, so it does not replace the app's service worker on './'.
+    const reg = await navigator.serviceWorker.register('./__guard-test-sw.js', {
+      scope: './__guard-test/',
+    });
     const worker = reg.installing ?? reg.waiting ?? reg.active;
     if (worker && worker.state !== 'activated') {
       await new Promise((resolve) => worker.addEventListener('statechange', resolve));
@@ -76,9 +79,20 @@ test.describe('in the default fail mode', () => {
 
   // The guard decision itself is unit-tested (tests/unit/guard-check.test.ts);
   // this proves the fixture applies it to a real browser test.
-  test('fails a test that makes an external request', async ({ page }) => {
+  // Listed as an expected failure (✘ in some reporters): passing here means the guard worked.
+  test('fails a test that makes an external request (expected failure: proves the guard)', async ({
+    page,
+  }) => {
     test.fail(true, 'The guard must fail this test from its teardown.');
     await page.goto('./');
     await page.evaluate(() => fetch('https://example.com/x').catch(() => undefined));
+  });
+
+  test('fails a test that makes a runtime API request (expected failure: proves the guard)', async ({
+    page,
+  }) => {
+    test.fail(true, 'The guard must fail this test from its teardown.');
+    await page.goto('./');
+    await page.evaluate(() => fetch('./api/balance').catch(() => undefined));
   });
 });

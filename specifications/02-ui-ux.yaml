@@ -142,6 +142,10 @@ layout:
     the browser'
   - 'Above the diagram: the scenario''s learning question and headline'
   - Bottom panels appear only once they have content; until then only the timeline shows
+  offline_indicator: 'After the service worker has cached the build and activated (01-architecture.yaml
+    deployment offline_mechanics readiness), the header''s simulated statement ends with "Available
+    offline." in the same small ink-muted text. Nothing is shown before that, nor where no service
+    worker runs (the development server, insecure origins); there is no progress or error message.'
   tablet: Stack inspector below horizontally scrollable diagram
   breakpoint: Side by side from 64rem; stacked below
   splitter: The boundary between diagram and inspector is a separator that resizes them

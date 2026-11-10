@@ -9,4 +9,9 @@ export default tseslint.config(
   {
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
+  {
+    // The service worker template: a classic script, prefixed with PRECACHE at build time.
+    files: ['src/offline/sw.js'],
+    languageOptions: { sourceType: 'script', globals: { ...globals.serviceworker } },
+  },
 );
