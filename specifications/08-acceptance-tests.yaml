@@ -118,8 +118,12 @@ e2e_tests:
     the current step is highlighted and inside its region.
   - Step through the longest scenario with Next in the bottom bar and verify that Previous,
     Play/Pause and Next stay inside the viewport, uncovered, at every step without scrolling.
-  - Verify every control outside running text is at least 44 × 44 px, and the menu holds the
-    scenario picker, the view switch, the speeds, Start and Reset.
+  - At both sizes, for every scenario in both modes, step from the top of the page with Next
+    in the bottom bar through every step and verify that the current row or group, any
+    prediction prompt and the message line are entirely on screen above the bar.
+  - Verify every control outside running text is at least 44 × 44 px on MCP, RAG, Combined
+    and Compare with the step details and the menu open, and the menu holds the scenario
+    list, the view switch, the speeds, Start and Reset.
   - Step through Compare in both modes and verify both panes use the step list without
     horizontal scrolling; verify the RAG projection takes its compact form.
 - id: pages

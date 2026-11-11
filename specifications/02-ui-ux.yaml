@@ -115,7 +115,8 @@ design:
     chunks use the accent, filled, and say "retained" in words (handover_decisions). No
     bars from an arbitrary origin; no gridlines unless they answer a question.
   - The 2D projection is a plain scatter plot with points labelled directly and axes
-    named by meaning.
+    named by meaning; on phones, where the labels cannot fit, its compact form names the
+    points in a list tied to the plot (rag_retrieval.projection).
   - Charts fit the available width with text at its real size. Only sequence diagrams
     keep a fixed scale and scroll horizontally, from 48rem (768 px) up where they do not
     fit; below 48rem they become the step list (diagram.phone_list), and the RAG projection
@@ -192,14 +193,17 @@ layout:
       page or inside any region, in any tab, scenario, mode or panel, from 360 px wide.
     header: 'The wordmark (32 px high), then on its row a disclosure "Menu" (dotted underline
       like every fold); below them the tabs and the simulated statement, always visible.
-      The menu holds the scenario picker (its list shown in place), the architecture/protocol
-      switch, the speeds, Start and Reset, each group labelled in small ink-muted text. It
-      opens below the wordmark row and pushes the page down; it closes on Escape (focus
-      returns to it), a pointer press outside it, or a scenario choice.'
+      The menu holds the scenario picker''s list of scenarios (shown in place, without the
+      picker''s own fold), the architecture/protocol switch, the speeds, Start and Reset, each
+      group labelled in small ink-muted text. These controls move into the menu; none is
+      duplicated. It opens below the wordmark row and pushes the page down; it closes on
+      Escape anywhere on the page while it is open (focus returns to it), a pointer press
+      outside it, a scenario choice or a change of view (focus returns to it).'
     controls: 'A bar fixed to the bottom edge of the screen, within thumb reach: the position
       ("Step <k> of <n> · <phase>", the line the timeline shows from 48rem), then Previous,
       Play or Pause and Next side by side in equal widths. It stays in place while the page
-      scrolls; the page ends with room for it, and focused elements scroll clear of it. In
+      scrolls; the page ends with room for it (and for the safe area at the screen''s bottom
+      edge), and focused elements scroll clear of it. In
       Compare it holds the compare step and the shared Previous, Play or Pause and Next. The
       step sliders stay where they are.'
     touch_targets: 'Every control outside running text (buttons, tabs, the menu and its
@@ -207,8 +211,18 @@ layout:
       (citations, step links, the lineage jumps) and folds inside code are exempt, as in WCAG
       2.5.8.'
     presentation: The diagram region shows the step list (diagram.phone_list) and scrolls
-      vertically only, at most 45% of the screen's height, so the message below it stays
-      in view while stepping.
+      vertically only; it is 30% of the screen's height (at least 9rem), so the stepping area
+      (the step list, then the prediction prompt, the message line and the error line below
+      it) fits above the bottom bar.
+    stepping_area: 'After every change of step or of the prediction prompt by Next, Previous,
+      Continue, Play, Start, Reset, the keys, the step slider or a jump link (not a parameter
+      change, a lineage selection or a fold), if the step list''s region does not start inside
+      the screen or the last of the prompt, the message line and the error line ends below the
+      top of the bottom bar, the page scrolls at once (no animation) so the region starts 8 px
+      below the top of the screen, as far as the page can scroll. The current row or group is
+      then in view inside the region (diagram.auto_scroll_to_current), so the learner sees the
+      current step, any prediction prompt and the message without scrolling. This is the only
+      case in which the page scrolls by itself (modes.scrolling).'
     inspector: 'Below the diagram region, in this order: the prediction prompt when shown
       (learning.prediction), the message line and the error line, always visible; then a
       toggle "Step details" (aria-expanded, dotted underline) over the tabs, collapsed at
@@ -304,7 +318,8 @@ modes:
     events up to the cursor with protocol-mode styling. Expansion is kept while the learner
     steps through the scenario.'
   scrolling: Only a cursor change or a mode switch scrolls, and only the diagram's own
-    scroll region, never the page; toggling a group or laying out again keeps the scroll
+    scroll region, never the page (on phones the page also scrolls to keep the stepping area
+    in view, layout.phone.stepping_area); toggling a group or laying out again keeps the scroll
     position. Keyboard focus stays on the same group or region across steps. Arrow keys
     scroll the diagram region while it has focus.
   protocol: 'Technical level: show all individual events with exact logical messages;
@@ -617,7 +632,8 @@ rag_retrieval:
   projection: 'A plain scatter plot of 05 fixtures.projection_2d (x = cost − rules, y = product
     − technical, both from −1 to 1, equal scales): the axes are named by meaning at their
     ends (rules ← → cost, technical ↓ ↑ product), every chunk point and the question''s point
-    (retrieve-03) are labelled directly, and retained points are filled in the accent. Chunks
+    (retrieve-03) are labelled directly (in the compact form below, only the question''s
+    point), and retained points are filled in the accent. Chunks
     with identical vectors and the same outcome (both retained, or both dropped for the same
     reason; the versions of one chunk in rag-conflict)
     share one label at their common point, naming each version once (for example
@@ -639,8 +655,15 @@ rag_retrieval:
     every point marked as above, only the question labelled at its point; then, below it, a
     list of the chunk points in score order, each with its label (shared labels as above), its
     position named by the axes with 2 decimals (for example "everyday-account@1.2 · 001: rules
-    0.31, product 0.62") and "retained" in words when it is. The compact form shows where the
-    retained chunks lie relative to the question; the list names every point without a key.'
+    0.31, product 0.62"; a coordinate that rounds to 0.00 is written "on the rules–cost axis"
+    or "on the technical–product axis" instead of a value) and "retained" in words when it
+    is. Each line is a toggle button (pressed: weight 600) that marks its point on the plot
+    with an ink ring; tapping a point presses its line, and one line is pressed at a time. A
+    lineage-selected chunk''s line has the selection background and ink underline on its
+    label, and its point the ink ring too. In the compact form the list carries the points
+    for assistive technology and the plot is hidden from it, so nothing is announced twice.
+    The compact form shows where the retained chunks lie relative to the question; the list
+    names every point without a key.'
   prompt: 'From retrieve-09, "Prompt before and after retrieval": retrieve-09 prompt_before
     and retrieve-09 prompt_after filled in (its system message, and its user_template with
     the question and one document block per item of its document_blocks and retrievedText,
