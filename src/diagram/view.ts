@@ -187,9 +187,11 @@ export class DiagramView {
 
   /** Scrolls the region (never the page) so the current step or group is in view. */
   private scrollToCurrent(): void {
-    // In the step list the innermost current element: the row inside an expanded group.
+    // The innermost current element: the step inside an expanded current group (it follows
+    // the group in document order), else the collapsed group or the protocol step. A group
+    // frame can be wider than the region, which would leave its step out of view.
     const all = this.root.querySelectorAll<Element>('[data-current]');
-    const current = this.root.dataset['presentation'] === 'list' ? all[all.length - 1] : all[0];
+    const current = all[all.length - 1];
     if (!current) return;
     const region = this.root.getBoundingClientRect();
     const box = current.getBoundingClientRect();

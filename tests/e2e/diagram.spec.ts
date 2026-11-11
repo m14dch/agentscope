@@ -140,8 +140,10 @@ test('groups expand and collapse with the keyboard, and stay open while stepping
 test('the current group stays expanded while stepping; one the learner collapsed stays closed until the cursor enters it again', async ({
   page,
 }) => {
-  // 02 modes.architecture_groups. mcp-balance: planning is steps 10-12, tool 13-16.
-  await open(page, route('mcp-balance', 1, 'architecture'));
+  // 02 modes.architecture_groups and modes.scrolling, at a laptop size where group frames are
+  // wider than the region; instant scrolling, so each step's position is final.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1280, height: 720 });
   const next = page.getByRole('button', { name: 'Next' });
   // Next, past a prediction prompt (02 learning.prediction_rules).
   const forward = async (): Promise<void> => {
@@ -149,18 +151,38 @@ test('the current group stays expanded while stepping; one the learner collapsed
     if (await page.locator('.prediction').count()) await next.click();
   };
   const current = page.locator('.step[data-current]');
-  for (let step = 1; step <= 28; step += 1) {
-    if (step > 1) await forward();
-    await expect(page.locator('.status')).toContainText(`Step ${step} of 28`);
-    await expect(page.locator('[data-phase][data-current]')).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-    await expect(current).toHaveAttribute('data-index', String(step - 1));
-    await expect(current).toBeInViewport();
-    // Only the current group is open: the overview stays one takeaway per phase.
-    await expect(page.locator('[data-group][aria-expanded="true"]')).toHaveCount(1);
+  // The current step lies wholly inside the region, below the pinned participant names.
+  const inside = () =>
+    current.evaluate((el) => {
+      const region = el.closest('.diagram-scroller');
+      if (!region) return false;
+      const r = region.getBoundingClientRect();
+      const head = region.querySelector('.diagram-head')?.getBoundingClientRect().height ?? 0;
+      const b = el.getBoundingClientRect();
+      return (
+        b.left >= r.left && b.right <= r.right && b.top >= r.top + head && b.bottom <= r.bottom
+      );
+    });
+  // combined-balance-explanation has the widest groups (steps start far right of their frame).
+  for (const [id, n] of [
+    ['mcp-balance', 28],
+    ['combined-balance-explanation', 35],
+  ] as const) {
+    await open(page, route(id, 1, 'architecture'));
+    for (let step = 1; step <= n; step += 1) {
+      if (step > 1) await forward();
+      await expect(page.locator('.status')).toContainText(`Step ${step} of ${n}`);
+      await expect(page.locator('[data-phase][data-current]')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+      await expect(current).toHaveAttribute('data-index', String(step - 1));
+      expect(await inside(), `${id} step ${step}`).toBe(true);
+      // Only the current group is open: the overview stays one takeaway per phase.
+      await expect(page.locator('[data-group][aria-expanded="true"]')).toHaveCount(1);
+    }
   }
+  // mcp-balance: planning is steps 10-12, tool 13-16.
   await page.evaluate(() => {
     location.hash = '#/mcp/mcp-balance/10';
   });
