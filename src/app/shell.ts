@@ -39,6 +39,7 @@ import {
   tabScenarios,
 } from './routes.ts';
 import { offlineIndicator } from './offline.ts';
+import { isPhone, PageScroll, relocate } from './phone.ts';
 import { CompareView } from '../compare/view.ts';
 import { appUrl } from '../base.ts';
 import '../styles/diagram.css';
@@ -46,6 +47,7 @@ import '../styles/shell.css';
 import '../styles/inspector.css';
 import '../styles/ingestion.css';
 import '../styles/retrieval.css';
+import '../styles/phone.css';
 
 const SIMULATED = 'Everything here is simulated. Nothing leaves your browser.';
 /** The approved wordmark for the light paper (02 layout brand); the app is light only. */
@@ -177,9 +179,15 @@ export class Shell {
   private compare: CompareView | undefined;
   /** Removes the document listeners of the current header. */
   private headerListeners: AbortController | undefined;
+  /** The header's menu on phones (02 layout.phone.header). */
+  private menu: { toggle: HTMLButtonElement; body: HTMLElement } | undefined;
   /** Whether a page has been shown; the first one does not take focus. */
   private shown = false;
   private route: Route | undefined;
+  /** True while a parameter changes, which never scrolls the page (02 layout.phone.stepping_area). */
+  private adjusting = false;
+  /** Tells the learner's own scrolling from the app's jumps. */
+  private readonly pageScroll = new PageScroll();
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -193,6 +201,7 @@ export class Shell {
   destroy(): void {
     this.leaveScenario();
     window.removeEventListener('keydown', this.onKey);
+    this.pageScroll.destroy();
     this.headerListeners?.abort();
     this.root.replaceChildren();
     this.root.className = '';
@@ -291,12 +300,98 @@ export class Shell {
     });
     const brand = el('h1', { class: 'brand' }, el('a', { href: '#/' }, wordmark));
     const row = el('div', { class: 'shell-bar' }, brand, nav);
-    if (scenario && this.tabs[tab].length > 1) row.append(this.picker(tab, scenario));
-    if (scenario) row.append(this.modeSwitch());
+    this.menu = this.phoneMenu(row);
+    if (scenario && this.tabs[tab].length > 1) {
+      const picker = this.picker(tab, scenario);
+      row.append(picker);
+      // On phones the picker's own list moves into the menu, shown in place.
+      const list = picker.querySelector('ul');
+      if (list) {
+        list.classList.add('menu-scenarios');
+        this.toMenu('Scenario', [list]).classList.add('menu-row--scenarios');
+      }
+    }
     this.header.replaceChildren(
       row,
       el('p', { class: 'small muted simulated' }, SIMULATED, offlineIndicator()),
     );
+    if (scenario) this.toMenu('View', [this.modeSwitch()], row);
+  }
+
+  /**
+   * The menu that holds the scenario picker, the view switch, the speeds, Start and Reset on
+   * phones (02 layout.phone.header); hidden from 48rem, where they sit in their own places.
+   * It is shown once something is in it.
+   */
+  private phoneMenu(row: HTMLElement): { toggle: HTMLButtonElement; body: HTMLElement } {
+    const signal = (this.headerListeners ??= new AbortController()).signal;
+    const body = el('div', { id: 'menu', class: 'menu-body', hidden: '' });
+    const toggle = button(
+      'Menu',
+      () => {
+        const open = toggle.getAttribute('aria-expanded') !== 'true';
+        toggle.setAttribute('aria-expanded', String(open));
+        body.hidden = !open;
+      },
+      { class: 'menu-toggle', 'aria-expanded': 'false', 'aria-controls': 'menu', hidden: '' },
+    );
+    const close = (focus: boolean): void => {
+      toggle.setAttribute('aria-expanded', 'false');
+      body.hidden = true;
+      if (focus) toggle.focus();
+    };
+    // A scenario choice closes it; so does a change of view, with focus back on the menu.
+    body.addEventListener('click', (e) => {
+      const target = e.target as Element;
+      if (target.closest('a')) close(false);
+      else if (target.closest('[data-mode]')) close(true);
+    });
+    // Escape anywhere on the page closes the open menu, and does nothing else (it does not
+    // clear a lineage selection: the window's key handler skips a handled event).
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.key !== 'Escape' || body.hidden) return;
+        e.preventDefault();
+        close(true);
+      },
+      { signal },
+    );
+    document.addEventListener(
+      'pointerdown',
+      (e) => {
+        const target = e.target as Node;
+        if (!body.hidden && !body.contains(target) && !toggle.contains(target)) close(false);
+      },
+      { signal },
+    );
+    row.append(toggle, body);
+    return { toggle, body };
+  }
+
+  /** A labelled row of the menu. */
+  private menuRow(label: string | undefined, ...children: Node[]): HTMLElement {
+    return el(
+      'div',
+      { class: 'menu-row' },
+      ...(label ? [el('span', { class: 'small muted' }, label)] : []),
+      ...children,
+    );
+  }
+
+  /**
+   * Puts a control into the menu while the phone layout applies (02 layout.phone.header);
+   * `parent` is where it sits otherwise. The control moves; it is never copied.
+   */
+  private toMenu(label: string | undefined, nodes: Element[], parent?: Element): HTMLElement {
+    const row = this.menuRow(label);
+    if (!this.menu) return row;
+    parent?.append(...nodes);
+    // The scenario list, the longest, comes last.
+    this.menu.body.insertBefore(row, this.menu.body.querySelector('.menu-row--scenarios'));
+    this.menu.toggle.hidden = false;
+    relocate(nodes, row, (this.headerListeners ??= new AbortController()).signal);
+    return row;
   }
 
   private picker(tab: Tab, scenario: Scenario): HTMLElement {
@@ -365,6 +460,7 @@ export class Shell {
       return { scenario: this.registry[id] as Scenario, label: TAB_LABELS[tab], tab };
     };
     this.compare = new CompareView(this.content, {
+      pageScroll: this.pageScroll,
       compare,
       phases: semantic_phases,
       panes: [pane(compare.left_scenario), pane(compare.right_scenario)],
@@ -377,7 +473,25 @@ export class Shell {
         if (location.hash !== hash) history.replaceState(null, '', hash);
       },
     });
-    this.header.querySelector('.shell-bar')?.append(this.compare.modeSwitch);
+    const bar = this.header.querySelector('.shell-bar') ?? undefined;
+    this.toMenu('View', [this.compare.modeSwitch], bar);
+    this.toPhoneControls(this.compare.phoneControls);
+  }
+
+  /**
+   * On phones the playback controls become the bottom bar with the position line, and the
+   * speeds, Start and Reset move into the menu (02 layout.phone.controls).
+   */
+  private toPhoneControls(c: {
+    bar: HTMLElement;
+    status: HTMLElement;
+    speeds: HTMLElement;
+    start: HTMLElement;
+    reset: HTMLElement;
+  }): void {
+    relocate([c.status], c.bar, (this.headerListeners ??= new AbortController()).signal);
+    this.toMenu('Speed', [c.speeds]);
+    this.toMenu(undefined, [c.start, c.reset]);
   }
 
   private renderScenario(scenario: Scenario, route: Route): ScenarioView {
@@ -390,7 +504,9 @@ export class Shell {
       el('h2', { tabindex: '-1' }, scenario.learning_question),
       el('p', { class: 'headline' }, scenario.headline),
     );
-    const play = button('Play', () => player.toggle());
+    const play = button('Play', () => this.act(() => player.toggle()));
+    const start = button('Start', () => this.go(() => player.start()));
+    const reset = button('Reset', () => this.go(() => player.reset()));
     const speeds = el('div', { class: 'segmented', role: 'group', 'aria-label': 'Speed' });
     for (const speed of SPEEDS) {
       const b = button(`${speed}×`, () => player.setSpeed(speed as Speed), {
@@ -402,11 +518,11 @@ export class Shell {
     const controls = el(
       'div',
       { class: 'controls', role: 'group', 'aria-label': 'Playback' },
-      button('Start', () => this.go(() => player.start())),
+      start,
       button('Previous', () => this.go(() => player.previous())),
       play,
       button('Next', () => this.next()),
-      button('Reset', () => this.go(() => player.reset())),
+      reset,
       speeds,
     );
 
@@ -478,11 +594,8 @@ export class Shell {
       );
     }
 
-    const diagram = el('div', {
-      class: 'diagram-pane',
-      role: 'region',
-      'aria-label': 'Sequence diagram, scrolls in both directions',
-    });
+    // DiagramView names the region and states how it scrolls.
+    const diagram = el('div', { class: 'diagram-pane', role: 'region' });
     const splitter = el('div', {
       class: 'splitter',
       role: 'separator',
@@ -510,6 +623,8 @@ export class Shell {
       details,
     );
     let shownPrompt: number | undefined;
+    /** The step and prompt last rendered, to tell a change of step from other renders. */
+    let rendered: string | undefined;
     const workspace = el('div', { class: 'workspace' }, diagram, splitter, inspector);
     this.attachSplitter(workspace, splitter);
 
@@ -563,7 +678,11 @@ export class Shell {
       leave: () => slider.focus({ preventScroll: true }),
     });
 
-    const view = new DiagramView(diagram, player, { labels: this.labels, mode: route.mode });
+    const view = new DiagramView(diagram, player, {
+      labels: this.labels,
+      mode: route.mode,
+      name: 'Sequence diagram',
+    });
     const state: ScenarioView = {
       scenario,
       defaults: player.playback.events,
@@ -630,6 +749,13 @@ export class Shell {
         );
       }
       this.syncUrl();
+      const position = `${k}:${promptAt ?? ''}`;
+      // An explicit step brings the stepping area back; a Play tick (or a link followed) only
+      // while the learner has not scrolled the page since (02 layout.phone.stepping_area).
+      if (rendered !== undefined && position !== rendered && !this.adjusting) {
+        if (!this.pageScroll.userScrolled) this.keepInView(diagram, inspector, controls);
+      }
+      rendered = position;
     };
 
     const unsubscribe = player.subscribe(() => {
@@ -659,6 +785,7 @@ export class Shell {
       ...(retrieval ? [retrieval.panel.root] : []),
       ...(combined ? [combined.root] : []),
     );
+    this.toPhoneControls({ bar: controls, status, speeds, start, reset });
     state.render();
     return state;
   }
@@ -687,15 +814,28 @@ export class Shell {
     ];
   }
 
+  /** Runs an explicit step action of the learner (02 layout.phone.stepping_area). */
+  private act(action: () => void): void {
+    // The learner's scrolling counts until the next explicit step action.
+    this.pageScroll.reset();
+    action();
+  }
+
   /** Runs a navigation that never shows a prediction prompt. */
   private go(action: () => void): void {
-    if (this.current) this.current.prompt = undefined;
-    action();
-    this.current?.render();
+    this.act(() => {
+      if (this.current) this.current.prompt = undefined;
+      action();
+      this.current?.render();
+    });
   }
 
   /** Next: show a pending prediction first, then run the step (02 learning.prediction_rules). */
   private next(): void {
+    this.act(() => this.nextStep());
+  }
+
+  private nextStep(): void {
     const c = this.current;
     if (!c) return;
     const upcoming = c.player.playback.event(c.player.cursor + 1);
@@ -825,15 +965,35 @@ export class Shell {
   private setParameter(name: string, value: Json): void {
     const c = this.current;
     if (!c) return;
-    c.prompt = undefined;
-    c.player.setParameters({ [name]: value });
-    if (c.selection) {
-      const found = occurrences(c.player.playback.events, c.selection);
-      // A value no longer played (a chunk ID of other parameters) is no longer selected.
-      if (!found.length) c.selection = undefined;
-      c.view.setSelected(new Set(found));
+    this.adjusting = true;
+    try {
+      c.prompt = undefined;
+      c.player.setParameters({ [name]: value });
+      if (c.selection) {
+        const found = occurrences(c.player.playback.events, c.selection);
+        // A value no longer played (a chunk ID of other parameters) is no longer selected.
+        if (!found.length) c.selection = undefined;
+        c.view.setSelected(new Set(found));
+      }
+      c.render();
+    } finally {
+      this.adjusting = false;
     }
-    c.render();
+  }
+
+  /**
+   * On phones, after a change of step, brings the stepping area on screen: the step list's
+   * region, then the prediction prompt, the message line and the error line, above the bottom
+   * bar. If any of it is off screen, the page scrolls at once so the region starts 8 px below
+   * the top (02 layout.phone.stepping_area).
+   */
+  private keepInView(region: HTMLElement, inspector: HTMLElement, bar: HTMLElement): void {
+    if (!isPhone()) return;
+    const top = region.getBoundingClientRect().top;
+    const lines = inspector.querySelectorAll('.prediction, .message, .message ~ p');
+    const bottom = Math.max(0, ...[...lines].map((l) => l.getBoundingClientRect().bottom));
+    if (top >= 0 && bottom <= bar.getBoundingClientRect().top) return;
+    this.pageScroll.jumpBy(top - 8);
   }
 
   /** Selects a lineage value or clears the selection (02 lineage_selection). */
@@ -851,6 +1011,7 @@ export class Shell {
     const compare = this.compare;
     if (compare) {
       if (keyBelongsToFocus(e.target, e.key)) return;
+      // CompareView treats these as the learner's explicit step actions.
       if (e.key === 'ArrowRight') compare.next();
       else if (e.key === 'ArrowLeft') compare.previous();
       else if (e.key === ' ') compare.toggle();
@@ -868,7 +1029,7 @@ export class Shell {
     if (keyBelongsToFocus(e.target, e.key)) return;
     if (e.key === 'ArrowRight') this.next();
     else if (e.key === 'ArrowLeft') this.go(() => c.player.previous());
-    else if (e.key === ' ') c.player.toggle();
+    else if (e.key === ' ') this.act(() => c.player.toggle());
     else return;
     e.preventDefault();
   };

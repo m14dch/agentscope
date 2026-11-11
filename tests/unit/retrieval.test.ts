@@ -6,6 +6,7 @@ import {
   layoutAt,
   projectedPoints,
   projectionLayout,
+  positionLine,
   type ProjectionLayout,
   sharedLabel,
   segmentCrosses,
@@ -251,7 +252,7 @@ describe('retrieval panel helpers', () => {
   });
 
   const answered = Object.values(registry).filter((s) => s.derived_events?.includes('retrieve-12'));
-  it.each(answered.flatMap((s) => [358, 720, 752, 928, 1344].map((w) => [s.id, w] as const)))(
+  it.each(answered.flatMap((s) => [328, 358, 720, 752, 928, 1344].map((w) => [s.id, w] as const)))(
     'lays out the projection of %s at %d px with no label over a label, mark, axis or leader',
     (id, width) => {
       const model = modelAt(id, 6) as RetrievalModel;
@@ -274,13 +275,14 @@ describe('retrieval panel helpers', () => {
         ...layout.axisNames.map((a) => a.box),
       ];
       layout.labels.forEach((l, i) => {
+        if (!l) return;
         const box = l.box;
         expect(box.bottom - box.top).toBeGreaterThanOrEqual(16);
         expect(box.left).toBeGreaterThanOrEqual(0);
         expect(box.right).toBeLessThanOrEqual(layout.width);
         expect(box.bottom).toBeLessThanOrEqual(layout.height);
         layout.labels.forEach((o, j) => {
-          if (j === i) return;
+          if (j === i || !o) return;
           expect(overlap(box, o.box), `label ${i} over label ${j}`).toBe(false);
           if (o.leader)
             expect(segmentCrosses(o.leader, box), `leader ${j} through label ${i}`).toBe(false);
@@ -296,19 +298,34 @@ describe('retrieval panel helpers', () => {
           for (const a of layout.axisNames)
             expect(segmentCrosses(leader, a.box), `leader ${i} through an axis name`).toBe(false);
           layout.labels.forEach((o, j) => {
-            if (j !== i && o.leader)
+            if (j !== i && o?.leader)
               expect(segmentsMeet(leader, o.leader), `leaders ${i} and ${j} meet`).toBe(false);
           });
         }
       });
-      // From a 768 px viewport (720 px of content) the layout fits without scrolling.
-      if (width >= 720) expect(layout.width).toBeLessThanOrEqual(width);
+      // Nothing scrolls at any width (02 labels_and_charts); from a 768 px viewport (720 px of
+      // content) every point is labelled at its place, below it the compact form labels only
+      // the question and names the points in a list.
+      expect(layout.width).toBeLessThanOrEqual(width);
+      if (width >= 720) {
+        expect(layout.compact).toBe(false);
+        expect(layout.labels.every((l) => l !== undefined)).toBe(true);
+      } else {
+        expect(layout.compact).toBe(true);
+        const points = projectedPoints(model);
+        expect(
+          layout.labels.map((l, i) => (l ? points[i]?.label : undefined)).filter(Boolean),
+        ).toEqual(points.filter((p) => !p.id).map((p) => p.label));
+        const side = layout.axes.x[2] - layout.axes.x[0];
+        expect(side).toBeLessThanOrEqual(360);
+        expect(side).toBeGreaterThanOrEqual(width - 2 * 12 - 1);
+      }
     },
   );
 
   it('draws the candidate layout with the shortest leaders at the largest side that fits', () => {
     const leaderCost = (l: ProjectionLayout): number =>
-      l.labels.reduce((n, x) => n + (x.leader ? (x.leader[3] - x.leader[1]) ** 2 : 0), 0);
+      l.labels.reduce((n, x) => n + (x?.leader ? (x.leader[3] - x.leader[1]) ** 2 : 0), 0);
     for (const s of answered) {
       const points = projectedPoints(modelAt(s.id, 6) as RetrievalModel);
       for (const width of [720, 1344]) {
@@ -323,6 +340,23 @@ describe('retrieval panel helpers', () => {
         }
       }
     }
+  });
+
+  it('names each point of the compact form by its label, its position on the axes and its outcome', () => {
+    const base = { label: 'everyday-account@1.2 · 001', id: 'x', retained: true };
+    expect(positionLine({ ...base, x: -0.3149, y: 0.6151 })).toBe(
+      'everyday-account@1.2 · 001: rules 0.31, product 0.62 · retained',
+    );
+    expect(positionLine({ ...base, x: 0.5, y: -0.25, retained: false })).toBe(
+      'everyday-account@1.2 · 001: cost 0.50, technical 0.25',
+    );
+    // A coordinate that rounds to 0.00 names the axis the point lies on.
+    expect(positionLine({ ...base, x: 0.004, y: -0.95, retained: false })).toBe(
+      'everyday-account@1.2 · 001: on the technical–product axis, technical 0.95',
+    );
+    expect(positionLine({ ...base, x: -0.2, y: -0.001, retained: false })).toBe(
+      'everyday-account@1.2 · 001: rules 0.20, on the rules–cost axis',
+    );
   });
 
   it('gives the versions of one chunk with identical vectors one shared label', () => {

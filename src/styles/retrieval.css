@@ -268,6 +268,42 @@
   stroke-width: var(--line-hair);
 }
 
+/* The compact form of phones: each chunk point named in a list below the plot. */
+.projection-list {
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Each line is a toggle that marks its point on the plot with an ink ring. */
+.projection-list .projection-item {
+  display: block;
+  width: 100%;
+  padding: 0.25rem 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+  text-align: left;
+}
+
+.projection-plot .point-ring {
+  fill: none;
+  stroke: var(--color-ink);
+  stroke-width: var(--line-network);
+}
+
+.projection-list span {
+  font-family: var(--font-code);
+}
+
+.projection-list .retained {
+  color: var(--color-ink);
+}
+
 /* Prompt messages and document blocks. */
 .prompt-message + .prompt-message {
   margin-top: var(--space-2);

@@ -10,6 +10,7 @@ import {
   wrap,
 } from '../../src/diagram/model.ts';
 import { renderSvg } from '../../src/diagram/render.ts';
+import { renderList } from '../../src/diagram/list.ts';
 import { loadRegistry, participantLabels } from '../../src/scenarios/registry.ts';
 import type { Scenario, ScenarioEvent } from '../../src/scenarios/types.ts';
 
@@ -279,5 +280,56 @@ describe('render', () => {
     const svg = renderSvg(build(scn, 'protocol', 3), 'T', 'd');
     expect(svg).toContain('marker-end="url(#d-request)"');
     expect(svg).toContain('marker-end="url(#d-response)"');
+  });
+});
+
+describe('the step list of phones (02 diagram.phone_list)', () => {
+  const text = (html: string): string =>
+    html
+      .replace(/<svg[\s\S]*?<\/svg>/g, ' → ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ');
+
+  it('lists each reached step with its label, sender and receiver; the current one is last', () => {
+    const html = renderList(build(scenario('mcp-balance'), 'protocol', 14), 'title', labels);
+    expect(html.match(/<li class="row[^"]*"/g)).toHaveLength(14);
+    expect(html.match(/data-current/g)).toHaveLength(1);
+    const last = html.slice(html.lastIndexOf('<li'));
+    expect(last).toContain('row--emphasized');
+    expect(last).toContain('row-arrow--network row-arrow--current');
+    expect(text(last)).toContain('Step 14MCP · tools/call');
+    expect(text(last)).toContain('MCP client → to Example Bank MCP server');
+    // No lifelines and no participant header.
+    expect(html).not.toContain('lifeline');
+    expect(html).not.toContain('participant');
+  });
+
+  it('draws the line encoding: responses open, self-calls as a loop, errors marked', () => {
+    const html = renderList(build(scenario('mcp-not-found'), 'protocol', 28), 't', labels);
+    expect(html).toContain('row-head--response');
+    expect(html).toContain('row-arrow--in-process');
+    expect(html).toContain('to itself');
+    expect(html).toMatch(/row--error[^>]*>[\s\S]*?× tool execution error/);
+  });
+
+  it('stacks the architecture groups as buttons, expanded ones listing their reached steps', () => {
+    const html = renderList(build(scenario('mcp-balance'), 'architecture', 14, ['tool']), 't');
+    expect(html).toContain(
+      '<section class="phase phase--current" data-phase="tool" data-current="">',
+    );
+    expect(html).toContain(
+      '<button type="button" class="phase-toggle" data-group="tool" aria-expanded="true">',
+    );
+    const tool = html.slice(html.indexOf('data-phase="tool"'));
+    expect(tool.slice(0, tool.indexOf('</section>')).match(/<li /g)).toHaveLength(2);
+    expect(html).not.toContain('<svg class="diagram"');
+  });
+
+  it('escapes every text', () => {
+    const scn = scenario('mcp-balance');
+    const sender = scn.events[0]?.sender ?? '';
+    const html = renderList(build(scn, 'protocol', 1), '<t>', { ...labels, [sender]: '<b>' });
+    expect(html).toContain('&lt;b&gt;');
+    expect(html).toContain('aria-label="&lt;t&gt;"');
   });
 });

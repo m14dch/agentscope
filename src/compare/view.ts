@@ -9,6 +9,7 @@ import { type Mode, operationLabel } from '../diagram/model.ts';
 import { createPlayback } from '../rag/bundled.ts';
 import type { Compare, Scenario } from '../scenarios/types.ts';
 import { CompareTimeline, type PaneAt, type PaneInput } from './timeline.ts';
+import { isPhone, type PageScroll, stepDelta } from '../app/phone.ts';
 import '../styles/compare.css';
 
 /** One side of the comparison. */
@@ -31,6 +32,8 @@ export interface CompareOptions {
   /** Called after every change of position or mode, to write the address. */
   onChange: (step: number, mode: Mode) => void;
   clock?: Clock;
+  /** Tells the learner's scrolling from the app's jumps (02 layout.phone.stepping_area). */
+  pageScroll?: PageScroll;
 }
 
 const browserClock: Clock = {
@@ -78,6 +81,14 @@ export class CompareView {
   readonly timeline: CompareTimeline;
   /** The architecture/protocol switch, placed in the top bar by the shell. */
   readonly modeSwitch: HTMLElement;
+  /** What the shell rearranges on phones (02 layout.phone.controls). */
+  readonly phoneControls: {
+    bar: HTMLElement;
+    status: HTMLElement;
+    speeds: HTMLElement;
+    start: HTMLElement;
+    reset: HTMLElement;
+  };
   private readonly options: CompareOptions;
   private readonly clock: Clock;
   private readonly panes: readonly [Pane, Pane];
@@ -98,6 +109,10 @@ export class CompareView {
    * position was already announced stays quiet.
    */
   private announced: number;
+  /** The bottom bar on phones: the shared controls. */
+  private readonly bar: HTMLElement;
+  /** Each pane's cursor at the last render, to tell which pane's step changed. */
+  private cursors: [number, number] | undefined;
 
   constructor(root: HTMLElement, options: CompareOptions) {
     this.options = options;
@@ -131,14 +146,16 @@ export class CompareView {
       b.dataset['speed'] = String(speed);
       this.speeds.append(b);
     }
+    const start = button('Start', () => this.act(() => this.navigate(1)));
+    const reset = button('Reset', () => this.reset());
     const controls = el(
       'div',
       { class: 'controls', role: 'group', 'aria-label': 'Playback of both panes' },
-      button('Start', () => this.navigate(1)),
+      start,
       button('Previous', () => this.previous()),
       this.play,
       button('Next', () => this.next()),
-      button('Reset', () => this.reset()),
+      reset,
       this.speeds,
     );
 
@@ -149,8 +166,12 @@ export class CompareView {
       step: '1',
       'aria-label': 'Compare step',
     });
-    this.slider.addEventListener('input', () => this.navigate(Number(this.slider.value)));
-    this.status = el('span', { class: 'small muted' });
+    this.slider.addEventListener('input', () =>
+      this.act(() => this.navigate(Number(this.slider.value))),
+    );
+    this.status = el('span', { class: 'small muted compare-status' });
+    this.bar = controls;
+    this.phoneControls = { bar: controls, status: this.status, speeds: this.speeds, start, reset };
     const phaseList = el('ol', { class: 'compare-phases small', 'aria-label': 'Semantic phases' });
     for (const phase of phases) {
       const item = el('li', {}, phase.label);
@@ -207,33 +228,73 @@ export class CompareView {
   }
 
   next(): void {
-    this.navigate(this.position + 1);
+    this.act(() => this.navigate(this.position + 1));
   }
 
   previous(): void {
-    this.navigate(this.position - 1);
+    this.act(() => this.navigate(this.position - 1));
   }
 
   /** Moves one pane to its own step; the other follows to the same phase. */
   stepPane(side: 0 | 1, cursor: number): void {
-    this.navigate(this.timeline.stepOf(side, cursor));
+    this.act(() => this.navigate(this.timeline.stepOf(side, cursor)));
   }
 
   /** Return to the initial state before any step and pause (02 controls.action_rules). */
   reset(): void {
-    this.stop();
-    this.position = 0;
-    this.render();
+    this.act(() => {
+      this.stop();
+      this.position = 0;
+      this.render();
+    });
   }
 
   toggle(): void {
-    if (this.playing) {
-      this.stop();
-    } else if (this.position < this.timeline.length) {
-      this.playing = true;
-      this.schedule();
-    }
-    this.render();
+    this.act(() => {
+      if (this.playing) {
+        this.stop();
+      } else if (this.position < this.timeline.length) {
+        this.playing = true;
+        this.schedule();
+      }
+      this.render();
+    });
+  }
+
+  /** Runs an explicit step action of the learner (02 layout.phone.stepping_area). */
+  private act(action: () => void): void {
+    // The learner's scrolling counts until the next explicit step action.
+    this.options.pageScroll?.reset();
+    action();
+  }
+
+  /**
+   * On phones, after a compare step, brings the panes whose step changed on screen above the
+   * bar (02 layout.phone.stepping_area): both current rows when they fit together, else the
+   * lower changed pane's message and current row.
+   */
+  private keepInView(changed: readonly Pane[]): void {
+    const scroll = this.options.pageScroll;
+    if (!scroll || !changed.length || !isPhone()) return;
+    const current = (pane: Pane): Element | undefined => {
+      const all = pane.root.querySelectorAll('.diagram-pane [data-current]');
+      return all[all.length - 1];
+    };
+    const limit = this.bar.getBoundingClientRect().top;
+    const rows = changed.flatMap((p) => {
+      const row = current(p);
+      return row ? [row.getBoundingClientRect()] : [];
+    });
+    const last = changed[changed.length - 1] as Pane;
+    const lastRow = current(last)?.getBoundingClientRect();
+    if (!lastRow) return;
+    const both = { top: Math.min(...rows.map((r) => r.top)), bottom: lastRow.bottom };
+    const span =
+      rows.length > 1 && both.bottom - both.top <= limit - 16
+        ? both
+        : { top: last.message.getBoundingClientRect().top, bottom: lastRow.bottom };
+    const delta = stepDelta(span, limit);
+    if (delta) scroll.jumpBy(delta);
   }
 
   setSpeed(speed: Speed): void {
@@ -307,14 +368,11 @@ export class CompareView {
     const position = el('p', { class: 'small muted' });
     const message = el('div', { class: 'compare-message' });
     const inspect = el('a', { class: 'small' });
-    const diagram = el('div', {
-      class: 'diagram-pane',
-      role: 'region',
-      'aria-label': `${label} sequence diagram, scrolls in both directions`,
-    });
+    const diagram = el('div', { class: 'diagram-pane', role: 'region' });
     const view = new DiagramView(diagram, player, {
       labels: this.options.labels,
       mode: this.mode,
+      name: `${label} sequence diagram`,
       id: `compare-${side === 0 ? 'left' : 'right'}`,
     });
     const root = el(
@@ -437,6 +495,17 @@ export class CompareView {
         phase ? `${phase}.` : 'Before the first step.',
         ...announcements,
       ].join(' ');
+    }
+    // An explicit step brings the panes back; a Play tick or a followed link only while the
+    // learner has not scrolled the page since (02 layout.phone.stepping_area).
+    const cursors: [number, number] = [step.panes[0].cursor, step.panes[1].cursor];
+    const before = this.cursors;
+    this.cursors = cursors;
+    if (before) {
+      const changed = this.panes.filter((_, i) => cursors[i] !== before[i]);
+      if (changed.length) {
+        if (!this.options.pageScroll?.userScrolled) this.keepInView(changed);
+      }
     }
     this.options.onChange(this.position, this.mode);
   }

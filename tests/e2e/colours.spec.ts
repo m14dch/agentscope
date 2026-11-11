@@ -123,6 +123,15 @@ function offenders(found: Found): string[] {
     .map(([value, where]) => `${value}: ${where.slice(0, 3).join(', ')}`);
 }
 
+// Below 48rem the diagram is the step list, the controls the bottom bar and the menu holds
+// the switches (02 layout.phone); those pages are checked at a phone's width too.
+const PHONE_ROUTES = new Set([
+  './#/mcp/mcp-not-found/23/protocol',
+  './#/mcp/mcp-balance/14',
+  './#/rag/rag-prompt-injection/10',
+  './#/compare/compare-rag-mcp/16',
+]);
+
 for (const route of [
   './',
   './#/design',
@@ -138,28 +147,32 @@ for (const route of [
   // Both compare panes, one of them done with its phase.
   './#/compare/compare-rag-mcp/16',
 ]) {
-  test(`every computed colour on ${route} is a design token`, async ({ page }) => {
-    await page.goto(route);
-    await page.locator('#app > *').first().waitFor();
-    // Expand folded content so it is checked too, then move the pointer away (no hover).
-    // Query again after each click: expanding can re-render the content.
-    const folded = page.locator('[aria-expanded="false"]');
-    for (let i = 0; i < 50 && (await folded.count()) > 0; i += 1) await folded.first().click();
-    await page.mouse.move(0, 0);
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    expect(offenders(await computedColours(page, false))).toEqual([]);
+  for (const phone of PHONE_ROUTES.has(route) ? [false, true] : [false])
+    test(`every computed colour on ${route}${phone ? ' on a phone' : ''} is a design token`, async ({
+      page,
+    }) => {
+      if (phone) await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(route);
+      await page.locator('#app > *').first().waitFor();
+      // Expand folded content so it is checked too, then move the pointer away (no hover).
+      // Query again after each click: expanding can re-render the content.
+      const folded = page.locator('[aria-expanded="false"]:visible');
+      for (let i = 0; i < 50 && (await folded.count()) > 0; i += 1) await folded.first().click();
+      await page.mouse.move(0, 0);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      expect(offenders(await computedColours(page, false))).toEqual([]);
 
-    // Each focusable element while it has keyboard focus. Reload so Tab starts at the top
-    // of the page instead of after the element that was clicked above.
-    await page.reload();
-    await page.locator('#app > *').first().waitFor();
-    const focusable = await page
-      .locator('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')
-      .count();
-    for (let i = 0; i < focusable; i++) {
-      await page.keyboard.press('Tab');
-      const name = await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 60));
-      expect(offenders(await computedColours(page, true)), `focus on ${name}`).toEqual([]);
-    }
-  });
+      // Each focusable element while it has keyboard focus. Reload so Tab starts at the top
+      // of the page instead of after the element that was clicked above.
+      await page.reload();
+      await page.locator('#app > *').first().waitFor();
+      const focusable = await page
+        .locator('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        .count();
+      for (let i = 0; i < focusable; i++) {
+        await page.keyboard.press('Tab');
+        const name = await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 60));
+        expect(offenders(await computedColours(page, true)), `focus on ${name}`).toEqual([]);
+      }
+    });
 }

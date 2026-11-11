@@ -36,6 +36,7 @@ constraints:
   deterministic: true
   desktop_first: true
   tablet_supported: true
+  phone_supported: true
   no_external_services: true
   no_api_keys: true
   browser_only: true

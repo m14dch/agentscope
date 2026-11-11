@@ -82,10 +82,11 @@ for (const [width, height, device] of [
   });
 }
 
+// From 48rem (tablets); below it the diagram is the step list (02 diagram.phone_list).
 test('the diagram scrolls horizontally on a narrow screen instead of squeezing', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 600, height: 900 });
+  await page.setViewportSize({ width: 768, height: 900 });
   await open(page, route('mcp-balance', 28, 'protocol'));
   const region = page.getByRole('region', { name: /Sequence diagram/ });
   const { scroll, client, pageWidth } = await region.evaluate((el) => ({
@@ -94,7 +95,7 @@ test('the diagram scrolls horizontally on a narrow screen instead of squeezing',
     pageWidth: document.documentElement.scrollWidth,
   }));
   expect(scroll).toBeGreaterThan(client);
-  expect(pageWidth).toBeLessThanOrEqual(600);
+  expect(pageWidth).toBeLessThanOrEqual(768);
 });
 
 test('switching mode keeps the cursor on the same step', async ({ page }) => {
@@ -219,7 +220,7 @@ test('focus stays on the same group while stepping', async ({ page }) => {
 });
 
 test('arrow keys scroll the focused diagram region instead of stepping', async ({ page }) => {
-  await page.setViewportSize({ width: 600, height: 900 });
+  await page.setViewportSize({ width: 768, height: 900 });
   await open(page, route('mcp-balance', 5, 'protocol'));
   const region = page.locator('.diagram-scroller');
   await region.focus();

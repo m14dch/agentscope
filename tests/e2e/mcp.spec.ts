@@ -144,6 +144,9 @@ test('server/discover offers the earlier initialize handshake, collapsed and lab
   await expect(earlier).toContainText('No body');
   // Readable at 200% zoom without horizontal scrolling, like the payload above it.
   await page.setViewportSize({ width: 720, height: 900 });
+  // At 720 px the phone layout applies (02 layout.phone): the tabs sit behind Step details.
+  await page.getByRole('button', { name: 'Step details' }).click();
+  await expect(earlier.locator('.json').first()).toBeVisible();
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '200%';
   });
