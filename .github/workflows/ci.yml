@@ -94,7 +94,7 @@ jobs:
         timeout-minutes: 3
         run: npx playwright install chromium
 
-      # About 6 minutes with the accessibility and quality tests (two workers: Playwright's
+      # About 7 minutes with the accessibility and quality tests (two workers: Playwright's
       # default of half the runner's four cores in CI).
       - name: End-to-end tests
         timeout-minutes: 12
