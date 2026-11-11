@@ -36,6 +36,21 @@ function event(id: string, extra: Partial<ScenarioEvent> = {}): ScenarioEvent {
   };
 }
 
+function phase(id: string): Scenario['phases'][number] {
+  return { id, label: 'Phase', semantic_phase: 'preparation', takeaway: 'One message.' };
+}
+
+/** An overview of two parties (agent, llm) and one stage per phase. */
+function overview(phases: string[]): Scenario['overview'] {
+  return {
+    parties: [
+      { id: 'a', label: 'Assistant', members: ['agent'] },
+      { id: 'm', label: 'Model', members: ['llm'] },
+    ],
+    stages: phases.map((id) => ({ id, phases: [id], sentence: `Stage ${id} happens.` })),
+  };
+}
+
 function base(): Scenario {
   const events = [
     event('e1', { pair_id: 'e2' }),
@@ -50,7 +65,8 @@ function base(): Scenario {
     learning_question: 'What does the base teach?',
     headline: 'The base teaches one thing.',
     participants: ['agent', 'llm'],
-    phases: [{ id: 'p1', label: 'Phase', semantic_phase: 'preparation', takeaway: 'One message.' }],
+    phases: ['p1', 'p2', 'p3'].map((id) => phase(id)),
+    overview: overview(['p1', 'p2', 'p3']),
     events,
     initial_state: {},
   };
@@ -84,6 +100,7 @@ const ctx: ValidationContext = {
     'phases',
     'events',
     'initial_state',
+    'overview',
   ],
   enums: {
     protocol: ['MCP', 'HTTP', 'LLM_API', 'RAG_INTERNAL', 'UI', 'DB', 'INTERNAL'],
@@ -114,7 +131,8 @@ describe('composition', () => {
       learning_question: 'What composes?',
       headline: 'Composition reuses events.',
       participants: ['agent', 'llm'],
-      phases: [{ id: 'q', label: 'Q', semantic_phase: 'preparation', takeaway: 'One message.' }],
+      phases: ['q', 'r', 's'].map((id) => phase(id)),
+      overview: overview(['q', 'r', 's']),
       initial_state: {},
       expanded_event_count: 3,
       derived_events: ['own'],
@@ -185,6 +203,7 @@ describe('validation', () => {
   it('checks that MCP headers mirror the body', () => {
     const scn = base();
     scn.participants.push('mcp-client', 'mcp-server');
+    scn.overview.parties[0]?.members.push('mcp-client', 'mcp-server');
     const payload = {
       jsonrpc: '2.0',
       id: 1,

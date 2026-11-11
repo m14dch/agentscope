@@ -491,6 +491,27 @@ scenarios:
     label: Store
     semantic_phase: preparation
     takeaway: Vectors, text and metadata are stored together, so every search result can cite its source.
+  overview:
+    parties:
+    - id: documents
+      label: Bank documents
+      members: [repository]
+    - id: pipeline
+      label: Indexing pipeline
+      members: [pipeline, parser, chunker, embedding-model]
+    - id: search-index
+      label: Search index
+      members: [vector-db]
+    stages:
+    - id: read
+      phases: [load, parse]
+      sentence: The pipeline reads the bank's documents and keeps only their text.
+    - id: split
+      phases: [chunk]
+      sentence: Each document is cut into short passages that overlap a little.
+    - id: index
+      phases: [embed, store]
+      sentence: Each passage is placed by its meaning and stored with its source, ready to be searched.
   initial_state:
     rag_index:
       sources: []
@@ -976,6 +997,27 @@ scenarios:
     label: Answer
     semantic_phase: answer
     takeaway: Each statement cites its chunk; gaps in the evidence are named, not filled in.
+  overview:
+    parties:
+    - id: you
+      label: You
+      members: [user]
+    - id: assistant
+      label: Assistant
+      members: [agent, llm]
+    - id: bank-documents
+      label: Bank documents
+      members: [embedding-model, vector-db, document-store]
+    stages:
+    - id: ask
+      phases: [question]
+      sentence: You ask what it takes to open and keep a bank account.
+    - id: search
+      phases: [embedding, retrieval]
+      sentence: The assistant searches the bank's documents for the passages closest in meaning to your question.
+    - id: answer
+      phases: [context, generation, answer]
+      sentence: The assistant answers from those passages only and cites each one.
   initial_state:
     retrieval:
       retained: []

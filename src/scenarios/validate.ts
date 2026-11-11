@@ -236,6 +236,98 @@ function checkScenario(
   }
   if (complete.length === list(scn.events).length) checkVisibility(scn, err);
   checkDerived(scn, byId, err);
+  for (const problem of overviewProblems(scn)) err(problem.where, problem.message);
+}
+
+/** Party labels and stage sentences name no protocol (03 overview_fields.plain_words). */
+const PROTOCOL_WORDS = /\b(MCP|HTTP|REST|JSON|RPC|LLM|API)\b/;
+
+/** One plain sentence: it ends with a period and holds no other sentence end. */
+function oneSentence(value: string): boolean {
+  const body = value.trim();
+  return (
+    body.length > 0 &&
+    body.endsWith('.') &&
+    !/[.?!]\s/.test(body.slice(0, -1)) &&
+    !/[?!]/.test(body)
+  );
+}
+
+/**
+ * The Overview zoom level's problems (03 scenario_format.overview_fields), each with where it
+ * is; mirrors check_overview of validate_specs.py, which a unit test compares.
+ */
+export function overviewProblems(scn: Scenario): { where: string; message: string }[] {
+  const sid = scn.id;
+  const out: { where: string; message: string }[] = [];
+  const err = (message: string, where = sid): void => void out.push({ where, message });
+  const raw: unknown = (scn as unknown as Obj)['overview'];
+  if (!isObj(raw)) {
+    err('overview must be {parties, stages}');
+    return out;
+  }
+  const parties = list(raw['parties']);
+  const stages = list(raw['stages']);
+  if (parties.length < 2 || parties.length > 4) err('overview needs 2 to 4 parties');
+  if (stages.length < 3 || stages.length > 5) err('overview needs 3 to 5 stages');
+  const ids = new Set<string>();
+  const members: string[] = [];
+  parties.forEach((value, i) => {
+    const party = obj(value);
+    const pid = text(party['id']);
+    const label = party['label'];
+    if (!pid || ids.has(pid)) err(`overview party ${i} needs a unique id`);
+    ids.add(pid);
+    if (typeof label !== 'string' || !label.trim()) err(`overview party ${pid} needs a label`);
+    else if (PROTOCOL_WORDS.test(label)) err(`overview party ${pid} names a protocol`);
+    const group = party['members'];
+    if (!Array.isArray(group) || !group.length) err(`overview party ${pid} needs members`);
+    else members.push(...group.map(text));
+  });
+  const sorted = (values: string[]): string[] => [...values].sort();
+  if (!sameList(sorted(members), sorted(list(scn.participants).map(text))))
+    err('overview parties must partition the participants');
+  const covered: string[] = [];
+  const stageIds = new Set<string>();
+  const stageOf = new Map<string, number>();
+  stages.forEach((value, i) => {
+    const stage = obj(value);
+    const tid = text(stage['id']);
+    const sentence = stage['sentence'];
+    if (!tid || stageIds.has(tid)) err(`overview stage ${i} needs a unique id`);
+    stageIds.add(tid);
+    if (typeof sentence !== 'string' || !oneSentence(sentence))
+      err(`overview stage ${tid} needs one sentence ending with a period`);
+    else if (PROTOCOL_WORDS.test(sentence)) err(`overview stage ${tid} names a protocol`);
+    const phases = stage['phases'];
+    if (!Array.isArray(phases) || !phases.length) {
+      err(`overview stage ${tid} needs phases`);
+      return;
+    }
+    for (const phase of phases.map(text)) {
+      covered.push(phase);
+      stageOf.set(phase, i);
+    }
+  });
+  if (
+    !sameList(
+      covered,
+      list(scn.phases).map((p) => text(obj(p)['id'])),
+    )
+  ) {
+    err('overview stages must partition the phases in their order');
+    return out;
+  }
+  let last = 0;
+  for (const e of list(scn.events).map(obj)) {
+    const at = stageOf.get(text(e['phase'])) ?? last;
+    if (at < last) {
+      err('events must visit the overview stages in order', `${sid}/${text(e['id'])}`);
+      break;
+    }
+    last = at;
+  }
+  return out;
 }
 
 /** derived_events and optional_steps name the scenario's events (03 scenario_format). */

@@ -144,6 +144,36 @@ combined:
     label: Answer
     semantic_phase: answer
     takeaway: The answer states the live balance and cites the conditions it compares.
+  overview:
+    parties:
+    - id: you
+      label: You
+      members: [user]
+    - id: assistant
+      label: Assistant
+      members: [agent, llm, mcp-client]
+    - id: bank-documents
+      label: Bank documents
+      members: [embedding-model, vector-db]
+    - id: bank-systems
+      label: Bank systems
+      members: [mcp-server, rest-api, database]
+    stages:
+    - id: prepare
+      phases: [setup, discovery]
+      sentence: Before any question, the assistant learns which actions the bank's systems offer.
+    - id: ask
+      phases: [question]
+      sentence: You ask for your balance and whether another account would suit you better.
+    - id: search
+      phases: [retrieval, context]
+      sentence: The assistant finds the bank's published account conditions in its documents.
+    - id: fetch
+      phases: [planning, tool, backend, tool-context]
+      sentence: The assistant asks the bank's systems for your live balance.
+    - id: answer
+      phases: [generation, answer]
+      sentence: The assistant answers with your balance and cites the conditions it compares.
   compose:
   - copy:
       scenario: mcp-balance

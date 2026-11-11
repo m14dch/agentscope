@@ -72,6 +72,7 @@ const COMPOSED_FIELDS = [
   'headline',
   'participants',
   'phases',
+  'overview',
   'initial_state',
   'derived_events',
 ] as const;
