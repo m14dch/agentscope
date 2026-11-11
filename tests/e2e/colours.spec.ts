@@ -146,6 +146,10 @@ for (const route of [
   './#/rag/rag-stale/10',
   // Both compare panes, one of them done with its phase.
   './#/compare/compare-rag-mcp/16',
+  // The combined answer with its provenance labels, sources and the evidence gap.
+  './#/combined/combined-missing-terms/35/protocol',
+  // An unknown route: the error line and its link back to the tab.
+  './#/compare/unknown',
 ]) {
   for (const phone of PHONE_ROUTES.has(route) ? [false, true] : [false])
     test(`every computed colour on ${route}${phone ? ' on a phone' : ''} is a design token`, async ({

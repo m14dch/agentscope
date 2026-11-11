@@ -142,6 +142,21 @@ e2e_tests:
   - Verify the header wordmark and the favicon load under the subpath and after an offline
     reload.
   - Fail on external requests or runtime API traffic.
+- id: accessibility
+  steps:
+  - At desktop, tablet and phone width, scan every tab and representative scenarios and steps in both modes
+    with axe-core, as loaded and with the step details, the model context, a group and the scenario
+    picker or the menu open, and fail on any serious or critical finding.
+  - At desktop and tablet width, on every tab in both modes, move through the page with Tab and verify
+    that every control is reached, on screen and shows a visible focus indicator, and that the arrow
+    keys and Enter on Next step.
+  - With reduced motion, verify on every tab that nothing animates or transitions and that the diagram
+    regions jump to each step at once.
+- id: quality-gate-events
+  steps:
+  - Step through every scenario and Compare with the arrow key at the default parameters and verify
+    that at least min_supported_events events are played and that 95% of steps are handled within
+    100 ms.
 quality_gates:
   min_supported_events: 100
   min_supported_events_rule: Counted over the events played at each scenario's default

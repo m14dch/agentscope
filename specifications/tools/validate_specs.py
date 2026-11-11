@@ -719,6 +719,28 @@ def check_compare(cmp_, registry):
             err("compare.aspects", f"aspect {i} needs exactly a label and a sentence")
 
 
+def answer_composition_problem(composition):
+    """What is wrong with an answer_composition (06 combined), or None. Mirrors
+    answerCompositionProblem in src/rag/derive.ts, message for message."""
+    def is_text(v):
+        return isinstance(v, str) and v.strip() != ""
+    if not isinstance(composition, dict):
+        return "missing"
+    intro = composition.get("intro")
+    if not isinstance(intro, list) or not intro or any(
+            not isinstance(p, dict) or p.get("source") not in ("tool", "session") or not is_text(p.get("text"))
+            for p in intro):
+        return "intro must list sentences, each with source tool or session and a text"
+    comparisons = composition.get("comparisons")
+    if not isinstance(comparisons, list) or any(
+            not isinstance(c, dict) or not is_text(c.get("sentence")) or not is_text(c.get("explanation"))
+            for c in comparisons):
+        return "each comparison needs a sentence and an explanation"
+    if not is_text(composition.get("explanation")):
+        return "explanation is missing"
+    return None
+
+
 def check_rag(rag, comp, registry, ui):
     R = rag_engine(rag)
     refs = {k: v for k, v in rag["reference_results"].items() if k != "note"}
@@ -812,11 +834,12 @@ def check_rag(rag, comp, registry, ui):
             check_derived_defaults(R, rag, registry, ranked, sel)
 
     # Combined: answer, sources and every derived payload.
-    composition = comp["answer_composition"]
+    composition = comp.get("answer_composition")
+    problem = answer_composition_problem(composition)
+    if problem:
+        err("combined.answer_composition", problem)
+        return
     intro = composition["intro"]
-    if not intro or any(p.get("source") not in ("tool", "session") or not str(p.get("text", "")).strip()
-                        for p in intro):
-        err("combined.answer_composition", "intro must list sentences, each with source tool or session")
     cases = [("combined", comp, comp)] + [(v["id"], v, comp) for v in comp.get("variants", [])]
     for label, case, base in cases:
         if not str(case.get("lesson" if case is not base else "headline", "")).strip():

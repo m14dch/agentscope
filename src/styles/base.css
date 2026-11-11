@@ -23,6 +23,11 @@ body {
   margin: 0;
 }
 
+/* Links are ink, never the browser's blue or purple; the underline marks them. */
+a {
+  color: inherit;
+}
+
 h1,
 h2,
 h3,

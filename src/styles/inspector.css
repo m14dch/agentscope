@@ -76,6 +76,11 @@
   color: var(--color-ink-muted);
 }
 
+/* A folded line is a target of at least 24 px (WCAG 2.5.8): folds can stack directly. */
+.json-fold > summary {
+  padding-block: 0.25rem;
+}
+
 .json-fold > summary::before {
   content: '▸ ';
 }

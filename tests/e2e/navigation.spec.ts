@@ -167,9 +167,14 @@ test('diagram and inspector sit side by side on desktop and stack on tablet', as
   expect(i.x, 'inspector right of the diagram').toBeGreaterThan(d.x + d.width - 1);
   expect(Math.abs(i.y - d.y), 'tops aligned').toBeLessThan(2);
   await page.setViewportSize({ width: 820, height: 1180 });
-  d = await box(diagram);
-  i = await box(inspector);
-  expect(i.y, 'inspector below the diagram').toBeGreaterThanOrEqual(d.y + d.height - 1);
+  // Measure once the layout has followed the resize.
+  await expect
+    .poll(async () => {
+      d = await box(diagram);
+      i = await box(inspector);
+      return i.y >= d.y + d.height - 1;
+    }, 'inspector below the diagram')
+    .toBe(true);
 });
 
 test('the splitter resizes the inspector with the keyboard, within 20rem and 60%', async ({

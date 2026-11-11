@@ -31,6 +31,11 @@
   .statement {
     grid-template-columns: 12rem minmax(0, 1fr);
   }
+
+  /* Also when there is no label (the unlabelled fallback). */
+  .statement-text {
+    grid-column: 2;
+  }
 }
 
 .balance {

@@ -5,6 +5,25 @@
   stroke-width: var(--line-hair);
 }
 
+/* The names stay at the top of the region while it scrolls; their band hides what passes
+   beneath them. They scroll horizontally with their lifelines. */
+.diagram-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: max-content;
+}
+
+.diagram-participants {
+  display: block;
+}
+
+/* Paper behind a group's text, so lifelines pass under it rather than through it. */
+.group-text-band,
+.participants-band {
+  fill: var(--color-paper);
+}
+
 .participant {
   fill: var(--color-ink);
   font-size: var(--size-small);

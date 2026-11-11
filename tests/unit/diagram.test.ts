@@ -281,6 +281,54 @@ describe('render', () => {
     expect(svg).toContain('marker-end="url(#d-request)"');
     expect(svg).toContain('marker-end="url(#d-response)"');
   });
+
+  it('names each group by its visible text, takeaway then caption (WCAG 2.5.3)', () => {
+    const model = build(scenario('mcp-not-found'), 'architecture', 23);
+    const svg = renderSvg(model, 'T');
+    for (const g of model.groups) {
+      const visible = [
+        g.takeaway.join(' '),
+        `${g.caption.slice(2)}${g.error ? ` · × ${g.error} error` : ''}`,
+      ]
+        .filter(Boolean)
+        .join(' ');
+      expect(svg).toContain(
+        `data-group="${g.key}" data-phase="${g.phase.id}"${g.current ? ' data-current=""' : ''} role="button" tabindex="0" aria-expanded="${g.expanded}" aria-label="${visible.replace(/'/g, '&#39;')}"`,
+      );
+    }
+    expect(model.groups.some((g) => g.error)).toBe(true);
+    expect(model.groups.some((g) => g.takeaway.length > 1)).toBe(true);
+    // Wrapped lines are separate words, not run together.
+    expect(svg).toMatch(/<\/tspan> <tspan/);
+  });
+
+  it('draws the participant names first, in a sticky header above the diagram', () => {
+    const model = build(scenario('mcp-balance'), 'protocol', 5);
+    const html = renderSvg(model, 'T');
+    const head = model.top - 8;
+    // Assistive technology meets the names before the steps.
+    expect(html.startsWith(`<div class="diagram-head" data-header="${head}">`)).toBe(true);
+    const diagram = html.indexOf('<svg class="diagram"');
+    expect(html.slice(0, diagram).match(/class="participant"/g)).toHaveLength(
+      model.lifelines.length,
+    );
+    expect(html.slice(diagram)).not.toContain('class="participant"');
+    // The diagram continues below the header in the same coordinates.
+    expect(html.slice(diagram)).toContain(
+      `height="${model.height - head}" viewBox="0 ${head} ${model.width} ${model.height - head}"`,
+    );
+  });
+
+  it("puts paper behind each group's text, so lifelines do not run through it", () => {
+    const model = build(scenario('mcp-balance'), 'architecture', 12);
+    const html = renderSvg(model, 'T');
+    for (const g of model.groups) {
+      expect(g.textWidth).toBeGreaterThan(0);
+      expect(html).toContain(
+        `<rect class="group-text-band" x="${g.x1 + 2 * SIZES.groupPad - 4}" y="${g.y + SIZES.groupPad}" width="${g.textWidth + 8}"`,
+      );
+    }
+  });
 });
 
 describe('the step list of phones (02 diagram.phone_list)', () => {

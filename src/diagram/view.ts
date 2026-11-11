@@ -159,6 +159,9 @@ export class DiagramView {
       ? renderList(model, title, this.options.labels)
       : renderSvg(model, title, this.options.id ?? 'diagram', this.options.labels);
     this.root.dataset['presentation'] = list ? 'list' : 'diagram';
+    // Focus moved by the keyboard scrolls clear of the sticky participant names too.
+    const header = this.headerHeight();
+    this.root.style.scrollPaddingTop = header ? `${header}px` : '';
     const name = this.options.name ?? 'Sequence diagram';
     this.root.setAttribute(
       'aria-label',
@@ -189,23 +192,36 @@ export class DiagramView {
     const region = this.root.getBoundingClientRect();
     const box = current.getBoundingClientRect();
     const margin = 24;
+    // The pinned participant names cover the top of the region.
+    const header = this.headerHeight();
     let top = this.root.scrollTop;
     let left = this.root.scrollLeft;
-    // Reveal the far edge only if the near edge stays in view; otherwise show the start.
-    const fitsY = box.height <= region.height - 2 * margin;
-    const fitsX = box.width <= region.width - 2 * margin;
-    if (box.top < region.top + margin || (!fitsY && box.top > region.top + margin)) {
-      top -= region.top + margin - box.top;
+    // Vertically: reveal the end only if the start stays in view; otherwise show the start.
+    const fitsY = box.height <= region.height - header - 2 * margin;
+    const near = region.top + header + margin;
+    if (box.top < near || (!fitsY && box.top > near)) {
+      top -= near - box.top;
     } else if (box.bottom > region.bottom - margin) top += box.bottom - region.bottom + margin;
-    if (box.left < region.left + margin || (!fitsX && box.left > region.left + margin)) {
-      left -= region.left + margin - box.left;
-    } else if (box.right > region.right - margin) left += box.right - region.right + margin;
+    // Horizontally only as far as needed: the start into view, or, when the whole box fits, its
+    // end. An arrow that fits keeps both ends (sender and receiver) in view; a group wider than
+    // the region stays where it is once its start is in view, so the participants left of it
+    // are not pushed out.
+    const start = region.left + margin;
+    const fitsX = box.width <= region.width - 2 * margin;
+    if (box.left < start) left -= start - box.left;
+    else if (fitsX && box.right > region.right - margin) left += box.right - region.right + margin;
     top = Math.max(0, top);
     left = Math.max(0, left);
     if (top === this.root.scrollTop && left === this.root.scrollLeft) return;
     // The step list scrolls at once, so the page can follow it (02 layout.phone.stepping_area).
     const instant = reducedMotion() || this.root.dataset['presentation'] === 'list';
     this.root.scrollTo({ top, left, behavior: instant ? 'instant' : 'smooth' });
+  }
+
+  /** Height of the participant names' band, 0 in the step list. */
+  private headerHeight(): number {
+    const header = this.root.querySelector<HTMLElement>('.diagram-head');
+    return header ? Number(header.dataset['header'] ?? 0) : 0;
   }
 
   private readonly onClick = (event: Event): void => {

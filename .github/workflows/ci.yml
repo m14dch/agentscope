@@ -24,7 +24,7 @@ jobs:
   # The job keeps its name: it is the check pull requests report.
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
       pages: read # configure-pages on deployable runs
@@ -94,8 +94,10 @@ jobs:
         timeout-minutes: 3
         run: npx playwright install chromium
 
+      # About 7 minutes with the accessibility and quality tests (two workers: Playwright's
+      # default of half the runner's four cores in CI).
       - name: End-to-end tests
-        timeout-minutes: 6
+        timeout-minutes: 12
         run: npm run test:e2e
 
       # Only after every check passed: the deployed site is the tested dist/.

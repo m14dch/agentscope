@@ -581,8 +581,8 @@ scenarios:
           arguments:
             customerId: '123'
       stop_reason: tool_use
-    explanation: The model does not call anything itself. It answers with a request that the agent run
-      get_customer_balance.
+    explanation: 'Simulated model output: the model does not call anything itself; it answers with a request
+      that the agent run get_customer_balance.'
     prediction:
       prompt: 'The model has the question and a list of tools. What will it return: an answer or a request?'
     tracked_values:
@@ -1582,7 +1582,8 @@ variants:
         name: get_balance
         arguments:
           customerId: '123'
-      explanation: The model requests get_balance, the only balance tool it was shown.
+      explanation: 'Simulated model output: the model requests get_balance, the only balance tool it was
+        shown.'
   - op: patch
     event: mcp-12
     set:
@@ -1769,7 +1770,7 @@ variants:
         name: get_customer
         arguments:
           customerId: '123'
-      explanation: The model first asks for the customer profile.
+      explanation: 'Simulated model output: the model first asks for the customer profile.'
   - op: insert_after
     event: mcp-11
     events:
@@ -2084,7 +2085,7 @@ variants:
             arguments:
               customerId: '123'
         stop_reason: tool_use
-      explanation: The model now asks for the balance.
+      explanation: 'Simulated model output: the model now asks for the balance.'
       tracked_values:
         customerId: '123'
   - op: patch

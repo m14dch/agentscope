@@ -28,6 +28,8 @@ function renderProblems(root: HTMLElement): void {
   title.textContent = 'AgentScope';
   const message = document.createElement('p');
   message.className = 'error';
+  // Announced at once: the page the learner asked for did not appear.
+  message.setAttribute('role', 'alert');
   message.textContent = '× Scenario data error: the bundled scenarios failed validation.';
   const items = document.createElement('ul');
   items.className = 'small';
@@ -46,6 +48,8 @@ function renderLoadError(root: HTMLElement): void {
   title.textContent = 'AgentScope';
   const message = document.createElement('p');
   message.className = 'error';
+  // Announced at once: the page the learner asked for did not appear.
+  message.setAttribute('role', 'alert');
   message.textContent =
     '× The design specimen could not be loaded. Reload the page to get the current version.';
   const back = document.createElement('a');

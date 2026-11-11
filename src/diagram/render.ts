@@ -54,23 +54,34 @@ function renderGroup(g: Group, ids: string, names: Readonly<Record<string, strin
   const textX = g.x1 + 2 * SIZES.groupPad;
   const lines = g.takeaway
     .map((t, i) => `<tspan x="${textX}" dy="${i === 0 ? 0 : SIZES.headerLine}">${esc(t)}</tspan>`)
-    .join('');
+    // A space between the lines, so the text reads as words to assistive technology.
+    .join(' ');
   const firstLine = g.y + SIZES.groupPad + 12;
   const captionY = firstLine + g.takeaway.length * SIZES.headerLine;
   const bar = g.current
     ? `<rect class="group-bar" x="${g.x1}" y="${g.y}" width="3" height="${g.height}" />`
     : '';
   const current = g.current ? ' data-current=""' : '';
+  // Paper behind the takeaway and caption, so lifelines do not run through the text.
+  const textTop = g.y + SIZES.groupPad;
+  const band = `<rect class="group-text-band" x="${textX - 4}" y="${textTop}" width="${g.textWidth + 8}" height="${captionY + 4 - textTop}" />`;
   const error = g.error ? `<tspan class="group-error"> · × ${esc(g.error)} error</tspan>` : '';
   const takeaway = g.takeaway.length
     ? `<text class="group-takeaway" x="${textX}" y="${firstLine}">${lines}</text>`
     : '';
-  const name = `${g.continued ? `${g.phase.label}, continued` : `${g.phase.label}: ${g.phase.takeaway}`}${g.error ? `, × ${g.error} error` : ''}`;
+  // The name is the visible text in reading order (WCAG 2.5.3 label in name): the takeaway,
+  // then the caption without its fold mark (aria-expanded states it), then the error.
+  const name = [
+    g.takeaway.join(' '),
+    `${g.caption.replace(/^[▸▾] /, '')}${g.error ? ` · × ${g.error} error` : ''}`,
+  ]
+    .filter(Boolean)
+    .join(' ');
   const steps = g.arrows.length
     ? `<g role="list" aria-label="${esc(g.phase.label)} steps">${g.arrows.map((a) => renderArrow(a, ids, names)).join('')}</g>`
     : '';
   return `<g class="${cls.join(' ')}" data-group="${esc(g.key)}" data-phase="${esc(g.phase.id)}"${current} role="button" tabindex="0" aria-expanded="${g.expanded}" aria-label="${esc(name)}">
-<rect class="group-frame" x="${g.x1}" y="${g.y}" width="${g.x2 - g.x1}" height="${g.height}" />${bar}${takeaway}
+<rect class="group-frame" x="${g.x1}" y="${g.y}" width="${g.x2 - g.x1}" height="${g.height}" />${band}${bar}${takeaway}
 ${g.selected ? markRect(textX, captionY, g.captionWidth) : ''}<text class="group-label${g.selected ? ' arrow-label--selected' : ''}" x="${textX}" y="${captionY}">${esc(g.caption)}${error}</text>
 </g>${steps}`;
 }
@@ -85,17 +96,32 @@ export function renderSvg(
     .map((l) => {
       const tspans = l.lines
         .map((t, i) => `<tspan x="${l.x}" dy="${i === 0 ? 0 : SIZES.headerLine}">${esc(t)}</tspan>`)
-        .join('');
+        .join(' ');
       const y = SIZES.margin + 12;
-      return `<text class="participant" text-anchor="middle" x="${l.x}" y="${y}">${tspans}</text><line class="lifeline" x1="${l.x}" y1="${layout.top - 8}" x2="${l.x}" y2="${layout.height}" />`;
+      return `<text class="participant" role="listitem" text-anchor="middle" x="${l.x}" y="${y}">${tspans}</text>`;
     })
     .join('');
+  const lifelines = layout.lifelines
+    .map(
+      (l) =>
+        `<line class="lifeline" x1="${l.x}" y1="${layout.top - 8}" x2="${l.x}" y2="${layout.height}" />`,
+    )
+    .join('');
+  // The participant names are a drawing of their own before the diagram, in an element that
+  // sticks to the top of the scroll region (diagram.css), so every lifeline stays named while
+  // the region scrolls vertically, and assistive technology meets the names first. Their paper
+  // band hides what passes beneath. The diagram continues below them in the same coordinates.
+  const head = layout.lifelines.length ? layout.top - 8 : 0;
+  const header = head
+    ? `<div class="diagram-head" data-header="${head}"><svg class="diagram-participants" width="${layout.width}" height="${head}" viewBox="0 0 ${layout.width} ${head}" role="list" aria-label="Participants"><rect class="participants-band" x="0" y="0" width="${layout.width}" height="${head}" />${participants}</svg></div>`
+    : '';
+  const height = layout.height - head;
   const body = layout.groups.length
     ? layout.groups.map((g) => renderGroup(g, ids, names)).join('')
     : `<g role="list" aria-label="Steps">${layout.arrows.map((a) => renderArrow(a, ids, names)).join('')}</g>`;
-  return `<svg class="diagram" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}" role="group" aria-label="${esc(title)}">
+  return `${header}<svg class="diagram" width="${layout.width}" height="${height}" viewBox="0 ${head} ${layout.width} ${height}" role="group" aria-label="${esc(title)}">
 <defs>
 <marker id="${ids}-request" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head--request" d="M 0 0 L 10 5 L 0 10 z" /></marker>
 <marker id="${ids}-response" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head--response" d="M 0 0 L 10 5 L 0 10" /></marker>
-</defs>${participants}${body}</svg>`;
+</defs>${lifelines}${body}</svg>`;
 }

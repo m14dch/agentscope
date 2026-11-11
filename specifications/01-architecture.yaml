@@ -189,7 +189,9 @@ deployment:
     cleanup scoped to this app. First hosted visit requires connectivity.
   offline_mechanics:
     asset_manifest: The build writes asset-manifest.json to dist with the version stamp,
-      one combined hash over the paths and bytes of every listed file, and the list of
+      one combined hash over the paths and bytes of every listed file and the bytes of the
+      service worker template (so a changed worker gets a new cache even when no other
+      file changed), and the list of
       every file in dist except asset-manifest.json and sw.js (scenarios, fonts, scripts,
       styles, licences, brand images, the page), each as a path relative to the base with its
       Subresource Integrity digest (sha256).
@@ -212,11 +214,15 @@ deployment:
       index.html with any hash, are answered from the current cache. Any other GET
       request in the scope, and a miss, is looked up in this scope's other caches
       (newest first) and then sent to the network. Requests outside the scope and other
-      methods go to the network untouched. The first load after a deployment therefore
+      methods go to the network untouched, as do only-if-cached requests whose mode is
+      not same-origin (the browser refuses to fetch those). The first load after a deployment therefore
       shows the previous build while the new worker installs, and the next load shows
       the current one; there is no update notice (signal-to-noise).
     readiness: Once a worker is activated, the page asks it to confirm that every listed
       file is in its cache; only a confirmed answer shows the indicator (02-ui-ux.yaml
-      layout offline_indicator).
+      layout offline_indicator). If the worker the page waited for becomes redundant
+      (replaced by a newer one), the page asks the registration's active worker again
+      before deciding.
     failed_load: 'If a lazily loaded part of the app (the #/design specimen) fails to load,
-      the page shows an error naming it and suggesting a reload, never a blank page.'
+      the page shows an error naming it and suggesting a reload, announced as an alert,
+      never a blank page.'

@@ -82,10 +82,6 @@
   border-bottom: var(--line-hair) solid var(--color-rule);
 }
 
-.compare-pane a {
-  color: inherit;
-}
-
 .compare-pane > p:last-child {
   margin-block: var(--space-1) var(--space-2);
 }

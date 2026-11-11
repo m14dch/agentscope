@@ -226,7 +226,7 @@ layout:
       does this, even when the learner had scrolled down to read the payload: it brings the
       stepping area back. A step made by Play does it only while the learner has not scrolled
       the page since the last explicit step action. A scroll of the page counts as the
-      learner''s only when it follows their input within a second (a wheel, a touch, a
+      learner''s only when it follows their input within a second (a wheel, a touch that moves, a
       scrolling key that nothing else handled, or a press on the scrollbar); scrolls the browser
       makes by itself (scroll anchoring, clamping when content shrinks) and the page''s own
       jumps never count. Once the learner scrolls during Play, its steps leave the page where it
@@ -280,7 +280,10 @@ diagram:
     self_arrows: An event whose sender is its receiver loops to the right of its lifeline,
       with the label to the right of the loop.
     participant_labels: Registry labels at the top of each lifeline, wrapped to the lifeline
-      spacing.
+      spacing. While the diagram region scrolls vertically they stay at its top on a paper band
+      that hides what passes beneath, so every lifeline stays named; they scroll horizontally
+      with their lifelines, and the current step is scrolled clear of them. They come before
+      the diagram in reading order, so assistive technology meets them before the steps.
   visibility:
     past: line keeps its kind's style; label in ink-muted
     current: emphasized
@@ -331,12 +334,15 @@ modes:
     reached events include an error adds × and the error kind to its caption, in the error
     colour. A group expands or collapses on click, Enter or Space; expanded, it shows its
     events up to the cursor with protocol-mode styling. Expansion is kept while the learner
-    steps through the scenario.'
+    steps through the scenario. Lifelines pass under a group''s takeaway and caption, not
+    through them.'
   scrolling: Only a cursor change or a mode switch scrolls, and only the diagram's own
     scroll region, never the page (on phones the page also scrolls to keep the stepping area
     in view, layout.phone.stepping_area); toggling a group or laying out again keeps the scroll
-    position. Keyboard focus stays on the same group or region across steps. Arrow keys
-    scroll the diagram region while it has focus.
+    position. It scrolls only as far as needed to bring the current step or group into view,
+    horizontally never past its left edge, so an arrow that fits keeps both its sender and
+    its receiver in view. Keyboard focus stays on the same group or region across steps. Arrow
+    keys scroll the diagram region while it has focus.
   protocol: 'Technical level: show all individual events with exact logical messages;
     the inspector holds payloads, boundaries and errors.'
   default_mode: architecture
@@ -352,7 +358,9 @@ learning:
     the prompt instead of advancing; Next or Continue then runs the step. Play pauses
     there and shows the prompt. Previous, jump, start and reset never show a prompt.
   simulated_behaviour: Model output is labelled as simulated wherever it appears; nothing
-    suggests a live decision.
+    suggests a live decision. The explanation of every response the model sends (LLM API
+    responses from the LLM provider, tool-call requests included) starts with "Simulated model
+    output".
 controls:
   actions:
   - start
