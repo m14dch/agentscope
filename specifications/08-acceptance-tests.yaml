@@ -121,6 +121,12 @@ e2e_tests:
   - At both sizes, for every scenario in both modes, step from the top of the page with Next
     in the bottom bar through every step and verify that the current row or group, any
     prediction prompt and the message line are entirely on screen above the bar.
+  - Play a scenario with its step details open and verify that without scrolling each step
+    keeps the stepping area on screen, that after the learner scrolls the page it stays where
+    it is while Play steps on, and that the next explicit step brings the stepping area back.
+  - Step through Compare with Next from the top of the page in both modes and verify that the
+    current row of each pane whose step changed is on screen above the bar when both fit, else
+    the lower changed pane's current row.
   - Verify every control outside running text is at least 44 × 44 px on MCP, RAG, Combined
     and Compare with the step details and the menu open, and the menu holds the scenario
     list, the view switch, the speeds, Start and Reset.
