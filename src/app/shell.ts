@@ -16,17 +16,15 @@ import {
 import { type Boundary, Inspector, occurrences, type Selection } from '../inspector/inspector.ts';
 import {
   projection,
-  renderVersions,
   RetrievalPanel,
   retrievalModel,
   type SearchedIndex,
   thresholdLabel,
-  versionRows,
 } from '../inspector/retrieval.ts';
 import { DiagramView } from '../diagram/view.ts';
 import { loadRegistry, participantLabels, specSources } from '../scenarios/registry.ts';
 import { createPlayback, ragDerivation } from '../rag/bundled.ts';
-import { type Chunk, corpusOverrides, type RagFixtures } from '../rag/engine.ts';
+import type { Chunk, RagFixtures } from '../rag/engine.ts';
 import type { Json, ParameterSpec, Scenario, ScenarioEvent } from '../scenarios/types.ts';
 import { fromDefaultStep, toDefaultStep } from '../engine/steps.ts';
 import {
@@ -166,13 +164,6 @@ export class Shell {
   private readonly sources = specSources();
   private readonly labels = participantLabels();
   private readonly tabs = tabScenarios(this.sources);
-  private readonly lessons = new Map<string, string>(
-    [
-      ...this.sources.mcp.variants,
-      ...this.sources.rag.variants,
-      ...(this.sources.comparison.combined.variants ?? []),
-    ].map((v) => [v.id, v.lesson]),
-  );
   private readonly root: HTMLElement;
   private readonly header: HTMLElement;
   private readonly content: HTMLElement;
@@ -410,16 +401,17 @@ export class Shell {
   }
 
   private picker(tab: Tab, scenario: Scenario): HTMLElement {
-    const items = this.tabs[tab].map((id) => {
-      const s = this.registry[id];
-      const lesson = this.lessons.get(id);
-      const link = el(
-        'a',
-        { href: `#/${tab}/${id}/0`, 'aria-current': id === scenario.id ? 'true' : undefined },
-        s?.title ?? id,
-      );
-      return el('li', {}, link, ...(lesson ? [el('span', { class: 'small muted' }, lesson)] : []));
-    });
+    const items = this.tabs[tab].map((id) =>
+      el(
+        'li',
+        {},
+        el(
+          'a',
+          { href: `#/${tab}/${id}/0`, 'aria-current': id === scenario.id ? 'true' : undefined },
+          this.registry[id]?.title ?? id,
+        ),
+      ),
+    );
     const details = el(
       'details',
       { class: 'picker' },
@@ -627,7 +619,6 @@ export class Shell {
       boundaries: this.sources.security.trust_boundaries as unknown as Boundary[],
       jump: (k) => this.go(() => player.jump(k)),
       select: (selection) => this.select(selection),
-      errorTaxonomy: this.sources.security.error_taxonomy,
       earlierRevision: this.sources.mcp.protocol.earlier_revision_handshake,
     });
     const inspector = el(
@@ -670,18 +661,13 @@ export class Shell {
     // The ingestion panel (02 rag_ingestion), below the timeline so nothing above it moves.
     const ingestion = scenario.derived_events?.includes('index-05')
       ? this.ingestionPanel(
-          scenario,
           (k) => this.go(() => player.jump(k)),
           () => slider.focus({ preventScroll: true }),
         )
       : undefined;
-    // The version panel (02 rag_controls.version_panel) and the retrieval panel (02 rag_retrieval).
-    const versions = scenario.fixture_overrides?.['indexed_versions']
-      ? this.versionPanel(scenario)
-      : undefined;
+    // The retrieval panel (02 rag_retrieval).
     const retrieval = scenario.derived_events?.includes('retrieve-12')
       ? this.retrievalPanel(
-          scenario,
           player,
           (k) => this.go(() => player.jump(k)),
           () => slider.focus({ preventScroll: true }),
@@ -796,7 +782,6 @@ export class Shell {
       workspace,
       timeline,
       ...(ingestion ? [ingestion.panel.root] : []),
-      ...(versions ? [versions] : []),
       ...(retrieval ? [retrieval.panel.root] : []),
       ...(combined ? [combined.root] : []),
     );
@@ -906,15 +891,11 @@ export class Shell {
 
   /** The ingestion panel over the documents the scenario indexes (02 rag_ingestion). */
   private ingestionPanel(
-    scenario: Scenario,
     jump: (step: number) => void,
     leave: () => void,
   ): { panel: IngestionPanel; sources: SourceDocument[] } {
     const { engine } = ragDerivation();
-    const sources = sourceDocuments(engine.corpus(corpusOverrides(scenario.fixture_overrides)), [
-      ...engine.fixtures.documents,
-      ...engine.fixtures.untrusted_documents,
-    ]);
+    const sources = sourceDocuments(engine.corpus(), engine.fixtures.documents);
     const panel = new IngestionPanel({
       sources,
       embedding: (text) => engine.embedding(text),
@@ -925,24 +906,11 @@ export class Shell {
     return { panel, sources };
   }
 
-  /** The source and indexed versions of a variant with an older index. */
-  private versionPanel(scenario: Scenario): HTMLElement {
-    const { engine } = ragDerivation();
-    return renderVersions(
-      versionRows(
-        engine.fixtures.documents,
-        engine.fixtures.previous_versions,
-        engine.corpus(corpusOverrides(scenario.fixture_overrides)),
-      ),
-    );
-  }
-
   /**
    * The retrieval panel over the index the scenario searches (02 rag_retrieval); its chunks
    * follow the current chunking parameters.
    */
   private retrievalPanel(
-    scenario: Scenario,
     player: Player,
     jump: (step: number) => void,
     leave: () => void,
@@ -953,7 +921,7 @@ export class Shell {
       projection_2d: { x: string; y: string };
     };
     const project = projection(fixtures.projection_2d, engine.fixtures.embedding.dimensions);
-    const docs = engine.corpus(corpusOverrides(scenario.fixture_overrides));
+    const docs = engine.corpus();
     const cache = new Map<string, Chunk[]>();
     const index = (): SearchedIndex => {
       const p = derivation.parameters(player.playback.retrievalConfig);
@@ -963,12 +931,9 @@ export class Shell {
         chunks = engine.chunks(docs, p.chunkSize, p.overlap);
         cache.set(key, chunks);
       }
-      return { docs, chunks, trustOf: (id) => engine.trustOf(id), project };
+      return { docs, chunks, project };
     };
-    const instructions = engine.fixtures.untrusted_documents.flatMap((d) =>
-      d.injected_instruction ? [d.injected_instruction] : [],
-    );
-    const panel = new RetrievalPanel({ index, instructions, jump, leave });
+    const panel = new RetrievalPanel({ index, jump, leave });
     return { panel, index };
   }
 

@@ -22,7 +22,7 @@ const obj = (v: Json | undefined): Obj =>
 const list = (v: Json | undefined): Json[] => (Array.isArray(v) ? v : []);
 
 /** Where a statement of the answer comes from. */
-export type StatementSource = 'tool' | 'session' | 'documents' | 'gap' | 'note' | 'comparison';
+export type StatementSource = 'tool' | 'session' | 'documents' | 'gap' | 'comparison';
 
 /** The label of each source, in the column beside its statements. */
 export const STATEMENT_LABELS: Readonly<Record<StatementSource, string>> = {
@@ -30,7 +30,6 @@ export const STATEMENT_LABELS: Readonly<Record<StatementSource, string>> = {
   session: 'Session context',
   documents: 'Document evidence · RAG',
   gap: 'Not in the evidence',
-  note: 'Note',
   comparison: 'Comparison',
 };
 
@@ -46,13 +45,10 @@ export function partSource(part: AnswerPart): StatementSource {
     case 'intro':
       return part.source;
     case 'group':
-    case 'conflict':
       return 'documents';
     case 'gap':
     case 'no-evidence':
       return 'gap';
-    case 'note':
-      return 'note';
     case 'comparison':
       return 'comparison';
   }

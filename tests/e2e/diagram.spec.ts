@@ -3,20 +3,9 @@ import type { Page } from '@playwright/test';
 
 const SCENARIOS = [
   ['mcp-balance', 28],
-  ['mcp-not-found', 28],
-  ['mcp-unauthorized', 26],
-  ['mcp-jsonrpc-error', 18],
-  ['mcp-multiple-tools', 40],
-  ['mcp-resources', 34],
   ['rag-index', 10],
   ['rag-query', 10],
-  ['rag-stale', 10],
-  ['rag-no-match', 10],
-  ['rag-conflict', 10],
-  ['rag-hybrid', 13],
-  ['rag-prompt-injection', 10],
   ['combined-balance-explanation', 35],
-  ['combined-missing-terms', 35],
 ] as const;
 
 /** The shell route for a scenario at a step, in either mode. */
@@ -203,10 +192,10 @@ test('the current group stays expanded while stepping; one the learner collapsed
   await expect(page.locator('.step[data-current]')).toHaveAttribute('data-index', '11');
 });
 
-test('meaning survives in greyscale: the current step and errors carry non-colour cues', async ({
+test('meaning survives in greyscale: the current step carries non-colour cues', async ({
   page,
 }, info) => {
-  await open(page, route('mcp-not-found', 23, 'protocol'));
+  await open(page, route('mcp-balance', 23, 'protocol'));
   const style = (selector: string) =>
     page
       .locator(selector)
@@ -222,11 +211,6 @@ test('meaning survives in greyscale: the current step and errors carry non-colou
   expect((await style('[data-current] .arrow')).width).toBe('2px');
   expect((await style('.arrow--network:not(.arrow--current)')).width).toBe('1.5px');
   expect((await style('.arrow--simulated')).dash).toBe('4px, 3px');
-  const errors = await page.locator('.arrow-label--error').allTextContents();
-  expect(errors).toEqual([
-    '× transport error · HTTP 404 Not Found',
-    '× tool execution error · MCP · tools/call result',
-  ]);
   await page.addStyleTag({ content: 'html { filter: grayscale(1); }' });
   await info.attach('greyscale', {
     body: await page.screenshot({ fullPage: true }),
@@ -239,11 +223,11 @@ test('with reduced motion the diagram region scrolls to the current step instant
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 1280, height: 700 });
-  await open(page, route('mcp-multiple-tools', 1, 'protocol'));
+  await open(page, route('combined-balance-explanation', 1, 'protocol'));
   await page.evaluate(() => {
-    location.hash = '#/mcp/mcp-multiple-tools/40/protocol';
+    location.hash = '#/combined/combined-balance-explanation/35/protocol';
   });
-  await page.locator('[data-current][data-index="39"]').waitFor();
+  await page.locator('[data-current][data-index="34"]').waitFor();
   const state = await page.evaluate(() => {
     const region = document.querySelector('.diagram-scroller');
     const current = document.querySelector('[data-current]');
@@ -302,8 +286,8 @@ test('the participant names stay at the top of the region while it scrolls, abov
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await open(page, route('mcp-multiple-tools', 40, 'protocol'));
-  await page.locator('[data-current][data-index="39"]').waitFor();
+  await open(page, route('combined-balance-explanation', 35, 'protocol'));
+  await page.locator('[data-current][data-index="34"]').waitFor();
   const state = () =>
     page.evaluate(() => {
       const region = document.querySelector('.diagram-scroller') as HTMLElement;

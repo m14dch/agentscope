@@ -1,15 +1,13 @@
-/* RAG retrieval panel (02 rag_retrieval) and version panel (02 rag_controls.version_panel). */
+/* RAG retrieval panel (02 rag_retrieval). */
 .retrieval,
-.combined,
-.versions {
+.combined {
   margin-top: var(--space-3);
   padding-top: var(--space-2);
   border-top: var(--line-hair) solid var(--color-rule);
 }
 
 .retrieval h3,
-.combined h3,
-.versions h3 {
+.combined h3 {
   margin-bottom: var(--space-1);
 }
 
@@ -22,8 +20,7 @@
 }
 
 .retrieval h5,
-.combined h5,
-.versions h4 {
+.combined h5 {
   margin: 0 0 var(--space-1);
   font-weight: var(--weight-regular);
 }
@@ -42,14 +39,12 @@
 
 .retrieval-projection,
 .retrieval-prompt,
-.retrieval-answer,
-.version-pair {
+.retrieval-answer {
   margin-top: var(--space-3);
 }
 
 .retrieval-prompt > p,
-.retrieval-answer > p,
-.version-pair > p {
+.retrieval-answer > p {
   margin-bottom: var(--space-1);
 }
 
@@ -324,15 +319,6 @@
   border-left: var(--line-hair) solid var(--color-rule);
 }
 
-.document-block.untrusted {
-  border-left: var(--line-focus) dashed var(--color-ink);
-}
-
-.untrusted-label,
-.injected {
-  font-weight: var(--weight-strong);
-}
-
 /* The answer: citations are buttons inside the text. */
 .answer-text {
   max-width: 48rem;
@@ -363,29 +349,4 @@
 
 .evidence-text {
   max-width: 40rem;
-}
-
-/* Version panel. */
-.version-table {
-  border-collapse: collapse;
-}
-
-.version-table th,
-.version-table td {
-  padding: 0.25rem var(--space-2) 0.25rem 0;
-  text-align: left;
-  font-weight: var(--weight-regular);
-}
-
-.version-table thead th {
-  color: var(--color-ink-muted);
-  border-bottom: var(--line-hair) solid var(--color-rule);
-}
-
-.version-table tbody th {
-  font-family: var(--font-code);
-}
-
-.diff {
-  font-weight: var(--weight-strong);
 }

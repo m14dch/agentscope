@@ -458,6 +458,9 @@ combined:
         stop_reason: end_turn
       explanation: 'Simulated model output: balance from the tool, terms from cited chunks, and a qualified
         comparison.'
+      technical_notes:
+      - The comparison is added only because the retrieved chunks cover both accounts' fees, interest and
+        card access; without that evidence the answer would name the missing terms and make no comparison.
       tracked_values:
         customerId: '123'
         balance: 12500.75
@@ -535,7 +538,7 @@ combined:
   answer_composition:
     rule: 'The answer is the intro''s sentences, then the parts of the RAG answer of 05-rag-scenarios.yaml
       answer_rules for the retained chunks, then the sentence of the first comparison whose required facts
-      are all supported and whose lacking facts are all unsupported. Without one, no sentence is added.
+      are all supported. Without one, no sentence is added.
       The parts are joined by single spaces. Each intro sentence names its source: tool for data an MCP
       tool returned, session for what the agent read from its session (c-02). The explanation of the model''s
       answer (c-07) is that comparison''s explanation, or the default explanation.'
@@ -555,12 +558,6 @@ combined:
         money you rarely need rather than everyday card payments.'
       explanation: 'Simulated model output: balance from the tool, terms from cited chunks, and a qualified
         comparison.'
-    - lacks:
-      - savings-fee-interest
-      sentence: Without the Savings account terms I can't say whether another account type would offer
-        better conditions.
-      explanation: 'Simulated model output: balance from the tool and terms from cited chunks; without the
-        Savings terms it makes no comparison.'
     explanation: 'Simulated model output: balance from the tool and terms from cited chunks.'
   required_boundaries:
   - RAG retrieval does not invoke the banking balance API
@@ -587,42 +584,6 @@ combined:
   - '[3] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-001'
   - '[4] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-002'
   - '[5] savings-account.md v1.2, chunk savings-account@1.2-c50o10-001'
-  variants:
-  - id: combined-missing-terms
-    title: Savings terms missing from the index
-    extends: combined-balance-explanation
-    fixture_overrides:
-      exclude_documents:
-      - savings-account.md
-    lesson: With the Savings document missing from the index, the answer still gives the balance and the
-      Savings deposit from the opening guide but states that the Savings terms are not covered instead
-      of comparing the accounts.
-    phase_overrides:
-      answer:
-        takeaway: The answer states the live balance and the cited conditions, and says which terms
-          the evidence does not cover instead of comparing the accounts.
-    expected_selected:
-    - account-opening@1.2-c50o10-001
-    - everyday-account@1.2-c50o10-002
-    - everyday-account@1.2-c50o10-001
-    - account-opening@1.2-c50o10-002
-    expected_answer: 'Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have
-      an Everyday account. Opening an account: anyone aged 18 or over who lives in Switzerland can open
-      an account online [1]; you need a valid passport or identity card and a Swiss address [1]; the Everyday
-      account needs no initial deposit [1]; the Savings account needs an initial deposit of at least CHF
-      100 [2]. Keeping an account: the Everyday account costs CHF 5 per month, has no minimum balance,
-      pays no interest [3] and can be closed at any time without a fee [4]; accounts without any activity
-      for 24 months are closed after a written notice [2]. Using the accounts: the Everyday account includes
-      a debit card for payments and cash withdrawals [3] and has free domestic transfers [4]. The retrieved
-      evidence does not cover the Savings account''s fee and interest, the Savings account''s minimum
-      balance, the Savings account''s card access, the Savings account''s withdrawal rules and transfers
-      between the accounts. Without the Savings account terms I can''t say whether another account type
-      would offer better conditions.'
-    expected_sources:
-    - '[1] account-opening.md v1.2, chunk account-opening@1.2-c50o10-001'
-    - '[2] account-opening.md v1.2, chunk account-opening@1.2-c50o10-002'
-    - '[3] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-001'
-    - '[4] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-002'
 conceptual_rules:
 - MCP is a protocol; RAG is an architectural pattern
 - MCP can expose a RAG search tool

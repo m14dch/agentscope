@@ -52,14 +52,15 @@ describe('scenario build step', () => {
   });
 
   it('reports a broken event in every scenario that inherits it', () => {
+    // mcp-23 answers mcp-14; the Combined scenario copies both.
     const specDir = brokenCopy((mcp) => {
-      const event = mcp.scenarios[0]?.events[10];
+      const event = mcp.scenarios[0]?.events[22];
       if (event) delete event['pair_id'];
     });
     const problems = problemsOf(specDir);
-    expect(problems).toContain('mcp-balance/mcp-10: pair mcp-11 not reciprocal');
+    expect(problems).toContain('mcp-balance/mcp-14: pair mcp-23 not reciprocal');
     expect(problems).toContain(
-      'mcp-not-found/mcp-not-found:mcp-10: pair mcp-not-found:mcp-11 not reciprocal',
+      'combined-balance-explanation/combined-balance-explanation:mcp-14: pair combined-balance-explanation:mcp-23 not reciprocal',
     );
   });
 });

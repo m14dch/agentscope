@@ -45,7 +45,7 @@ test('every payload renders exactly as the event holds it, and Copy copies it', 
 }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   for (const [scenario, steps] of [
-    ['mcp/mcp-not-found', 28],
+    ['mcp/mcp-balance', 28],
     ['rag/rag-query', 10],
   ] as const) {
     for (let step = 1; step <= steps; step += 1) {

@@ -15,8 +15,7 @@ runtime:
     assets only.
   runtime_api_requests: 0
 modules:
-  scenario_registry: Validates bundled JSON and expands variants and compositions before
-    playback
+  scenario_registry: Validates bundled JSON and expands the composition before playback
   playback_engine: Deterministically reduces ordered events into snapshots
   diagram_renderer: Displays lifelines, phases, arrows, request/response pairs
   inspector: Displays exact logical payload, transport framing, rationale and notes
@@ -112,8 +111,7 @@ source_of_truth:
   state: Initial snapshot plus deterministic event reducer
   view: Derived from current snapshot and selected event
   derived_payloads: RAG events listed in a scenario's derived_events have their payload,
-    explanation and tracked values recomputed by rag_engine from fixtures, fixture_overrides
-    and parameters. The YAML shows the base scenario's default-parameter values.
+    explanation and tracked values recomputed by rag_engine from fixtures and parameters. The YAML shows the base scenario's default-parameter values.
 repo_layout:
 - specifications/
 - specifications/tools/validate_specs.py

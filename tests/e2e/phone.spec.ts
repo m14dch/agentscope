@@ -13,20 +13,9 @@ const SIZES = [
 /** Every scenario of the MCP, RAG and Combined tabs (02 navigation.tab_contents). */
 const SCENARIOS = [
   ['mcp', 'mcp-balance'],
-  ['mcp', 'mcp-not-found'],
-  ['mcp', 'mcp-unauthorized'],
-  ['mcp', 'mcp-jsonrpc-error'],
-  ['mcp', 'mcp-multiple-tools'],
-  ['mcp', 'mcp-resources'],
   ['rag', 'rag-query'],
   ['rag', 'rag-index'],
-  ['rag', 'rag-stale'],
-  ['rag', 'rag-no-match'],
-  ['rag', 'rag-conflict'],
-  ['rag', 'rag-hybrid'],
-  ['rag', 'rag-prompt-injection'],
   ['combined', 'combined-balance-explanation'],
-  ['combined', 'combined-missing-terms'],
 ] as const;
 
 const bar = (page: Page) => page.getByRole('group', { name: /^Playback/ });
@@ -440,9 +429,9 @@ test.describe('at 390 × 844', () => {
   test('Previous, Play/Pause and Next stay in reach while stepping through the longest scenario', async ({
     page,
   }) => {
-    await page.goto('./#/mcp/mcp-multiple-tools/0/protocol');
+    await page.goto('./#/combined/combined-balance-explanation/0/protocol');
     await list(page).and(page.locator('[data-measured]')).waitFor();
-    const n = 40;
+    const n = 35;
     const status = page.locator('.controls .status');
     for (let guard = 0; guard < 2 * n; guard += 1) {
       for (const name of ['Previous', /^(Play|Pause)$/, 'Next'] as const) {

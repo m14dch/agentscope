@@ -1,7 +1,7 @@
 /**
  * Derived RAG events (05-rag-scenarios.yaml derived_event_rules): recomputes the payload,
  * explanation and tracked values of every event a scenario lists in derived_events from
- * the fixtures, the scenario's fixture_overrides and the current retrieval_config. Plugs
+ * the fixtures and the current retrieval_config. Plugs
  * into Playback as its deriveEvents hook; scenarios without derived events pass through.
  */
 import { type DeriveEvents, localId, type RetrievalConfig } from '../engine/playback.ts';
@@ -15,7 +15,6 @@ import {
   type Retrieval,
   RagEngine,
   type ScoredChunk,
-  corpusOverrides,
   modelMessage,
   parentDocuments,
   pyRound,
@@ -28,8 +27,6 @@ import {
 export interface Comparison {
   /** Facts that must all be supported. */
   requires?: string[];
-  /** Facts that must all be unsupported. */
-  lacks?: string[];
   sentence: string;
   /** Explanation of the model's answer event when this comparison applies. */
   explanation: string;
@@ -396,10 +393,8 @@ export function combinedAnswer(
   composition: AnswerComposition,
 ): { answer: Answer; explanation: string } {
   const answer = engine.answer(selected, composition.intro);
-  const applies = composition.comparisons.find(
-    (c) =>
-      (c.requires ?? []).every((f) => answer.supported.has(f)) &&
-      (c.lacks ?? []).every((f) => !answer.supported.has(f)),
+  const applies = composition.comparisons.find((c) =>
+    (c.requires ?? []).every((f) => answer.supported.has(f)),
   );
   return applies
     ? {
@@ -495,19 +490,12 @@ export class RagDerivation {
     };
   }
 
-  /**
-   * The scenario's events with every derived event recomputed. `fixtureOverrides` replaces
-   * the scenario's own (the Combined variants are not expanded into the registry).
-   */
-  derive(
-    scenario: Scenario,
-    config: RetrievalConfig,
-    fixtureOverrides: JsonObject | undefined = scenario.fixture_overrides,
-  ): ScenarioEvent[] {
+  /** The scenario's events with every derived event recomputed. */
+  derive(scenario: Scenario, config: RetrievalConfig): ScenarioEvent[] {
     const derived = new Set(scenario.derived_events ?? []);
     if (!derived.size) return scenario.events;
     const params = this.parameters(config);
-    const docs = this.engine.corpus(corpusOverrides(fixtureOverrides));
+    const docs = this.engine.corpus();
     const retrieval = this.engine.retrieve(docs, params);
     const parents = parentDocuments(retrieval.selected, docs);
     const evidence = params.fetchFullDocuments ? parents : retrieval.selected;
@@ -539,13 +527,8 @@ export class RagDerivation {
    * The Combined answer with its parts, computed as the scenario's derived c-07 and c-08 are
    * (02 combined_answer.statements).
    */
-  combinedAnswer(
-    scenario: Scenario,
-    config: RetrievalConfig,
-    fixtureOverrides: JsonObject | undefined = scenario.fixture_overrides,
-  ): Answer {
-    const docs = this.engine.corpus(corpusOverrides(fixtureOverrides));
-    const { selected } = this.engine.retrieve(docs, this.parameters(config));
+  combinedAnswer(config: RetrievalConfig): Answer {
+    const { selected } = this.engine.retrieve(this.engine.corpus(), this.parameters(config));
     return combinedAnswer(this.engine, selected, this.composition).answer;
   }
 

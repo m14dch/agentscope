@@ -20,25 +20,26 @@ interface Case {
   expected_answer: string;
   expected_sources: string[];
 }
-const combined = specSources().comparison.combined as unknown as Case & { variants: Case[] };
-const cases = [combined, ...combined.variants];
+const combined = specSources().comparison.combined as unknown as Case;
 const composition = answerComposition(specSources());
 
 const scenario = (id: string): Scenario => registry[id] as Scenario;
-const partsOf = (id: string): AnswerPart[] => derivation.combinedAnswer(scenario(id), {}).parts;
+const parts: AnswerPart[] = derivation.combinedAnswer({}).parts;
 
 /** The model at a step, or at the last step. */
 function at(id: string, step?: number) {
   const player = new Player(createPlayback(scenario(id)));
   player.jump(step ?? player.playback.length);
-  const parts = registry[id]?.derived_events?.includes('c-08') ? partsOf(id) : [];
-  return combinedModel(player.playback.events, player.cursor, parts);
+  return combinedModel(
+    player.playback.events,
+    player.cursor,
+    registry[id]?.derived_events?.includes('c-08') ? parts : [],
+  );
 }
 
 describe('Combined answer parts (06 answer_composition.rule, 05 answer_rules)', () => {
-  it.each(cases)('$id: the parts compose exactly the expected answer', (c) => {
-    const parts = partsOf(c.id);
-    expect(parts.map((p) => p.text).join(' ')).toBe(c.expected_answer);
+  it('the parts compose exactly the expected answer', () => {
+    expect(parts.map((p) => p.text).join(' ')).toBe(combined.expected_answer);
     // The intro sentences come first, with the sources the specifications give them.
     expect(parts.slice(0, composition.intro.length)).toEqual(
       composition.intro.map((s) => ({ kind: 'intro', source: s.source, text: s.text })),
@@ -47,15 +48,7 @@ describe('Combined answer parts (06 answer_composition.rule, 05 answer_rules)', 
     const kinds = parts.map((p) => p.kind);
     expect(kinds.filter((k) => k === 'group').length).toBeGreaterThan(1);
     expect(kinds.slice(-2)).toEqual(['gap', 'comparison']);
-  });
-
-  it('states the missing Savings terms instead of comparing', () => {
-    const parts = partsOf('combined-missing-terms');
-    expect(parts.find((p) => p.kind === 'gap')?.text).toContain(
-      "the Savings account's fee and interest",
-    );
-    expect(parts.at(-1)?.text).toBe(composition.comparisons[1]?.sentence);
-    expect(partsOf(combined.id).at(-1)?.text).toBe(composition.comparisons[0]?.sentence);
+    expect(parts.at(-1)?.text).toBe(composition.comparisons[0]?.sentence);
   });
 
   it('reports a malformed composition by name', () => {
@@ -70,11 +63,10 @@ describe('Combined answer parts (06 answer_composition.rule, 05 answer_rules)', 
 });
 
 describe('Combined answer statements (02 combined_answer.statements)', () => {
-  it.each(cases)('$id: one statement per part, labelled by its kind', (c) => {
-    const parts = partsOf(c.id);
-    const statements = answerStatements(c.expected_answer, parts);
+  it('one statement per part, labelled by its kind', () => {
+    const statements = answerStatements(combined.expected_answer, parts);
     expect(statements).toEqual(parts.map((p) => ({ source: partSource(p), text: p.text })));
-    expect(statements.map((s) => s.text).join(' ')).toBe(c.expected_answer);
+    expect(statements.map((s) => s.text).join(' ')).toBe(combined.expected_answer);
     const labels = statements.map((s) => STATEMENT_LABELS[s.source ?? 'gap']);
     expect(labels.slice(0, 2)).toEqual(['Tool data · MCP', 'Session context']);
     expect(labels.at(-2)).toBe('Not in the evidence');
@@ -89,18 +81,15 @@ describe('Combined answer statements (02 combined_answer.statements)', () => {
           { kind: 'intro', source: 'tool', text: '' },
           { kind: 'intro', source: 'session', text: '' },
           { kind: 'group', text: '' },
-          { kind: 'conflict', text: '' },
           { kind: 'gap', text: '' },
           { kind: 'no-evidence', text: '' },
-          { kind: 'note', text: '' },
           { kind: 'comparison', text: '' },
         ] as AnswerPart[]
       ).map(partSource),
-    ).toEqual(['tool', 'session', 'documents', 'documents', 'gap', 'gap', 'note', 'comparison']);
+    ).toEqual(['tool', 'session', 'documents', 'gap', 'gap', 'comparison']);
   });
 
   it('shows an answer its parts do not compose as one unlabelled statement', () => {
-    const parts = partsOf(combined.id);
     expect(answerStatements('Something else.', parts)).toEqual([{ text: 'Something else.' }]);
   });
 
@@ -119,25 +108,23 @@ describe('Combined answer model', () => {
     expect(at('mcp-balance')).toBeUndefined();
   });
 
-  it.each(cases)(
-    '$id: links the balance to the tool result and cites the expected sources',
-    (c) => {
-      const model = at(c.id);
-      expect(model?.tool).toEqual({
-        tool: 'get_customer_balance',
-        arguments: { customerId: '123' },
-        result: { customerId: '123', currency: 'CHF', balance: 12500.75 },
-        balance: 'CHF 12,500.75',
-        // The tools/call result, and the follow-up model request that contains it (c-06).
-        step: 30,
-        sentStep: 33,
-      });
-      expect(model?.sources.map((s) => s.line)).toEqual(c.expected_sources);
-      expect(model?.statements.map((s) => s.text).join(' ')).toBe(c.expected_answer);
-      expect(model?.statements.every((s) => s.source)).toBe(true);
-      const events = createPlayback(scenario(c.id)).events;
-      expect(events[29]?.operation).toBe('tools/call result');
-      expect(events[32]?.id).toBe(`${c.id}:c-06`);
-    },
-  );
+  it('links the balance to the tool result and cites the expected sources', () => {
+    const c = combined;
+    const model = at(c.id);
+    expect(model?.tool).toEqual({
+      tool: 'get_customer_balance',
+      arguments: { customerId: '123' },
+      result: { customerId: '123', currency: 'CHF', balance: 12500.75 },
+      balance: 'CHF 12,500.75',
+      // The tools/call result, and the follow-up model request that contains it (c-06).
+      step: 30,
+      sentStep: 33,
+    });
+    expect(model?.sources.map((s) => s.line)).toEqual(c.expected_sources);
+    expect(model?.statements.map((s) => s.text).join(' ')).toBe(c.expected_answer);
+    expect(model?.statements.every((s) => s.source)).toBe(true);
+    const events = createPlayback(scenario(c.id)).events;
+    expect(events[29]?.operation).toBe('tools/call result');
+    expect(events[32]?.id).toBe(`${c.id}:c-06`);
+  });
 });

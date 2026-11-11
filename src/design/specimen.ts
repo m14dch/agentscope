@@ -67,7 +67,6 @@ interface Arrow {
   kind: ArrowKind;
   response?: boolean;
   state?: 'past' | 'current';
-  error?: boolean;
 }
 
 const ARROWS: Arrow[] = [
@@ -78,12 +77,6 @@ const ARROWS: Arrow[] = [
   { label: 'Similarity search', kind: 'simulated' },
   { label: 'LLM · submit conversation', kind: 'network', state: 'current' },
   { label: 'LLM · answer', kind: 'network', response: true, state: 'current' },
-  {
-    label: '× MCP · tool execution error (isError: true)',
-    kind: 'network',
-    response: true,
-    error: true,
-  },
 ];
 
 function arrows(): string {
@@ -99,10 +92,6 @@ function arrows(): string {
     const label = ['arrow-label'];
     if (a.state === 'current') line.push('arrow--current');
     if (a.state) label.push(`arrow-label--${a.state}`);
-    if (a.error) {
-      line.push('arrow--error');
-      label.push('arrow-label--error');
-    }
     const head = a.response ? 'url(#head-response)' : 'url(#head-request)';
     const labelX = a.response ? right - 8 : left + 8;
     const anchor = a.response ? 'end' : 'start';

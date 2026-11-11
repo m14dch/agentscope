@@ -7,7 +7,7 @@ phases:
   - Step navigation and random access correct
   - Event inspector displays payload
   - Architecture/protocol modes preserve cursor
-  - Variant and composition expansion validated
+  - Composition expansion validated
 - id: 2
   name: MCP primary
   exit:
@@ -27,9 +27,8 @@ phases:
   - Combined answer shows the simulated current balance and a conditional account
     comparison with document citations
 - id: 5
-  name: Security, errors and polish
+  name: Security and polish
   exit:
-  - Errors correctly classified
   - Offline browser E2E passes
   - Accessible reduced-motion mode works
 unit_tests:
@@ -50,15 +49,16 @@ unit_tests:
 - Cosine similarity computed correctly
 - Retrieval selection respects topK and threshold
 - Simulated answers reproduce the reference answers and citations for every RAG reference
-  and both Combined cases
+  and the Combined case
 - Document citations resolve to source fixtures
 - No HTTP framing for in-process or simulated calls
 - All three primary questions match 00-product.yaml primary_questions
-- Every scenario has a learning question and headline, every phase a takeaway, every
-  variant a lesson, and every prediction prompt ends with a question mark
-- Expanded variants and compositions resolve scenario, participant, phase, event and
-  pair references
-- The TypeScript expanded registry equals the Python validator's registry (golden test)
+- Every scenario has a learning question and headline, every phase a takeaway, and every
+  prediction prompt ends with a question mark
+- The composed scenario resolves scenario, participant, phase, event and pair references
+- Each tab offers exactly its scenarios of 02 navigation.tab_contents, and only RAG has a
+  scenario picker
+- The TypeScript registry equals the Python validator's registry (golden test)
 - A broken event fails the build with an error naming its scenario and event
 - Every participant ID exists in the 01-architecture.yaml registry
 - Every security_boundaries entry exists in 07-security-protocols.yaml
@@ -74,11 +74,6 @@ e2e_tests:
   - Inspect server/discover, tools/list and tools/call with their HTTP headers
   - Verify REST GET and response
   - Verify final CHF 12,500.75
-- id: mcp-errors
-  steps:
-  - Run mcp-not-found and mcp-unauthorized and verify isError results labelled as tool
-    execution errors
-  - Run mcp-jsonrpc-error and verify the JSON-RPC error labelled as a protocol error
 - id: rag-walkthrough
   steps:
   - Run ingestion
@@ -112,7 +107,6 @@ e2e_tests:
   - Verify the exact combined question.
   - Trace MCP tool use and RAG evidence separately.
   - Verify CHF 12,500.75 and cited fee, interest and access trade-offs.
-  - Run combined-missing-terms and verify the answer states the evidence gap.
 - id: phone-layout
   steps:
   - At 390 × 844 and 360 × 800, open every scenario of the MCP, RAG and Combined tabs in both
@@ -137,7 +131,7 @@ e2e_tests:
     the lower changed pane's current row.
   - Verify every control outside running text is at least 44 × 44 px on MCP, RAG, Combined
     and Compare with the step details and the menu open, and the menu holds the scenario
-    list, the view switch, the speeds, Start and Reset, and last the GitHub link.
+    list (on RAG), the view switch, the speeds, Start and Reset, and last the GitHub link.
   - Step through Compare in both modes and verify both panes use the step list without
     horizontal scrolling; verify the RAG projection takes its compact form.
 - id: pages
@@ -160,12 +154,16 @@ e2e_tests:
 - id: quality-gate-events
   steps:
   - Step through every scenario and Compare with the arrow key at the default parameters and verify
-    that at least min_supported_events events are played and that 95% of steps are handled within
-    100 ms.
+    that the scenarios play at least min_supported_events events and that 95% of steps, Compare's
+    included, are handled within 100 ms.
 quality_gates:
-  min_supported_events: 100
-  min_supported_events_rule: Counted over the events played at each scenario's default
-    parameters, so optional steps that are off do not count
+  min_supported_events: 80
+  min_supported_events_rule: 'Counted over the events played at each scenario''s default
+    parameters, so optional steps that are off do not count, and Compare, which replays
+    rag-query and mcp-balance, does not count either. The gate was 100 while the variants
+    counted; with one scenario per use case (issue 46) the four scenarios play 83 events
+    (mcp-balance 28, rag-index 10, rag-query 10, Combined 35), so the gate is 80: every
+    scenario still counts, and a few events may be merged without lowering it again.'
   desktop_and_tablet: true
   phone: true
   keyboard_navigation: true

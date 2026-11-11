@@ -6,25 +6,17 @@ import type { Snapshot } from '../engine/playback.ts';
 import type { Json, ScenarioEvent } from '../scenarios/types.ts';
 import { promptParts } from './retrieval.ts';
 
-/**
- * Where an item came from (02 context_panel.provenance): data a tool returned, an isError
- * result of a tool, a tool call that failed at the protocol level (no tool data), or
- * retrieved documents.
- */
-export type Source = 'tool' | 'tool-error' | 'tool-failed' | 'documents';
+/** Where an item came from (02 context_panel.provenance): a tool, or retrieved documents. */
+export type Source = 'tool' | 'documents';
 
 /** The label naming each source in agent state. */
 export const SOURCE_LABELS: Readonly<Record<Source, string>> = {
   tool: 'Tool data',
-  'tool-error': 'Tool data · error result',
-  'tool-failed': 'Tool call failed',
   documents: 'Document evidence',
 };
 
 /** The label of a tool message in the model-visible context, naming its tool. */
-export function toolMessageLabel(source: Source, tool: string): string {
-  if (source === 'tool-failed') return `Tool call failed · ${tool}`;
-  if (source === 'tool-error') return `Tool data · ${tool} error result`;
+export function toolMessageLabel(tool: string): string {
   return `Tool data · ${tool} result`;
 }
 
@@ -45,7 +37,6 @@ export interface DocumentBlock {
   documentId: string;
   version: string;
   chunkId?: string;
-  untrusted: boolean;
   text: string;
 }
 
@@ -55,8 +46,6 @@ export interface VisibleMessage {
   text: string;
   /** For a tool message, the tool its call named. */
   tool?: string;
-  /** For a tool message, the outcome of its call. */
-  source?: Source;
   /** The message's document blocks, in prompt order. */
   documents: DocumentBlock[];
   /** New since the previous step. */
@@ -104,46 +93,13 @@ function isToolData(value: Json | undefined): boolean {
   );
 }
 
-/**
- * The outcome of the last MCP tools/call (of the named tool, if given) answered before
- * `before`: a JSON-RPC error fails the call; a result with isError true is an error result.
- * Undefined when no such call was answered.
- */
-function callOutcome(
-  events: readonly ScenarioEvent[],
-  before: number,
-  tool?: string,
-): Source | undefined {
-  for (let i = Math.min(before, events.length) - 1; i >= 0; i -= 1) {
-    const request = events[i] as ScenarioEvent;
-    const payload = obj(request.payload as Json | undefined);
-    if (request.protocol !== 'MCP' || payload['method'] !== 'tools/call') continue;
-    if (tool !== undefined && obj(payload['params'])['name'] !== tool) continue;
-    const at = events.findIndex((e) => e.id === request.pair_id);
-    if (at < 0 || at >= before) continue;
-    const response = obj(events[at]?.payload as Json | undefined);
-    if (Object.hasOwn(response, 'error')) return 'tool-failed';
-    return obj(response['result'])['isError'] === true ? 'tool-error' : 'tool';
-  }
-  return undefined;
-}
-
-/** The outcome a tool value states itself, where no MCP call answers it. */
-function ownOutcome(value: Json | undefined): Source {
-  const v = obj(value);
-  return v['isError'] === true || v['is_error'] === true ? 'tool-error' : 'tool';
-}
-
-/**
- * A memory entry's source: tool data (qualified by its call's outcome), or a non-empty list
- * of retained chunks from a retrieval step.
- */
+/** A memory entry's source: tool data, or a non-empty list of retained chunks from a retrieval step. */
 function memorySource(
   events: readonly ScenarioEvent[],
   index: number,
   value: Json | undefined,
 ): Source | undefined {
-  if (isToolData(value)) return callOutcome(events, index + 1) ?? ownOutcome(value);
+  if (isToolData(value)) return 'tool';
   const stored = events[index];
   if (stored?.protocol === 'RAG_INTERNAL' && Array.isArray(value) && value.length)
     return 'documents';
@@ -152,7 +108,7 @@ function memorySource(
 
 /** Splits a message's text from its document blocks. */
 function withDocuments(text: string): { text: string; documents: DocumentBlock[] } {
-  const parts = promptParts(text, []);
+  const parts = promptParts(text);
   const documents: DocumentBlock[] = [];
   let own = '';
   for (const part of parts) {
@@ -165,7 +121,6 @@ function withDocuments(text: string): { text: string; documents: DocumentBlock[]
       documentId: b['id'] ?? '',
       version: b['version'] ?? '',
       ...(b['chunk'] !== undefined ? { chunkId: b['chunk'] } : {}),
-      untrusted: b['trust'] === 'untrusted',
       text: part.text,
     });
   }
@@ -247,8 +202,6 @@ export function contextModel(
     for (const c of Array.isArray(calls) ? calls : [])
       tools.set(String(obj(c)['id']), String(obj(c)['name']));
   }
-  // The request the model saw: the latest LLM request played.
-  const sentAt = requests.at(-1)?.index ?? snapshot.cursor;
   const messages = list?.map((m, i): VisibleMessage => {
     const message = obj(m);
     const role = String(message['role'] ?? '');
@@ -256,12 +209,7 @@ export function contextModel(
     return {
       role,
       ...withDocuments(messageText(message)),
-      ...(role === 'tool'
-        ? {
-            tool: tool ?? 'unknown tool',
-            source: callOutcome(events, sentAt, tool) ?? ownOutcome(m),
-          }
-        : {}),
+      ...(role === 'tool' ? { tool: tool ?? 'unknown tool' } : {}),
       added: i >= listBefore.length || JSON.stringify(m) !== JSON.stringify(listBefore[i]),
     };
   });
@@ -335,7 +283,7 @@ export function renderContext(model: ContextModel): HTMLElement {
         'li',
         m.added ? 'context-added' : undefined,
         el('span', 'small muted', `${m.role} · `),
-        ...(m.tool !== undefined ? sourceTag(toolMessageLabel(m.source ?? 'tool', m.tool)) : []),
+        ...(m.tool !== undefined ? sourceTag(toolMessageLabel(m.tool)) : []),
         m.text,
       );
       // Document blocks below the message's own text, in prompt order.
@@ -345,7 +293,6 @@ export function renderContext(model: ContextModel): HTMLElement {
           const where = [
             `${d.documentId} v${d.version}`,
             ...(d.chunkId !== undefined ? [`chunk ${d.chunkId}`] : []),
-            ...(d.untrusted ? ['untrusted'] : []),
           ].join(' · ');
           blocks.append(
             el(

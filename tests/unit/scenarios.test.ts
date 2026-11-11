@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildRegistry,
-  compose,
-  expandVariant,
-  getPath,
-  setPath,
-} from '../../src/scenarios/expand.ts';
+import { buildRegistry, compose, getPath, setPath } from '../../src/scenarios/expand.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
 import { createPlayback } from '../../src/rag/bundled.ts';
 import type {
@@ -17,6 +11,7 @@ import type {
 } from '../../src/scenarios/types.ts';
 import {
   contextFrom,
+  loadScenarios,
   validateRegistry,
   type ValidationContext,
 } from '../../src/scenarios/validate.ts';
@@ -107,72 +102,6 @@ describe('paths', () => {
     expect(setPath(obj, 'a.b.0.c', 2)).toBe(true);
     expect(obj.a.b[0]?.c).toBe(2);
     expect(setPath(obj, 'a.x.y', 1)).toBe(false);
-  });
-});
-
-describe('variant expansion', () => {
-  it('applies operations in order, then prefixes IDs and renumbers', () => {
-    const problems: string[] = [];
-    const scn = expandVariant(
-      base(),
-      {
-        id: 'v',
-        title: 'Variant',
-        extends: 'base',
-        lesson: 'The variant teaches one thing.',
-        operations: [
-          { op: 'patch', event: 'e2', set: { 'payload.n.1': 5, explanation: 'Patched.' } },
-          { op: 'insert_after', event: 'e1', events: [event('new')] },
-          { op: 'remove', events: ['e3'] },
-          { op: 'replace', event: 'new', with: event('swapped') },
-        ],
-      },
-      problems,
-    );
-    expect(problems).toEqual([]);
-    expect(scn.id).toBe('v');
-    expect(scn.title).toBe('Variant');
-    expect(scn.question).toBe('Base question?');
-    expect(scn.headline).toBe('The variant teaches one thing.');
-    expect(scn.events.map((e) => [e.id, e.sequence, e.scenario_id, e.pair_id])).toEqual([
-      ['v:e1', 1, 'v', 'v:e2'],
-      ['v:swapped', 2, 'v', undefined],
-      ['v:e2', 3, 'v', 'v:e1'],
-    ]);
-    expect(scn.events[2]?.payload).toEqual({ n: [1, 5] });
-    expect(scn.events[2]?.explanation).toBe('Patched.');
-  });
-
-  it('leaves the base untouched', () => {
-    const b = base();
-    expandVariant(
-      b,
-      {
-        id: 'v',
-        title: 'V',
-        extends: 'base',
-        lesson: 'L.',
-        operations: [{ op: 'remove', events: ['e1'] }],
-      },
-      [],
-    );
-    expect(b.events.map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
-  });
-
-  it('reports operations on unknown events', () => {
-    const problems: string[] = [];
-    expandVariant(
-      base(),
-      {
-        id: 'v',
-        title: 'V',
-        extends: 'base',
-        lesson: 'L.',
-        operations: [{ op: 'remove', events: ['zz'] }],
-      },
-      problems,
-    );
-    expect(problems).toEqual(['v: remove names unknown event zz']);
   });
 });
 
@@ -357,57 +286,6 @@ describe('more validation rules', () => {
     ]);
   });
 
-  it('replaces the takeaways named in phase_overrides', () => {
-    const problems: string[] = [];
-    const scn = expandVariant(
-      base(),
-      {
-        id: 'v',
-        title: 'V',
-        extends: 'base',
-        lesson: 'L.',
-        phase_overrides: { p1: { takeaway: 'True here.' }, nope: { takeaway: 'X.' } },
-      },
-      problems,
-    );
-    expect(scn.phases[0]?.takeaway).toBe('True here.');
-    expect(base().phases[0]?.takeaway).toBe('One message.');
-    expect(problems).toEqual(['v: phase_overrides names unknown phase nope']);
-  });
-
-  it("applies a variant's parameter_overrides to the parameter defaults", () => {
-    const b = base();
-    b.parameters = { top_k: { default: 5, min: 1, max: 8 } };
-    const problems: string[] = [];
-    const scn = expandVariant(
-      b,
-      {
-        id: 'v',
-        title: 'V',
-        extends: 'base',
-        lesson: 'L.',
-        parameter_overrides: { top_k: 8, nope: 1 },
-      },
-      problems,
-    );
-    expect(scn.parameters?.['top_k']).toEqual({ default: 8, min: 1, max: 8 });
-    expect(b.parameters['top_k']?.default).toBe(5);
-    expect(problems).toEqual(['v: parameter_overrides names unknown parameter nope']);
-  });
-
-  it("copies a variant's fixture_overrides for the scenario's engine", () => {
-    const b = base();
-    const overrides = { add_documents: ['x.md'] };
-    const scn = expandVariant(
-      b,
-      { id: 'v', title: 'V', extends: 'base', lesson: 'L.', fixture_overrides: overrides },
-      [],
-    );
-    expect(scn.fixture_overrides).toEqual(overrides);
-    expect(scn.fixture_overrides).not.toBe(overrides);
-    expect(b.fixture_overrides).toBeUndefined();
-  });
-
   it('checks that derived events and optional steps name events and boolean parameters', () => {
     const scn = base();
     scn.parameters = { top_k: { default: 5 }, on: { default: false } };
@@ -464,11 +342,21 @@ describe('more validation rules', () => {
     ]);
   });
 
-  it('reports an event without an ID in an expanded variant', () => {
+  it('reports an event without an ID', () => {
     const b = base();
     delete (b.events[2] as Partial<ScenarioEvent>).id;
-    const scn = expandVariant(b, { id: 'v', title: 'V', extends: 'base', lesson: 'L.' }, []);
-    expect(validateRegistry({ v: scn }, ctx)).toEqual(['v/events[2]: missing id']);
+    expect(validateRegistry({ base: b }, ctx)).toEqual(['base/events[2]: missing id']);
+  });
+
+  it('rejects a variants key (03 one_scenario_per_use_case)', () => {
+    const specs = structuredClone(sources) as SpecSources;
+    (specs.rag as Record<string, unknown>)['variants'] = [];
+    (specs.comparison.combined as unknown as Record<string, unknown>)['variants'] = [];
+    expect(loadScenarios(specs).problems).toEqual([
+      '05: variants are not allowed: one scenario per use case',
+      '06 combined: variants are not allowed: one scenario per use case',
+    ]);
+    expect(loadScenarios(sources).problems).toEqual([]);
   });
 
   it('reports a base scenario without events instead of crashing', () => {
@@ -476,7 +364,9 @@ describe('more validation rules', () => {
     delete (specs.mcp.scenarios[0] as Partial<Scenario>).events;
     const { problems } = buildRegistry(specs);
     expect(problems[0]).toBe('mcp-balance: events must be a list');
-    expect(problems).toContain('mcp-not-found: extends invalid scenario mcp-balance');
+    expect(problems).toContain(
+      'combined-balance-explanation: copy names unknown scenario mcp-balance',
+    );
   });
 
   it('ignores inherited keys and non-decimal indexes in paths', () => {
@@ -495,10 +385,15 @@ describe('more validation rules', () => {
 });
 
 describe('bundled registry', () => {
-  it('loads the specifications without problems', () => {
+  it('loads one scenario per use case without problems (03 one_scenario_per_use_case)', () => {
     const registry = loadRegistry();
-    expect(Object.keys(registry)).toHaveLength(15);
-    expect(Object.values(registry).reduce((n, s) => n + s.events.length, 0)).toBe(344);
+    expect(Object.keys(registry)).toEqual([
+      'mcp-balance',
+      'rag-index',
+      'rag-query',
+      'combined-balance-explanation',
+    ]);
+    expect(Object.values(registry).reduce((n, s) => n + s.events.length, 0)).toBe(88);
     expect(registry['mcp-balance']?.question).toBe(
       'What is the current balance of my bank account?',
     );
@@ -506,7 +401,7 @@ describe('bundled registry', () => {
 
   it('labels every response the model sends as simulated (02 learning.simulated_behaviour)', () => {
     // 08 definition_of_done: no fictional model output represented as real inference. Every
-    // scenario, variants and Combined included, as written and as played (derived events too).
+    // scenario, Combined included, as written and as played (derived events too).
     const fromModel = (e: { protocol: string; message_type: string; sender: string }) =>
       e.protocol === 'LLM_API' && e.message_type === 'RESPONSE' && e.sender === 'llm';
     const scenarios = Object.values(loadRegistry());
@@ -520,37 +415,9 @@ describe('bundled registry', () => {
         responses.some((e) => e.scenario_id === s.id),
         s.id,
       ).toBe(true);
-    expect(responses.filter((e) => /tool call/.test(e.operation)).length).toBeGreaterThanOrEqual(8);
+    expect(
+      new Set(responses.filter((e) => /tool call/.test(e.operation)).map((e) => e.scenario_id)),
+    ).toEqual(new Set(['mcp-balance', 'combined-balance-explanation']));
     for (const e of responses) expect(e.explanation, e.id).toMatch(/^Simulated model output/);
-  });
-
-  it('expands the Combined variant from the composed events (03 composition_format.variants)', () => {
-    const registry = loadRegistry();
-    const base = registry['combined-balance-explanation'] as Scenario;
-    const variant = registry['combined-missing-terms'] as Scenario;
-    expect(Object.keys(registry).slice(-2)).toEqual([base.id, variant.id]);
-    expect(variant.events.map((e) => e.id)).toEqual(
-      base.events.map((e) => e.id.replace(`${base.id}:`, `${variant.id}:`)),
-    );
-    expect(variant.events.every((e) => e.scenario_id === variant.id)).toBe(true);
-    expect(variant.fixture_overrides).toEqual({ exclude_documents: ['savings-account.md'] });
-    expect(variant.title).toBe('Savings terms missing from the index');
-    expect(variant.headline).toMatch(/^With the Savings document missing/);
-    expect(variant.phases.find((p) => p.id === 'answer')?.takeaway).toMatch(/does not cover/);
-    expect(base.phases.find((p) => p.id === 'answer')?.takeaway).not.toMatch(/does not cover/);
-    expect(variant.derived_events).toEqual(base.derived_events);
-    expect(variant).not.toHaveProperty('expected_answer');
-  });
-
-  it('reports a Combined variant that extends another scenario', () => {
-    const specs = structuredClone(sources as SpecSources);
-    const comb = specs.comparison.combined;
-    const [variant] = comb.variants ?? [];
-    if (variant) variant['extends'] = 'rag-query';
-    const { registry, problems } = buildRegistry(specs);
-    expect(problems).toEqual([
-      'combined-missing-terms: extends rag-query, not the composed scenario combined-balance-explanation',
-    ]);
-    expect(registry).not.toHaveProperty('combined-missing-terms');
   });
 });

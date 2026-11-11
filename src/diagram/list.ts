@@ -21,7 +21,6 @@ function isResponse(a: Arrow): boolean {
 function arrowMark(a: Arrow): string {
   const cls = ['row-arrow', `row-arrow--${a.line}`];
   if (a.emphasized) cls.push('row-arrow--current');
-  if (a.error) cls.push('row-arrow--error');
   const head = isResponse(a) ? 'row-head row-head--response' : 'row-head row-head--request';
   if (a.self) {
     // Out to the right, down and back, the head pointing left at the start.
@@ -47,7 +46,6 @@ function renderRow(a: Arrow, names: Readonly<Record<string, string>>): string {
   const cls = ['row'];
   if (a.emphasized) cls.push('row--emphasized');
   if (a.visibility === 'past' && !a.emphasized) cls.push('row--past');
-  if (a.error) cls.push('row--error');
   const e = a.event;
   const from = esc(names[e.sender] ?? e.sender);
   const to = esc(names[e.receiver] ?? e.receiver);
@@ -79,8 +77,7 @@ function renderSection(g: Group, names: Readonly<Record<string, string>>): strin
   const caption = g.selected
     ? `<span class="row-label--selected">${esc(g.caption)}</span><span class="visually-hidden">, carries the selected value</span>`
     : esc(g.caption);
-  const error = g.error ? `<span class="phase-error"> · × ${esc(g.error)} error</span>` : '';
-  return `<section class="${cls.join(' ')}" data-phase="${esc(g.phase.id)}"${current}><button type="button" class="phase-toggle" data-group="${esc(g.key)}" aria-expanded="${g.expanded}">${takeaway}<span class="phase-caption">${caption}${error}</span></button>${g.expanded ? renderRows(g.arrows, names) : ''}</section>`;
+  return `<section class="${cls.join(' ')}" data-phase="${esc(g.phase.id)}"${current}><button type="button" class="phase-toggle" data-group="${esc(g.key)}" aria-expanded="${g.expanded}">${takeaway}<span class="phase-caption">${caption}</span></button>${g.expanded ? renderRows(g.arrows, names) : ''}</section>`;
 }
 
 /** The step list for a layout: rows in protocol mode, stacked groups in architecture mode. */

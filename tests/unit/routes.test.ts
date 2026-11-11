@@ -5,13 +5,13 @@ import { specSources } from '../../src/scenarios/registry.ts';
 const tabs = tabScenarios(specSources());
 
 describe('tab contents', () => {
-  it('list the base scenarios first, then the variants', () => {
-    expect(tabs.mcp[0]).toBe('mcp-balance');
-    expect(tabs.mcp).toContain('mcp-jsonrpc-error');
-    expect(tabs.rag.slice(0, 2)).toEqual(['rag-query', 'rag-index']);
-    expect(tabs.rag).toContain('rag-prompt-injection');
-    expect(tabs.combined).toEqual(['combined-balance-explanation', 'combined-missing-terms']);
-    expect(tabs.compare).toEqual(['compare-rag-mcp']);
+  it('hold exactly one scenario per use case; only RAG has two (02 navigation.tab_contents)', () => {
+    expect(tabs).toEqual({
+      mcp: ['mcp-balance'],
+      rag: ['rag-query', 'rag-index'],
+      compare: ['compare-rag-mcp'],
+      combined: ['combined-balance-explanation'],
+    });
   });
 });
 
@@ -53,10 +53,31 @@ describe('routes', () => {
     expect(ok('#/combined/combined-balance-explanation/3').mode).toBe('architecture');
   });
 
+  it("open a removed variant's base scenario at step 0, keeping the mode (02 removed_scenarios)", () => {
+    expect(ok('#/mcp/mcp-not-found/3')).toEqual({
+      tab: 'mcp',
+      scenario: 'mcp-balance',
+      step: 0,
+      mode: 'architecture',
+    });
+    expect(ok('#/rag/rag-hybrid/12/protocol')).toEqual({
+      tab: 'rag',
+      scenario: 'rag-query',
+      step: 0,
+      mode: 'protocol',
+    });
+    expect(ok('#/combined/combined-missing-terms').scenario).toBe('combined-balance-explanation');
+    // Only on its own tab.
+    expect(parseRoute('#/rag/mcp-not-found', tabs)).toMatchObject({
+      ok: false,
+      message: 'Unknown scenario: mcp-not-found',
+    });
+  });
+
   it('round-trip through formatRoute', () => {
     for (const hash of [
       '#/mcp/mcp-balance/14/protocol',
-      '#/rag/rag-hybrid/0',
+      '#/rag/rag-index/0',
       '#/compare/compare-rag-mcp/12/protocol',
     ]) {
       expect(formatRoute(ok(hash))).toBe(hash);
