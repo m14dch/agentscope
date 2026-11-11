@@ -64,6 +64,8 @@ unit_tests:
 - Every security_boundaries entry exists in 07-security-protocols.yaml
 - Identical JSON fixtures and parameters yield identical snapshots, rankings and citations
 - Every Compare step, and stepping either pane, keeps both panes on the same semantic phase
+- In architecture mode the group the cursor enters expands (forward, back, jump, reset), and a
+  group the learner collapsed stays collapsed until the cursor enters it again
 e2e_tests:
 - id: mcp-walkthrough
   steps:
@@ -89,6 +91,9 @@ e2e_tests:
   - Jump to last step
   - Step backward
   - Switch architecture view
+  - Step through mcp-balance in architecture mode and verify the current group is expanded
+    with the current step in view at every step; collapse a group and verify it stays
+    collapsed until the cursor enters it again
   - Reset and replay
   - Verify deterministic snapshots
 - id: offline

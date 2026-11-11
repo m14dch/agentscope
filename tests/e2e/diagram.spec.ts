@@ -70,13 +70,9 @@ for (const [width, height, device] of [
       await open(page, route(id, steps, 'protocol'));
       expect(await overlaps(page), `${id} protocol`).toEqual([]);
       await open(page, route(id, steps, 'architecture'));
-      // Expand every group.
-      const groups = page.locator('[data-group]');
-      const count = await groups.count();
-      for (let i = 0; i < count; i += 1) {
-        const group = page.locator('[data-phase][aria-expanded="false"]').first();
-        await group.click();
-      }
+      // Expand every group (the current one is open already).
+      const closed = page.locator('[data-phase][aria-expanded="false"]');
+      while ((await closed.count()) > 0) await closed.first().click();
       expect(await overlaps(page), `${id} architecture`).toEqual([]);
     }
   });
@@ -103,7 +99,9 @@ test('switching mode keeps the cursor on the same step', async ({ page }) => {
   await expect(page.locator('[data-current]')).toHaveAttribute('data-index', '13');
   await page.getByRole('button', { name: 'Architecture' }).click();
   await expect(page.locator('.status').filter({ hasText: 'Step 14 of 28' })).toBeVisible();
-  await expect(page.locator('[data-current]')).toHaveAttribute('data-phase', 'tool');
+  // The current group, open with its current step (02 modes.architecture_groups).
+  await expect(page.locator('[data-phase][data-current]')).toHaveAttribute('data-phase', 'tool');
+  await expect(page.locator('.step[data-current]')).toHaveAttribute('data-index', '13');
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: 'Protocol' }).click();
   await expect(page.locator('.status').filter({ hasText: 'Step 15 of 28' })).toBeVisible();
@@ -125,18 +123,84 @@ test('groups expand and collapse with the keyboard, and stay open while stepping
   page,
 }) => {
   await open(page, route('mcp-balance', 14, 'architecture'));
-  const group = page.locator('[data-group="tool"]');
+  const group = page.locator('[data-group="setup"]');
   await group.focus();
   await page.keyboard.press('Enter');
   await expect(group).toHaveAttribute('aria-expanded', 'true');
   await expect(group).toBeFocused();
-  await expect(page.locator('.step')).toHaveCount(2);
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.locator('[data-group="tool"]')).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.locator('.step')).toHaveCount(3);
-  await page.locator('[data-group="tool"]').focus();
+  await expect(page.locator('[data-group="setup"]')).toHaveAttribute('aria-expanded', 'true');
+  // Setup's three steps and the current group's three (tool: steps 13 to 15).
+  await expect(page.locator('.step')).toHaveCount(6);
+  await page.locator('[data-group="setup"]').focus();
   await page.keyboard.press(' ');
-  await expect(page.locator('[data-group="tool"]')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('[data-group="setup"]')).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('the current group stays expanded while stepping; one the learner collapsed stays closed until the cursor enters it again', async ({
+  page,
+}) => {
+  // 02 modes.architecture_groups and modes.scrolling, at a laptop size where group frames are
+  // wider than the region; instant scrolling, so each step's position is final.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const next = page.getByRole('button', { name: 'Next' });
+  // Next, past a prediction prompt (02 learning.prediction_rules).
+  const forward = async (): Promise<void> => {
+    await next.click();
+    if (await page.locator('.prediction').count()) await next.click();
+  };
+  const current = page.locator('.step[data-current]');
+  // The current step lies wholly inside the region, below the pinned participant names.
+  const inside = () =>
+    current.evaluate((el) => {
+      const region = el.closest('.diagram-scroller');
+      if (!region) return false;
+      const r = region.getBoundingClientRect();
+      const head = region.querySelector('.diagram-head')?.getBoundingClientRect().height ?? 0;
+      const b = el.getBoundingClientRect();
+      return (
+        b.left >= r.left && b.right <= r.right && b.top >= r.top + head && b.bottom <= r.bottom
+      );
+    });
+  // combined-balance-explanation has the widest groups (steps start far right of their frame).
+  for (const [id, n] of [
+    ['mcp-balance', 28],
+    ['combined-balance-explanation', 35],
+  ] as const) {
+    await open(page, route(id, 1, 'architecture'));
+    for (let step = 1; step <= n; step += 1) {
+      if (step > 1) await forward();
+      await expect(page.locator('.status')).toContainText(`Step ${step} of ${n}`);
+      await expect(page.locator('[data-phase][data-current]')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+      await expect(current).toHaveAttribute('data-index', String(step - 1));
+      expect(await inside(), `${id} step ${step}`).toBe(true);
+      // Only the current group is open: the overview stays one takeaway per phase.
+      await expect(page.locator('[data-group][aria-expanded="true"]')).toHaveCount(1);
+    }
+  }
+  // mcp-balance: planning is steps 10-12, tool 13-16.
+  await page.evaluate(() => {
+    location.hash = '#/mcp/mcp-balance/10';
+  });
+  const planning = page.locator('[data-group="planning"]');
+  // On its caption: the frame's middle is covered by its expanded steps.
+  await planning.locator('.group-label').click();
+  await expect(planning).toHaveAttribute('aria-expanded', 'false');
+  await forward();
+  await expect(page.locator('.status')).toContainText('Step 11 of 28');
+  await expect(page.locator('[data-group="planning"]')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.step[data-current]')).toHaveCount(0);
+  await forward();
+  await forward();
+  await expect(page.locator('[data-group="planning"]')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('[data-group="tool"]')).toHaveAttribute('aria-expanded', 'true');
+  await page.getByRole('button', { name: 'Previous' }).click();
+  await expect(page.locator('[data-group="planning"]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.step[data-current]')).toHaveAttribute('data-index', '11');
 });
 
 test('meaning survives in greyscale: the current step and errors carry non-colour cues', async ({
@@ -200,10 +264,13 @@ test('toggling a group keeps the scroll position and focus', async ({ page }) =>
   // Instant scrolling, so the opening scroll has finished before measuring.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 1280, height: 700 });
-  await open(page, route('combined-balance-explanation', 35, 'architecture'));
+  // At the step before the last group, so the click expands a group that is not current.
+  await open(page, route('combined-balance-explanation', 34, 'architecture'));
   const region = page.locator('.diagram-scroller');
-  const before = await region.evaluate((el) => el.scrollTop);
   const last = page.locator('[data-group="answer"]');
+  // The current group is open above it, so the click target may first need scrolling to.
+  await last.scrollIntoViewIfNeeded();
+  const before = await region.evaluate((el) => el.scrollTop);
   await last.click();
   await expect(page.locator('[data-group="answer"]')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('[data-group="answer"]')).toBeFocused();

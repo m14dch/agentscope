@@ -333,13 +333,22 @@ modes:
     step is the current group: an accent bar and its takeaway in weight 600. A group whose
     reached events include an error adds × and the error kind to its caption, in the error
     colour. A group expands or collapses on click, Enter or Space; expanded, it shows its
-    events up to the cursor with protocol-mode styling. Expansion is kept while the learner
-    steps through the scenario. Lifelines pass under a group''s takeaway and caption, not
+    events up to the cursor with protocol-mode styling. The current step is visible without
+    a click: when the cursor enters a group (stepping forward or back, a jump, a link to a
+    step), that group expands, so the current group is always expanded unless the learner
+    collapsed it while it was current. A group the cursor expanded collapses again when the
+    cursor leaves it, so the overview stays one takeaway per phase; a group the learner
+    collapsed reopens only when the cursor enters it again; a group the learner expanded keeps
+    its state while the learner steps. At step 0 (and after Reset) no group is current and only
+    the groups the learner expanded are open. The same holds in the phone step list
+    (diagram.phone_list) and in each Compare pane, where a waiting pane (compare_view.timeline)
+    has no current group. Lifelines pass under a group''s takeaway and caption, not
     through them.'
   scrolling: Only a cursor change or a mode switch scrolls, and only the diagram's own
     scroll region, never the page (on phones the page also scrolls to keep the stepping area
     in view, layout.phone.stepping_area); toggling a group or laying out again keeps the scroll
-    position. It scrolls only as far as needed to bring the current step or group into view,
+    position. It scrolls only as far as needed to bring the current step into view, or the current
+    group when it is collapsed (in an expanded current group, the step inside it),
     horizontally never past its left edge, so an arrow that fits keeps both its sender and
     its receiver in view. Keyboard focus stays on the same group or region across steps. Arrow
     keys scroll the diagram region while it has focus.
