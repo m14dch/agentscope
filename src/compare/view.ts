@@ -102,10 +102,6 @@ export class CompareView {
   private announced: number;
   /** The bottom bar on phones: the shared controls. */
   private readonly bar: HTMLElement;
-  /** The panes side by side; they widen for the wider diagram (02 layout.max_width). */
-  private readonly paneRow = el('div', { class: 'compare-panes' });
-  /** The width each pane's diagram needs (DiagramOptions.onNaturalWidth). */
-  private readonly needed: [number, number] = [0, 0];
   /** Each pane's cursor at the last render, to tell which pane's step changed. */
   private cursors: [number, number] | undefined;
 
@@ -116,7 +112,6 @@ export class CompareView {
     const { compare, phases, panes } = options;
     this.phaseLabels = new Map(phases.map((p) => [p.id, p.label]));
     this.panes = [this.pane(panes[0], 0), this.pane(panes[1], 1)];
-    this.paneRow.append(...this.panes.map((p) => p.root));
     this.timeline = new CompareTimeline(
       phases.map((p) => p.id),
       [this.input(this.panes[0]), this.input(this.panes[1])],
@@ -176,7 +171,7 @@ export class CompareView {
       el('section', { class: 'lesson' }, el('h2', { tabindex: '-1' }, compare.headline)),
       this.controls.root,
       phaseLine,
-      this.paneRow,
+      el('div', { class: 'compare-panes' }, ...this.panes.map((p) => p.root)),
       aspects,
     );
     this.render();
@@ -344,10 +339,6 @@ export class CompareView {
       mode: this.mode,
       name: `${label} sequence diagram`,
       id: `compare-${side === 0 ? 'left' : 'right'}`,
-      onNaturalWidth: (px) => {
-        this.needed[side] = px;
-        this.paneRow.style.setProperty('--diagram-width', `${Math.max(...this.needed)}px`);
-      },
     });
     const root = el(
       'section',

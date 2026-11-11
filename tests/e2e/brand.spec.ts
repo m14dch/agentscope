@@ -158,3 +158,46 @@ test('on a wide screen the workspace widens only as far as its diagram needs, ce
   expect(narrow.left).toBeCloseTo(COLUMN.left, 0);
   expect(narrow.right).toBeCloseTo(COLUMN.right, 0);
 });
+
+test('the widened workspace keeps its width while stepping and after a parameter change; the splitter states its share on screen', async ({
+  page,
+}) => {
+  await page.setViewportSize(WIDE);
+  const width = async () => {
+    const { left, right } = await edges(page, '.workspace');
+    return Math.round(right - left);
+  };
+
+  // Every step of mcp-balance, from the architecture overview at step 0 to the end.
+  await page.goto('./#/mcp/mcp-balance/0');
+  await page.locator('[data-measured]').waitFor();
+  const status = page.locator('.control-row .status');
+  const length = Number(/of (\d+)/.exec((await status.textContent()) ?? '')?.[1]);
+  expect(length).toBeGreaterThan(10);
+  const wide = await width();
+  expect(wide).toBeGreaterThan(COLUMN.right - COLUMN.left);
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  for (let step = 1; step <= length; step++) {
+    await page.keyboard.press('ArrowRight');
+    // A prediction prompt comes first; the next press runs the step.
+    if (await page.locator('.prediction').isVisible()) await page.keyboard.press('ArrowRight');
+    await expect(status).toContainText(`Step ${step} of`);
+    expect(await width(), `step ${step}`).toBe(wide);
+  }
+
+  // The separator gives the share the inspector takes of this wider workspace.
+  const splitter = page.getByRole('separator', { name: 'Resize the inspector' });
+  const inspector = await page.getByRole('complementary', { name: 'Current step' }).boundingBox();
+  const shown = String(Math.round(((inspector?.width ?? 0) / wide) * 100));
+  await expect(splitter).toHaveAttribute('aria-valuenow', shown);
+  await expect(splitter).toHaveAttribute('aria-valuetext', `Inspector ${shown}% of the width`);
+
+  // rag-query keeps the column's width when a parameter changes its steps.
+  await page.goto('./#/rag/rag-query/10');
+  await page.locator('[data-measured]').waitFor();
+  const before = await width();
+  const rerank = page.getByRole('button', { name: 'Reranking' });
+  await rerank.click();
+  await expect(rerank).toHaveAttribute('aria-pressed', 'true');
+  expect(await width()).toBe(before);
+});

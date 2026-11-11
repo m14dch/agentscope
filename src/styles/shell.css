@@ -28,9 +28,9 @@
   );
 }
 
-/* Compare's panes set --workspace-needed in compare.css. */
-.shell .shell-content > :is(.workspace, .compare-panes) {
-  margin-inline: max(0px, calc((100% - var(--workspace-needed, var(--content-inner))) / 2));
+/* Compare's panes stay in the column. */
+.shell .shell-content > .workspace {
+  margin-inline: max(0px, calc((100% - var(--workspace-needed)) / 2));
 }
 
 .shell-bar {

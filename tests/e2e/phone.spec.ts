@@ -426,6 +426,25 @@ test.describe('at 360 × 800, Play without input', () => {
 test.describe('at 390 × 844', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
+  test('with nothing else for the menu, the GitHub link ends the wordmark row', async ({
+    page,
+  }) => {
+    await page.goto('./#/nowhere');
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Menu' })).toBeHidden();
+    const github = page.getByRole('link', { name: 'GitHub', exact: true });
+    await expect(github).toBeVisible();
+    const link = await github.boundingBox();
+    const brand = await page.getByRole('heading', { level: 1 }).boundingBox();
+    expect(link && brand).toBeTruthy();
+    if (!link || !brand) return;
+    // On the wordmark's row, at its end, and a full touch target.
+    const middle = (b: { y: number; height: number }) => b.y + b.height / 2;
+    expect(Math.abs(middle(link) - middle(brand))).toBeLessThanOrEqual(2);
+    expect(link.x + link.width).toBeGreaterThan(390 - 16 - 2);
+    expect(link.height).toBeGreaterThanOrEqual(44);
+  });
+
   test('Reset, Previous, Play/Pause and Next stay in reach while stepping through the longest scenario', async ({
     page,
   }) => {
