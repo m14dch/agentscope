@@ -354,7 +354,9 @@ learning:
     the prompt instead of advancing; Next or Continue then runs the step. Play pauses
     there and shows the prompt. Previous, jump, start and reset never show a prompt.
   simulated_behaviour: Model output is labelled as simulated wherever it appears; nothing
-    suggests a live decision.
+    suggests a live decision. The explanation of every response the model sends (LLM API
+    responses from the LLM provider, tool-call requests included) starts with "Simulated model
+    output".
 controls:
   actions:
   - start

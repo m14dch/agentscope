@@ -333,8 +333,8 @@ combined:
             arguments:
               customerId: '123'
         stop_reason: tool_use
-      explanation: The model asks the agent to run the balance tool. Account terms came from retrieval,
-        not from a tool.
+      explanation: 'Simulated model output: the model asks the agent to run the balance tool; account terms
+        came from retrieval, not from a tool.'
       tracked_values:
         customerId: '123'
   - copy:
