@@ -136,7 +136,8 @@
     margin-top: 0;
   }
 
-  /* The bottom bar: the position, then Previous, Play or Pause and Next in equal widths. */
+  /* The bottom bar: the position, then Reset, Previous step, Play or Pause and Next step in
+     equal widths (02 layout.phone.controls). */
   .controls {
     position: fixed;
     z-index: 2;
@@ -144,7 +145,7 @@
     right: 0;
     bottom: 0;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-1);
     margin: 0;
     padding: var(--space-1) var(--page-margin)
@@ -153,11 +154,30 @@
     border-top: var(--line-hair) solid var(--color-rule);
   }
 
-  .controls > .status,
-  .controls > .compare-status {
+  .controls > .status {
     order: -1;
     grid-column: 1 / -1;
     margin: 0;
+  }
+
+  .controls .icon-button {
+    width: auto;
+  }
+
+  /* At the screen's bottom edge the focused button's name shows above it. */
+  .controls .icon-button:focus-visible .control-label,
+  .controls .icon-button:hover .control-label {
+    top: auto;
+    bottom: calc(100% + var(--space-1) / 2);
+  }
+
+  /* What stays of the control row in the page: the step slider, alone at full width. */
+  .control-row {
+    display: block;
+  }
+
+  .control-row .timeline input {
+    width: 100%;
   }
 
   /* Touch targets of at least 44 × 44 px, except controls inside a sentence or code. */

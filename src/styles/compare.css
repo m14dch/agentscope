@@ -1,13 +1,6 @@
 /* Compare view (02-ui-ux.yaml compare_view): two panes in sync, then the aspects. */
 .compare-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
   margin-bottom: var(--space-3);
-}
-
-.compare-timeline input {
-  width: 100%;
 }
 
 .compare-phases {

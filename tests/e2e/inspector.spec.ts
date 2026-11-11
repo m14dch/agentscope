@@ -162,7 +162,7 @@ test('open folds and focus survive changes that are not a step', async ({ page }
   const meta = page.locator('.tab-panel .json-fold').nth(1);
   await meta.locator('> summary').click();
   await expect(meta).toHaveAttribute('open', '');
-  await page.getByRole('button', { name: '2×' }).click();
+  await page.getByRole('combobox', { name: 'Play speed' }).selectOption('2');
   await page.getByRole('button', { name: 'Protocol' }).click();
   await expect(page.locator('.tab-panel .json-fold').nth(1)).toHaveAttribute('open', '');
 });

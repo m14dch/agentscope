@@ -233,12 +233,12 @@ describe('player', () => {
     return [new Player(new Playback(scenario('mcp-balance')), clock), clock];
   };
 
-  it('starts, steps, jumps and resets within bounds', () => {
+  it('steps, jumps and resets within bounds', () => {
     const [player] = make();
     const n = player.playback.length;
     player.previous();
     expect(player.cursor).toBe(0);
-    player.start();
+    player.next();
     expect(player.cursor).toBe(1);
     player.next();
     player.next();

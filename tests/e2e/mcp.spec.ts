@@ -29,7 +29,7 @@ async function jump(page: Page, step: number): Promise<void> {
 /** Plays from the start to the last step at 4×, continuing past every prediction. */
 async function playThrough(page: Page): Promise<void> {
   const n = await stepCount(page);
-  await page.getByRole('button', { name: '4×' }).click();
+  await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
   await page.getByRole('button', { name: 'Play' }).click();
   const end = status(page).filter({ hasText: new RegExp(`^Step ${n} of ${n}`) });
   const prompt = page.getByRole('button', { name: 'Continue', exact: true });

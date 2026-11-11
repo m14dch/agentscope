@@ -186,7 +186,7 @@ for (const [width, height] of SIZES) {
           const n = Number(
             await page.getByRole('slider', { name: 'Step', exact: true }).getAttribute('max'),
           );
-          const next = bar(page).getByRole('button', { name: 'Next', exact: true });
+          const next = bar(page).getByRole('button', { name: 'Next step', exact: true });
           const status = page.locator('.controls .status');
           for (let guard = 0; guard < 2 * n + 2; guard += 1) {
             if ((await status.textContent())?.startsWith(`Step ${n} of ${n}`)) break;
@@ -263,7 +263,7 @@ for (const [width, height] of SIZES) {
         expect(await page.evaluate(() => window.scrollY), `step ${k}`).toBe(reading);
       }
       // An explicit step brings the stepping area back.
-      await bar(page).getByRole('button', { name: 'Next', exact: true }).click();
+      await bar(page).getByRole('button', { name: 'Next step', exact: true }).click();
       expect(await inView()).toBe(true);
     });
 
@@ -286,7 +286,7 @@ for (const [width, height] of SIZES) {
         ];
         for (let k = 1; k <= n; k += 1) {
           const before = await cursors();
-          await bar(page).getByRole('button', { name: 'Next', exact: true }).click();
+          await bar(page).getByRole('button', { name: 'Next step', exact: true }).click();
           await expect(page.locator('.controls .compare-status')).toHaveText(
             new RegExp(`^Step ${k} of ${n}`),
           );
@@ -426,7 +426,7 @@ test.describe('at 360 × 800, Play without input', () => {
 test.describe('at 390 × 844', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-  test('Previous, Play/Pause and Next stay in reach while stepping through the longest scenario', async ({
+  test('Reset, Previous, Play/Pause and Next stay in reach while stepping through the longest scenario', async ({
     page,
   }) => {
     await page.goto('./#/combined/combined-balance-explanation/0/protocol');
@@ -434,7 +434,7 @@ test.describe('at 390 × 844', () => {
     const n = 35;
     const status = page.locator('.controls .status');
     for (let guard = 0; guard < 2 * n; guard += 1) {
-      for (const name of ['Previous', /^(Play|Pause)$/, 'Next'] as const) {
+      for (const name of ['Reset', 'Previous step', /^(Play|Pause)$/, 'Next step'] as const) {
         const control = bar(page).getByRole('button', { name, exact: typeof name === 'string' });
         const box = await control.boundingBox();
         expect(box, `${String(name)} has a box`).not.toBeNull();
@@ -443,27 +443,32 @@ test.describe('at 390 × 844', () => {
         expect(box.y + box.height).toBeLessThanOrEqual(844);
         expect(box.width).toBeGreaterThanOrEqual(44);
         expect(box.height).toBeGreaterThanOrEqual(44);
-        // Nothing covers it: the control itself is hit at its centre.
+        // Nothing covers it: the control itself (its icon) is hit at its centre.
         const hit = await page.evaluate(
-          ([x, y]) => document.elementFromPoint(x as number, y as number)?.textContent ?? '',
+          ([x, y]) =>
+            document
+              .elementFromPoint(x as number, y as number)
+              ?.closest('button')
+              ?.getAttribute('data-icon') ?? '',
           [box.x + box.width / 2, box.y + box.height / 2],
         );
-        expect(hit).toMatch(typeof name === 'string' ? name : /^(Play|Pause)$/);
+        expect(hit).toBe(
+          { Reset: 'reset', 'Previous step': 'previous', 'Next step': 'next' }[String(name)] ??
+            (await control.getAttribute('data-icon')),
+        );
       }
       if ((await status.textContent())?.startsWith(`Step ${n} of ${n}`)) break;
       // Next shows a prediction prompt first, then runs the step (02 learning.prediction_rules).
-      await bar(page).getByRole('button', { name: 'Next', exact: true }).click();
+      await bar(page).getByRole('button', { name: 'Next step', exact: true }).click();
     }
     await expect(status).toHaveText(new RegExp(`^Step ${n} of ${n}`));
     // Play and Pause from the bar.
-    await bar(page).getByRole('button', { name: 'Previous', exact: true }).click();
+    await bar(page).getByRole('button', { name: 'Previous step', exact: true }).click();
     await bar(page).getByRole('button', { name: 'Play', exact: true }).click();
     await expect(status).toHaveText(new RegExp(`^Step ${n} of ${n}`));
   });
 
-  test('the menu holds the scenario list, the view switch, the speeds, Start and Reset', async ({
-    page,
-  }) => {
+  test('the menu holds the scenario list, the view switch and the play speed', async ({ page }) => {
     await page.goto('./#/rag/rag-query/10');
     await list(page).and(page.locator('[data-measured]')).waitFor();
     const menu = page.getByRole('button', { name: 'Menu' });
@@ -475,9 +480,10 @@ test.describe('at 390 × 844', () => {
     await expect(menu).toHaveAttribute('aria-expanded', 'true');
     const body = page.locator('#menu');
     await expect(body.getByRole('group', { name: 'View', exact: true })).toBeVisible();
-    await expect(body.getByRole('group', { name: 'Speed', exact: true })).toBeVisible();
-    await expect(body.getByRole('button', { name: 'Start' })).toBeVisible();
-    await expect(body.getByRole('button', { name: 'Reset' })).toBeVisible();
+    await expect(body.getByRole('combobox', { name: 'Play speed' })).toBeVisible();
+    // Reset is in the bottom bar, not in the menu.
+    await expect(body.getByRole('button', { name: 'Reset' })).toHaveCount(0);
+    await expect(bar(page).getByRole('button', { name: 'Reset' })).toBeVisible();
     await expect(body.getByRole('link', { name: 'Ingest and index documents' })).toBeVisible();
     // Each scenario link exists once: the picker's list moved, it was not copied.
     await expect(
@@ -510,14 +516,14 @@ test.describe('at 390 × 844', () => {
     await expect(page.getByRole('tablist', { name: 'Step details' })).toBeHidden();
     await toggle.click();
     await expect(page.getByRole('tablist', { name: 'Step details' })).toBeVisible();
-    await bar(page).getByRole('button', { name: 'Next', exact: true }).click();
+    await bar(page).getByRole('button', { name: 'Next step', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Step details' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
     // A prediction prompt sits above the step's message.
     for (let i = 0; i < 20 && !(await page.locator('.prediction').count()); i += 1)
-      await bar(page).getByRole('button', { name: 'Next', exact: true }).click();
+      await bar(page).getByRole('button', { name: 'Next step', exact: true }).click();
     const prompt = await page.locator('.prediction').boundingBox();
     const message = await page.locator('.inspector .message').boundingBox();
     expect(prompt && message && prompt.y + prompt.height <= message.y).toBe(true);
@@ -590,24 +596,24 @@ test('from 48rem the diagram and the controls are unchanged', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Step details' })).toBeHidden();
   await expect(page.getByRole('tablist', { name: 'Step details' })).toBeVisible();
   const controls = page.getByRole('group', { name: 'Playback' });
-  await expect(controls.getByRole('button')).toHaveText([
-    'Start',
-    'Previous',
-    'Play',
-    'Next',
-    'Reset',
-    '0.5×',
-    '1×',
-    '2×',
-    '4×',
-  ]);
+  const names = ['Reset', 'Previous step', 'Play', 'Next step'];
+  for (const [i, name] of names.entries())
+    await expect(controls.getByRole('button').nth(i)).toHaveAccessibleName(name);
   expect(await controls.evaluate((e) => getComputedStyle(e).position)).toBe('static');
-  // Narrowing to a phone moves the controls; widening puts them back in place.
+  const speed = page.getByRole('combobox', { name: 'Play speed' });
+  await expect(page.locator('.control-row .speed')).toContainText('Play speed');
+  // Narrowing to a phone moves the buttons into the bar with the position line, and the
+  // speed into the menu; the slider stays in the row. Widening puts them back in place.
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(list(page)).toBeVisible();
-  await expect(controls.getByRole('button')).toHaveText(['Previous', 'Play', 'Next']);
+  await expect(controls.getByRole('button')).toHaveCount(4);
+  await expect(controls.locator('.status')).toHaveText(/^Step 14 of 28/);
+  await expect(page.locator('#menu .speed')).toHaveCount(1);
+  await expect(page.locator('.control-row .timeline input')).toHaveCount(1);
   await page.setViewportSize({ width: 768, height: 1000 });
   await expect(page.locator('svg.diagram')).toBeVisible();
-  await expect(controls.getByRole('button')).toHaveCount(9);
-  await expect(page.locator('.timeline .status')).toHaveText(/^Step 14 of 28/);
+  await expect(controls.getByRole('button')).toHaveCount(4);
+  await expect(page.locator('.control-row .speed')).toContainText('Play speed');
+  await expect(speed).toBeVisible();
+  await expect(page.locator('.control-row .timeline .status')).toHaveText(/^Step 14 of 28/);
 });

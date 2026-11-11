@@ -125,7 +125,7 @@ test.describe('rag-walkthrough', () => {
     await open(page, '#/rag/rag-index/0');
     await expect(panel(page)).toBeHidden();
     // Run ingestion.
-    await page.getByRole('button', { name: 'Speed 4×' }).click();
+    await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
     await page.getByRole('button', { name: 'Play' }).click();
     await expect(page.locator('.status')).toHaveText('Step 10 of 10 · Store', { timeout: 10_000 });
     await expect(panel(page)).toBeVisible();
@@ -274,7 +274,7 @@ test.describe('rag-walkthrough', () => {
     // Run retrieval.
     await open(page, '#/rag/rag-query/0');
     await expect(retrieval(page)).toBeHidden();
-    await page.getByRole('button', { name: 'Speed 4×' }).click();
+    await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
     await page.getByRole('button', { name: 'Play' }).click();
     // Play pauses before retrieve-05, whose prediction asks which document ranks first.
     await expect(page.locator('.prediction')).toBeVisible({ timeout: 10_000 });
