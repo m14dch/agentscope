@@ -115,8 +115,9 @@ e2e_tests:
     on the page or inside any element, and that no element extends past the screen's edges.
   - Verify the diagram is the step list, every reached step names its sender and receiver, and
     the current step is highlighted and inside its region.
-  - Step through the longest scenario with Next in the bottom bar and verify that Previous,
-    Play/Pause and Next stay inside the viewport, uncovered, at every step without scrolling.
+  - Step through the longest scenario with Next in the bottom bar and verify that Reset,
+    Previous, Play/Pause and Next stay inside the viewport, uncovered, at every step without
+    scrolling.
   - At both sizes, for every scenario in both modes, step from the top of the page with Next
     in the bottom bar through every step and verify that the current row or group, any
     prediction prompt and the message line are entirely on screen above the bar.
@@ -131,7 +132,8 @@ e2e_tests:
     the lower changed pane's current row.
   - Verify every control outside running text is at least 44 × 44 px on MCP, RAG, Combined
     and Compare with the step details and the menu open, and the menu holds the scenario
-    list (on RAG), the view switch, the speeds, Start and Reset.
+    list (on RAG), the view switch and the play speed, and the bottom bar holds Reset, Previous,
+    Play/Pause and Next as named icon buttons.
   - Step through Compare in both modes and verify both panes use the step list without
     horizontal scrolling; verify the RAG projection takes its compact form.
 - id: pages
@@ -147,8 +149,8 @@ e2e_tests:
     with axe-core, as loaded and with the step details, the model context, a group and the scenario
     picker or the menu open, and fail on any serious or critical finding.
   - At desktop and tablet width, on every tab in both modes, move through the page with Tab and verify
-    that every control is reached, on screen and shows a visible focus indicator, and that the arrow
-    keys and Enter on Next step.
+    that every control is reached, on screen and shows a visible focus indicator, that each playback
+    icon button shows its name while focused, and that the arrow keys and Enter on Next step.
   - With reduced motion, verify on every tab that nothing animates or transitions and that the diagram
     regions jump to each step at once.
 - id: quality-gate-events
