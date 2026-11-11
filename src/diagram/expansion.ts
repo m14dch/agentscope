@@ -1,6 +1,6 @@
 /**
  * Which architecture groups are expanded as the cursor moves and the learner toggles
- * (02-ui-ux.yaml modes.architecture_groups): the group the cursor enters expands, a group the
+ * (02-ui-ux.yaml zoom_levels.architecture_groups): the group the cursor enters expands, a group the
  * cursor expanded collapses when the cursor leaves it, and the learner's own choices stand
  * until the cursor enters that group again.
  */

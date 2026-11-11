@@ -154,10 +154,10 @@ for (const [width, height] of SIZES) {
     }
 
     for (const route of [
-      '#/mcp/mcp-balance/14',
-      '#/rag/rag-query/10',
+      '#/mcp/mcp-balance/14/architecture',
+      '#/rag/rag-query/10/architecture',
       '#/combined/combined-balance-explanation/35/protocol',
-      '#/compare/compare-rag-mcp/16',
+      '#/compare/compare-rag-mcp/16/architecture',
     ]) {
       test(`every control outside running text is at least 44 × 44 px on ${route}`, async ({
         page,
@@ -179,7 +179,7 @@ for (const [width, height] of SIZES) {
       test(`${id}: the current step, the prompt and the message stay above the bar while stepping with Next`, async ({
         page,
       }) => {
-        for (const mode of ['/protocol', '']) {
+        for (const mode of ['/protocol', '/architecture']) {
           await page.goto(`./#/${tab}/${id}/0${mode}`);
           await list(page).and(page.locator('[data-measured]')).waitFor();
           await page.evaluate(() => window.scrollTo(0, 0));
@@ -270,7 +270,7 @@ for (const [width, height] of SIZES) {
     test('Compare: stepping with Next keeps the current rows of the changed panes above the bar', async ({
       page,
     }) => {
-      for (const mode of ['/protocol', '']) {
+      for (const mode of ['/protocol', '/architecture']) {
         await page.goto(`./#/compare/compare-rag-mcp/0${mode}`);
         await expect(page.locator('[data-presentation="list"][data-measured]')).toHaveCount(2);
         await page.evaluate(() => window.scrollTo(0, 0));
@@ -316,7 +316,7 @@ for (const [width, height] of SIZES) {
     });
 
     test('Compare: both panes use the step list and nothing scrolls sideways', async ({ page }) => {
-      for (const mode of ['', '/protocol']) {
+      for (const mode of ['/architecture', '/protocol']) {
         await page.goto(`./#/compare/compare-rag-mcp/0${mode}`);
         await expect(page.locator('[data-presentation="list"][data-measured]')).toHaveCount(2);
         const n = Number(
@@ -387,7 +387,7 @@ test.describe('at 360 × 800, Play without input', () => {
     });
   });
 
-  for (const mode of ['', '/protocol']) {
+  for (const mode of ['/architecture', '/protocol']) {
     test(`Compare${mode} keeps the changed panes' current rows above the bar at every step`, async ({
       page,
     }) => {
@@ -468,18 +468,20 @@ test.describe('at 390 × 844', () => {
     await expect(status).toHaveText(new RegExp(`^Step ${n} of ${n}`));
   });
 
-  test('the menu holds the scenario list, the view switch and the play speed', async ({ page }) => {
-    await page.goto('./#/rag/rag-query/10');
+  test('the menu holds the scenario list, the zoom control and the play speed', async ({
+    page,
+  }) => {
+    await page.goto('./#/rag/rag-query/10/architecture');
     await list(page).and(page.locator('[data-measured]')).waitFor();
     const menu = page.getByRole('button', { name: 'Menu' });
     // Closed, the menu hides its controls; the tabs and the statement stay visible.
-    await expect(page.getByRole('group', { name: 'View', exact: true })).toBeHidden();
+    await expect(page.getByRole('group', { name: 'Zoom', exact: true })).toBeHidden();
     await expect(page.getByRole('navigation', { name: 'Modules' })).toBeVisible();
     await expect(page.getByText('Everything here is simulated.')).toBeVisible();
     await menu.click();
     await expect(menu).toHaveAttribute('aria-expanded', 'true');
     const body = page.locator('#menu');
-    await expect(body.getByRole('group', { name: 'View', exact: true })).toBeVisible();
+    await expect(body.getByRole('group', { name: 'Zoom', exact: true })).toBeVisible();
     await expect(body.getByRole('combobox', { name: 'Play speed' })).toBeVisible();
     // Reset is in the bottom bar, not in the menu.
     await expect(body.getByRole('button', { name: 'Reset' })).toHaveCount(0);
@@ -489,7 +491,7 @@ test.describe('at 390 × 844', () => {
     await expect(
       page.getByRole('link', { name: 'Ingest and index documents', includeHidden: true }),
     ).toHaveCount(1);
-    // A change of view closes the menu, keeps the step and returns focus to the menu.
+    // A change of level closes the menu, keeps the step and returns focus to the menu.
     await body.getByRole('button', { name: 'Protocol' }).click();
     await expect(menu).toHaveAttribute('aria-expanded', 'false');
     await expect(menu).toBeFocused();
@@ -530,9 +532,9 @@ test.describe('at 390 × 844', () => {
   });
 
   test('architecture groups expand from the step list by touch and keyboard', async ({ page }) => {
-    await page.goto('./#/mcp/mcp-balance/14');
+    await page.goto('./#/mcp/mcp-balance/14/architecture');
     await list(page).and(page.locator('[data-measured]')).waitFor();
-    // The current group is open, its current row in view (02 modes.architecture_groups).
+    // The current group is open, its current row in view (02 zoom_levels.architecture_groups).
     const group = list(page).locator('[data-group="tool"]');
     await expect(group).toHaveAttribute('aria-expanded', 'true');
     await expect(list(page).locator('.phase--current .row[data-current]')).toBeInViewport();
@@ -554,7 +556,7 @@ test.describe('at 390 × 844', () => {
   test('the RAG projection takes its compact form: the question labelled, every point listed', async ({
     page,
   }) => {
-    await page.goto('./#/rag/rag-query/10');
+    await page.goto('./#/rag/rag-query/10/architecture');
     await list(page).and(page.locator('[data-measured]')).waitFor();
     const projection = page.locator('.retrieval-projection');
     await expect(projection.locator('.point-label')).toHaveText(['question']);

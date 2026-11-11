@@ -54,6 +54,8 @@ async function transportText(page: Page): Promise<string> {
 test('mcp-walkthrough: the balance trace plays end to end and is inspectable', async ({ page }) => {
   await open(page, '#/mcp');
   await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/0$/);
+  // Every event at Architecture; the Overview steps by stage (zoom-levels.spec.ts).
+  await page.getByRole('button', { name: 'Architecture', exact: true }).click();
   await playThrough(page);
   await expect(status(page)).toHaveText('Step 28 of 28 · Answer');
   await expect(inspector(page)).toContainText('Your current account balance is CHF 12,500.75.');

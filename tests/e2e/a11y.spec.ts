@@ -56,7 +56,7 @@ for (const size of WIDTHS) {
 
     for (const route of ROUTES) {
       for (const mode of ['architecture', 'protocol'] as const) {
-        const url = `./${route}${mode === 'protocol' ? '/protocol' : ''}`;
+        const url = `./${route}/${mode}`;
         test(`${url} has no serious or critical issues`, async ({ page }) => {
           await page.goto(url);
           await page.locator('[data-measured]').first().waitFor();

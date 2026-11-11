@@ -23,7 +23,7 @@ describe('current group', () => {
   });
 });
 
-describe('expansion as the cursor moves (02 modes.architecture_groups)', () => {
+describe('expansion as the cursor moves (02 zoom_levels.architecture_groups)', () => {
   it('opens the group the cursor enters and closes it when the cursor leaves', () => {
     const e = new Expansion();
     expect(at(e, 0)).toEqual([]);

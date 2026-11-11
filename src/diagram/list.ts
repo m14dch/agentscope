@@ -4,7 +4,7 @@
  * receiver, joined by a short arrow in the event's line encoding. Every text is escaped;
  * colours come from classes in src/styles/diagram.css only.
  */
-import type { Arrow, DiagramLayout, Group } from './model.ts';
+import type { Arrow, DiagramLayout, Group, StageBlock } from './model.ts';
 
 const esc = (text: string): string =>
   text.replace(
@@ -80,14 +80,27 @@ function renderSection(g: Group, names: Readonly<Record<string, string>>): strin
   return `<section class="${cls.join(' ')}" data-phase="${esc(g.phase.id)}"${current}><button type="button" class="phase-toggle" data-group="${esc(g.key)}" aria-expanded="${g.expanded}">${takeaway}<span class="phase-caption">${caption}</span></button>${g.expanded ? renderRows(g.arrows, names) : ''}</section>`;
 }
 
-/** The step list for a layout: rows in protocol mode, stacked groups in architecture mode. */
+/** A stage of the Overview: its sentence, then the parties its events involve. */
+function renderStage(s: StageBlock, count: number): string {
+  const cls = ['phase', 'stage-item'];
+  if (s.current) cls.push('phase--current');
+  const current = s.current ? ' data-current="" aria-current="step"' : '';
+  return `<li class="${cls.join(' ')}" data-stage="${esc(s.stage.id)}"${current}><span class="visually-hidden">Stage ${s.number} of ${count}: </span><span class="stage-text">${esc(s.stage.sentence)}</span><span class="stage-parties small muted">${esc(s.parties.join(' · '))}</span></li>`;
+}
+
+/**
+ * The step list for a layout: stages at the Overview, stacked groups at Architecture, rows at
+ * Protocol.
+ */
 export function renderList(
   layout: DiagramLayout,
   title: string,
   names: Readonly<Record<string, string>> = {},
 ): string {
-  const body = layout.groups.length
-    ? layout.groups.map((g) => renderSection(g, names)).join('')
-    : renderRows(layout.arrows, names);
+  const body = layout.stages.length
+    ? `<ol class="stages">${layout.stages.map((s) => renderStage(s, layout.stages.length)).join('')}</ol>`
+    : layout.groups.length
+      ? layout.groups.map((g) => renderSection(g, names)).join('')
+      : renderRows(layout.arrows, names);
   return `<div class="step-list" role="group" aria-label="${esc(title)}">${body}</div>`;
 }

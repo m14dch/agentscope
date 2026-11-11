@@ -54,12 +54,14 @@ test('compare-sync: Next keeps both panes on the same semantic phase, with the R
 }) => {
   await open(page, '#/compare');
   await expect(page).toHaveURL(/#\/compare\/compare-rag-mcp\/0$/);
+  // The Overview steps by stage (zoom-levels.spec.ts); every event is stepped at Architecture.
+  await page.getByRole('button', { name: 'Architecture', exact: true }).click();
   await expect(status(page)).toHaveText('Step 0 of 28');
   const next = page.getByRole('button', { name: 'Next' });
   for (let s = 1; s <= 28; s += 1) {
     await next.click();
     await expect(status(page)).toHaveText(new RegExp(`^Step ${s} of 28 · `));
-    await expect(page).toHaveURL(new RegExp(`#/compare/compare-rag-mcp/${s}$`));
+    await expect(page).toHaveURL(new RegExp(`#/compare/compare-rag-mcp/${s}/architecture$`));
     const phase = await sharedPhase(page);
     await expect(page.locator('.compare-phases [aria-current="step"]')).toHaveText(phase);
     expect(await paneSemantic(mcp(page), mcpPhases), `MCP at compare step ${s}`).toBe(phase);
@@ -84,7 +86,7 @@ test('compare-sync: Next keeps both panes on the same semantic phase, with the R
 test('compare-sync: stepping either pane moves the other to the same semantic phase', async ({
   page,
 }) => {
-  await open(page, '#/compare/compare-rag-mcp/16');
+  await open(page, '#/compare/compare-rag-mcp/16/architecture');
   // RAG has finished information acquisition while MCP continues.
   await expect(status(page)).toHaveText('Step 16 of 28 · Information acquisition');
   await expect(rag(page).locator('.compare-done')).toHaveText(
@@ -104,7 +106,7 @@ test('compare-sync: stepping either pane moves the other to the same semantic ph
   await expect(rag(page).locator('.compare-message')).toHaveText(
     'Index built earlier by rag-index.',
   );
-  await expect(page.locator('[aria-live="polite"].visually-hidden')).toHaveText(
+  await expect(page.locator('.compare-phase-line [aria-live="polite"]')).toHaveText(
     'Preparation. RAG: Index built earlier by rag-index. MCP step 4 of 28.',
   );
   // And forward to RAG's last retrieval step: MCP goes to the same offset of that phase.
@@ -112,14 +114,14 @@ test('compare-sync: stepping either pane moves the other to the same semantic ph
   await expect(status(page)).toHaveText('Step 14 of 28 · Information acquisition');
   await expect(mcp(page).locator('.compare-position p')).toContainText('Step 14 of 28');
   expect(await paneSemantic(mcp(page), mcpPhases)).toBe('Information acquisition');
-  await expect(page.locator('[aria-live="polite"].visually-hidden')).toHaveText(
+  await expect(page.locator('.compare-phase-line [aria-live="polite"]')).toHaveText(
     'Information acquisition. RAG step 6 of 10. MCP step 14 of 28.',
   );
-  await expect(page).toHaveURL(/#\/compare\/compare-rag-mcp\/14$/);
+  await expect(page).toHaveURL(/#\/compare\/compare-rag-mcp\/14\/architecture$/);
 });
 
-test('compare: shared controls, keys and the mode switch act on both panes', async ({ page }) => {
-  await open(page, '#/compare/compare-rag-mcp/9');
+test('compare: shared controls, keys and the zoom control act on both panes', async ({ page }) => {
+  await open(page, '#/compare/compare-rag-mcp/9/architecture');
   await page.locator('body').click({ position: { x: 5, y: 5 } });
   await page.keyboard.press('ArrowRight');
   await expect(status(page)).toHaveText('Step 10 of 28 · Information acquisition');
@@ -141,7 +143,7 @@ test('compare: shared controls, keys and the mode switch act on both panes', asy
   await page.getByRole('slider', { name: 'Compare step' }).fill('28');
   await expect(status(page)).toHaveText('Step 28 of 28 · Answer');
   // The live region stays quiet while playing and speaks once playback pauses.
-  const live = page.locator('[aria-live="polite"].visually-hidden');
+  const live = page.locator('.compare-phase-line [aria-live="polite"]');
   await page.getByRole('slider', { name: 'Compare step' }).fill('20');
   await expect(live).toContainText('MCP step 20 of 28.');
   await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
@@ -176,7 +178,7 @@ test('compare: panes side by side on desktop, stacked on tablet, no page-level h
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await open(page, '#/compare/compare-rag-mcp/14');
+  await open(page, '#/compare/compare-rag-mcp/14/architecture');
   let r = await box(rag(page));
   let m = await box(mcp(page));
   expect(m.x, 'MCP right of RAG').toBeGreaterThan(r.x + r.width - 1);
@@ -209,7 +211,7 @@ test('compare: panes side by side on desktop, stacked on tablet, no page-level h
 test('compare: focus moves to the heading when Compare is chosen from the tabs', async ({
   page,
 }) => {
-  await page.goto('./#/mcp/mcp-balance/0');
+  await page.goto('./#/mcp/mcp-balance/0/architecture');
   await page.locator('[data-measured] svg.diagram').waitFor();
   await page.getByRole('link', { name: 'Compare' }).press('Enter');
   await expect(page.locator('.lesson h2')).toBeFocused();

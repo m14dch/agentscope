@@ -11,7 +11,7 @@ const SCENARIOS = [
 /** The shell route for a scenario at a step, in either mode. */
 function route(id: string, step: number, mode: 'architecture' | 'protocol'): string {
   const tab = id.startsWith('mcp-') ? 'mcp' : id.startsWith('rag-') ? 'rag' : 'combined';
-  return `#/${tab}/${id}/${step}${mode === 'protocol' ? '/protocol' : ''}`;
+  return `#/${tab}/${id}/${step}/${mode}`;
 }
 
 async function open(page: Page, hash: string): Promise<void> {
@@ -88,7 +88,7 @@ test('switching mode keeps the cursor on the same step', async ({ page }) => {
   await expect(page.locator('[data-current]')).toHaveAttribute('data-index', '13');
   await page.getByRole('button', { name: 'Architecture' }).click();
   await expect(page.locator('.status').filter({ hasText: 'Step 14 of 28' })).toBeVisible();
-  // The current group, open with its current step (02 modes.architecture_groups).
+  // The current group, open with its current step (02 zoom_levels.architecture_groups).
   await expect(page.locator('[data-phase][data-current]')).toHaveAttribute('data-phase', 'tool');
   await expect(page.locator('.step[data-current]')).toHaveAttribute('data-index', '13');
   await page.getByRole('button', { name: 'Next' }).click();
@@ -129,7 +129,7 @@ test('groups expand and collapse with the keyboard, and stay open while stepping
 test('the current group stays expanded while stepping; one the learner collapsed stays closed until the cursor enters it again', async ({
   page,
 }) => {
-  // 02 modes.architecture_groups and modes.scrolling, at a laptop size where group frames are
+  // 02 zoom_levels.architecture_groups and zoom_levels.scrolling, at a laptop size where group frames are
   // wider than the region; instant scrolling, so each step's position is final.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -173,7 +173,7 @@ test('the current group stays expanded while stepping; one the learner collapsed
   }
   // mcp-balance: planning is steps 10-12, tool 13-16.
   await page.evaluate(() => {
-    location.hash = '#/mcp/mcp-balance/10';
+    location.hash = '#/mcp/mcp-balance/10/architecture';
   });
   const planning = page.locator('[data-group="planning"]');
   // On its caption: the frame's middle is covered by its expanded steps.

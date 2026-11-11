@@ -187,7 +187,7 @@ test('pages: the subpath build serves shell, assets, hash navigation and a base-
 
   // Offline reload of a deep link restores the same route from the cache.
   const reachedNetwork = await goOffline(context);
-  await page.goto('./#/rag/rag-query/3');
+  await page.goto('./#/rag/rag-query/3/architecture');
   await page.reload();
   await expect(page.locator('.status')).toContainText('Step 3 of ');
   await expect(simulated(page)).toContainText('Available offline.');

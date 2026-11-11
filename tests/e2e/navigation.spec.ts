@@ -21,7 +21,7 @@ async function snapshot(page: Page): Promise<string> {
 test('navigation: jump to the last step, step back, switch view, reset and replay deterministically', async ({
   page,
 }) => {
-  await open(page, '#/mcp/mcp-balance/0');
+  await open(page, '#/mcp/mcp-balance/0/architecture');
   await expect(status(page)).toHaveText('Step 0 of 28');
   await page.getByRole('slider', { name: 'Step' }).fill('28');
   await expect(status(page)).toHaveText('Step 28 of 28 · Answer');
@@ -58,21 +58,22 @@ test('a deep link restores tab, scenario, step and mode after reload', async ({ 
 });
 
 test('stepping replaces the history entry; changing scenario adds one', async ({ page }) => {
-  await open(page, '#/mcp/mcp-balance/2');
+  await open(page, '#/mcp/mcp-balance/2/architecture');
   await page.getByRole('link', { name: 'Combined' }).click();
   await page.locator('[data-measured] svg.diagram').waitFor();
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page).toHaveURL(/#\/combined\/combined-balance-explanation\/2$/);
+  // Combined opens at the Overview, where Next moves to the end of each stage.
+  await expect(page).toHaveURL(/#\/combined\/combined-balance-explanation\/10$/);
   await page.goBack();
-  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/2$/);
+  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/2\/architecture$/);
   await expect(status(page)).toContainText('Step 2 of 28');
 });
 
 test('keyboard: → next, ← previous, Space plays and pauses, with visible focus', async ({
   page,
 }) => {
-  await open(page, '#/mcp/mcp-balance/3');
+  await open(page, '#/mcp/mcp-balance/3/architecture');
   await page.locator('body').click({ position: { x: 5, y: 5 } });
   await page.keyboard.press('ArrowRight');
   await expect(status(page)).toContainText('Step 4 of 28');
@@ -92,7 +93,7 @@ test('keyboard: → next, ← previous, Space plays and pauses, with visible foc
 
 test('a prediction appears before its step and the step answers it', async ({ page }) => {
   // mcp-11 carries a prediction: at step 10, Next shows the prompt first.
-  await open(page, '#/mcp/mcp-balance/10');
+  await open(page, '#/mcp/mcp-balance/10/architecture');
   await page.getByRole('button', { name: 'Next' }).click();
   const prompt = page.locator('.prediction');
   await expect(prompt).toContainText('What will it return');
@@ -106,7 +107,7 @@ test('a prediction appears before its step and the step answers it', async ({ pa
 });
 
 test('play pauses at a prediction', async ({ page }) => {
-  await open(page, '#/mcp/mcp-balance/9');
+  await open(page, '#/mcp/mcp-balance/9/architecture');
   await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
   await page.getByRole('button', { name: 'Play' }).click();
   await expect(page.locator('.prediction')).toBeVisible({ timeout: 5000 });
@@ -120,11 +121,11 @@ test('only RAG offers a scenario picker: the question and the index it searches'
   page,
 }) => {
   // One scenario per use case (02 navigation.scenario_picker): MCP and Combined have none.
-  await open(page, '#/mcp/mcp-balance/0');
+  await open(page, '#/mcp/mcp-balance/0/architecture');
   await expect(page.locator('.picker')).toHaveCount(0);
-  await open(page, '#/combined/combined-balance-explanation/0');
+  await open(page, '#/combined/combined-balance-explanation/0/architecture');
   await expect(page.locator('.picker')).toHaveCount(0);
-  await open(page, '#/rag/rag-query/0');
+  await open(page, '#/rag/rag-query/0/architecture');
   await page.locator('.picker summary').click();
   await expect(page.locator('.picker li')).toHaveText([
     'Conditions for opening and keeping an account',
@@ -142,7 +143,7 @@ test('only RAG offers a scenario picker: the question and the index it searches'
 });
 
 test('an unknown scenario is named, with a way back', async ({ page }) => {
-  await page.goto('./#/rag/nope/3');
+  await page.goto('./#/rag/nope/3/architecture');
   await expect(page.getByRole('alert')).toHaveText('× Unknown scenario: nope. Go to RAG');
   await page.getByRole('link', { name: 'Go to RAG' }).click();
   await page.locator('[data-measured] svg.diagram').waitFor();
@@ -150,10 +151,10 @@ test('an unknown scenario is named, with a way back', async ({ page }) => {
 });
 
 test('each compare pane links its step to its own scenario', async ({ page }) => {
-  await page.goto('./#/compare/compare-rag-mcp/3');
+  await page.goto('./#/compare/compare-rag-mcp/3/architecture');
   await expect(page.getByRole('heading', { level: 2 })).toContainText('MCP fetches live data');
   await page.getByRole('link', { name: 'Inspect step 3 in MCP' }).click();
-  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/3$/);
+  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/3\/architecture$/);
 });
 
 test('the simulated statement is always visible', async ({ page }) => {
@@ -167,7 +168,7 @@ test('the simulated statement is always visible', async ({ page }) => {
 
 test('diagram and inspector sit side by side on desktop and stack on tablet', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await open(page, '#/mcp/mcp-balance/5');
+  await open(page, '#/mcp/mcp-balance/5/architecture');
   const diagram = page.getByRole('region', { name: /Sequence diagram/ });
   const inspector = page.getByRole('complementary', { name: 'Current step' });
   const box = async (l: typeof diagram) =>
@@ -191,7 +192,7 @@ test('the splitter resizes the inspector with the keyboard, within 20rem and 60%
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await open(page, '#/mcp/mcp-balance/5');
+  await open(page, '#/mcp/mcp-balance/5/architecture');
   const inspector = page.getByRole('complementary', { name: 'Current step' });
   const workspace = page.locator('.workspace');
   const width = async () => (await inspector.boundingBox())?.width ?? 0;
@@ -219,7 +220,7 @@ test('the control row: named icon buttons with their keys, one play speed, the t
   page,
 }) => {
   await page.clock.install();
-  await open(page, '#/mcp/mcp-balance/0');
+  await open(page, '#/mcp/mcp-balance/0/architecture');
   const controls = page.getByRole('group', { name: 'Playback' });
   const buttons = controls.getByRole('button');
   const expected = [
@@ -271,7 +272,7 @@ test('the control row: named icon buttons with their keys, one play speed, the t
 });
 
 test('Space during a prediction plays on, like the Play button', async ({ page }) => {
-  await open(page, '#/mcp/mcp-balance/10');
+  await open(page, '#/mcp/mcp-balance/10/architecture');
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.locator('.prediction')).toBeVisible();
   await page.locator('body').click({ position: { x: 5, y: 5 } });
@@ -283,7 +284,7 @@ test('Space during a prediction plays on, like the Play button', async ({ page }
 test('after choosing a tab or a scenario, focus moves to the new page heading', async ({
   page,
 }) => {
-  await open(page, '#/mcp/mcp-balance/0');
+  await open(page, '#/mcp/mcp-balance/0/architecture');
   await page.getByRole('link', { name: 'RAG' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('.lesson h2')).toBeFocused();

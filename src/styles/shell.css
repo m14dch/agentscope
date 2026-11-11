@@ -306,3 +306,19 @@
   text-decoration: underline dotted var(--color-ink-muted);
   text-underline-offset: 0.25em;
 }
+
+/* The zoom control (02 zoom_levels.control): as high as the playback buttons; each button keeps
+   the width of its bold label, so pressing one moves nothing. */
+.zoom button {
+  display: inline-grid;
+  height: calc(5 * var(--space-1));
+  align-items: center;
+}
+
+.zoom button::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--weight-strong);
+}

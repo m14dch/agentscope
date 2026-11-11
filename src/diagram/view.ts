@@ -1,10 +1,11 @@
 /**
- * Mounts the sequence diagram for one scenario and keeps it in step with a Player:
- * mode switching keeps the cursor, the group the cursor enters expands, groups expand or
- * collapse on click, Enter or Space, and the current step stays in view (02-ui-ux.yaml diagram, modes).
+ * Mounts the sequence diagram for one scenario and keeps it in step with a Player at a zoom
+ * level: the group the cursor enters expands, groups expand or collapse on click, Enter or Space,
+ * and the current step, group or stage stays in view (02-ui-ux.yaml diagram, zoom_levels).
  */
 import type { Player } from '../engine/player.ts';
-import { currentGroupKey, estimate, layout, type Measure, type Mode } from './model.ts';
+import { currentGroupKey, estimate, layout, type Level, type Measure } from './model.ts';
+import { stageAt, stageSpans, stageStops } from './zoom.ts';
 import { Expansion } from './expansion.ts';
 import { renderSvg } from './render.ts';
 import { renderList } from './list.ts';
@@ -12,7 +13,7 @@ import { phoneQuery } from '../app/phone.ts';
 
 export interface DiagramOptions {
   labels: Readonly<Record<string, string>>;
-  mode?: Mode;
+  level?: Level;
   /** Unique per page, for marker IDs. */
   id?: string;
   /** The region's name, for example "Sequence diagram"; its scrolling is appended. */
@@ -44,7 +45,7 @@ const reducedMotion = (): boolean =>
   typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export class DiagramView {
-  private viewMode: Mode;
+  private viewLevel: Level;
   private readonly expansion = new Expansion();
   private selected: ReadonlySet<number> = new Set();
   private held = false;
@@ -54,7 +55,7 @@ export class DiagramView {
   private readonly options: DiagramOptions;
   private measure: Measure = estimate;
   private destroyed = false;
-  /** Mode and cursor the region last scrolled to. */
+  /** Level and cursor the region last scrolled to. */
   private scrolledTo = '';
   /** Below 48rem the diagram is the step list (02 diagram.phone_list). */
   private readonly phone = phoneQuery();
@@ -67,7 +68,7 @@ export class DiagramView {
     this.root = root;
     this.player = player;
     this.options = options;
-    this.viewMode = options.mode ?? 'architecture';
+    this.viewLevel = options.level ?? 'overview';
     root.classList.add('diagram-scroller');
     root.tabIndex = 0;
     root.addEventListener('click', this.onClick);
@@ -88,14 +89,14 @@ export class DiagramView {
     this.render();
   }
 
-  get mode(): Mode {
-    return this.viewMode;
+  get level(): Level {
+    return this.viewLevel;
   }
 
-  /** Switches between architecture and protocol mode; the cursor stays where it is. */
-  setMode(mode: Mode): void {
-    if (mode === this.viewMode) return;
-    this.viewMode = mode;
+  /** Changes the zoom level; the caller moves the cursor (zoom.ts zoomCursor). */
+  setLevel(level: Level): void {
+    if (level === this.viewLevel) return;
+    this.viewLevel = level;
     this.render();
   }
 
@@ -144,19 +145,21 @@ export class DiagramView {
         ? (focused.closest<HTMLElement | SVGElement>('[data-group]')?.dataset['group'] ?? '')
         : undefined;
     const list = this.phone?.matches ?? false;
-    // The group the cursor enters expands; a waiting Compare pane has no current group.
-    this.expansion.follow(this.held ? undefined : currentGroupKey(scenario, this.player.cursor));
+    // The group the cursor enters expands; a waiting Compare pane has no current group, and the
+    // Overview none at all, so zooming in enters the current group again.
+    const architecture = this.viewLevel === 'architecture' && !this.held;
+    this.expansion.follow(architecture ? currentGroupKey(scenario, this.player.cursor) : undefined);
     const model = layout({
       scenario,
       labels: this.options.labels,
-      mode: this.viewMode,
+      level: this.viewLevel,
       cursor: this.player.cursor,
       expanded: this.expansion.expanded,
       measure: this.measure,
       selected: this.selected,
       held: this.held,
     });
-    const title = `${scenario.title}, ${this.viewMode} view, step ${this.player.cursor} of ${this.player.playback.length}`;
+    const title = this.title(scenario);
     this.root.innerHTML = list
       ? renderList(model, title, this.options.labels)
       : renderSvg(model, title, this.options.id ?? 'diagram', this.options.labels);
@@ -178,26 +181,54 @@ export class DiagramView {
       // A group that no longer exists hands focus to the region, not to the page.
       (group ?? this.root).focus({ preventScroll: true });
     }
-    const position = `${this.viewMode}:${this.player.cursor}`;
+    const position = `${this.viewLevel}:${this.player.cursor}`;
     if (position !== this.scrolledTo) {
       this.scrolledTo = position;
       this.scrollToCurrent();
     }
   }
 
-  /** Scrolls the region (never the page) so the current step or group is in view. */
+  /** The diagram's name: the scenario, the level and the position at that level. */
+  private title(scenario: Parameters<typeof layout>[0]['scenario']): string {
+    const k = this.player.cursor;
+    if (this.viewLevel === 'overview') {
+      const spans = stageSpans(scenario.overview, scenario.events);
+      const stops = stageStops(spans);
+      const stage = stageAt(spans, k);
+      const where = stage
+        ? `stage ${stops.indexOf(stage.last)} of ${stops.length - 1}`
+        : 'before the first stage';
+      return `${scenario.title}, overview, ${where}`;
+    }
+    return `${scenario.title}, ${this.viewLevel} view, step ${k} of ${this.player.playback.length}`;
+  }
+
+  /** Scrolls the region (never the page) so the current step, group or stage is in view. */
   private scrollToCurrent(): void {
     // The innermost current element: the step inside an expanded current group (it follows
-    // the group in document order), else the collapsed group or the protocol step. A group
-    // frame can be wider than the region, which would leave its step out of view.
+    // the group in document order), else the collapsed group, the stage or the protocol step. A
+    // group frame can be wider than the region, which would leave its step out of view.
     const all = this.root.querySelectorAll<Element>('[data-current]');
     const current = all[all.length - 1];
     if (!current) return;
     const region = this.root.getBoundingClientRect();
-    const box = current.getBoundingClientRect();
     const margin = 24;
     // The pinned participant names cover the top of the region.
     const header = this.headerHeight();
+    const step = current.getBoundingClientRect();
+    // A step inside an expanded group: show the group's start too when both fit (issue 51).
+    const group = all.length > 1 ? all[0]?.getBoundingClientRect() : undefined;
+    const box =
+      group && step.bottom - group.top <= region.height - header - 2 * margin
+        ? {
+            top: group.top,
+            bottom: step.bottom,
+            height: step.bottom - group.top,
+            left: step.left,
+            right: step.right,
+            width: step.width,
+          }
+        : step;
     let top = this.root.scrollTop;
     let left = this.root.scrollLeft;
     // Vertically: reveal the end only if the start stays in view; otherwise show the start.

@@ -6,10 +6,20 @@
 import { type Clock, Player, type Speed, STEP_INTERVAL_MS } from '../engine/player.ts';
 import { ControlRow } from '../app/controls.ts';
 import { DiagramView } from '../diagram/view.ts';
-import { type Mode, operationLabel } from '../diagram/model.ts';
+import { operationLabel } from '../diagram/model.ts';
+import {
+  type Level,
+  stageAt,
+  stageSpans,
+  stageStops,
+  type StageSpan,
+  zoomCursor,
+  zoomed,
+} from '../diagram/zoom.ts';
+import { levelSuffix } from '../app/routes.ts';
 import { createPlayback } from '../rag/bundled.ts';
 import type { Compare, Scenario } from '../scenarios/types.ts';
-import { CompareTimeline, type PaneAt, type PaneInput } from './timeline.ts';
+import { CompareTimeline, type PaneAt, type PaneInput, stageInput } from './timeline.ts';
 import { isPhone, type PageScroll, stepDelta } from '../app/phone.ts';
 import '../styles/compare.css';
 
@@ -29,9 +39,9 @@ export interface CompareOptions {
   panes: readonly [PaneSpec, PaneSpec];
   labels: Readonly<Record<string, string>>;
   step: number;
-  mode: Mode;
-  /** Called after every change of position or mode, to write the address. */
-  onChange: (step: number, mode: Mode) => void;
+  level: Level;
+  /** Called after every change of position or level, to write the address. */
+  onChange: (step: number, level: Level) => void;
   clock?: Clock;
   /** Tells the learner's scrolling from the app's jumps (02 layout.phone.stepping_area). */
   pageScroll?: PageScroll;
@@ -57,19 +67,13 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function button(
-  label: string,
-  onClick: () => void,
-  props: Partial<Record<string, string>> = {},
-): HTMLButtonElement {
-  const b = el('button', { type: 'button', ...props }, label);
-  b.addEventListener('click', onClick);
-  return b;
-}
-
 interface Pane {
   spec: PaneSpec;
   player: Player;
+  /** The stages with the spans of their events; Compare plays the defaults, so they are fixed. */
+  spans: StageSpan[];
+  /** Where the pane rests at the Overview: 0 and the end of each stage. */
+  stops: number[];
   view: DiagramView;
   slider: HTMLInputElement;
   position: HTMLElement;
@@ -79,9 +83,10 @@ interface Pane {
 }
 
 export class CompareView {
-  readonly timeline: CompareTimeline;
-  /** The architecture/protocol switch, placed in the top bar by the shell. */
-  readonly modeSwitch: HTMLElement;
+  /** The timeline of events, for Architecture and Protocol. */
+  private readonly events: CompareTimeline;
+  /** The timeline of stages, for the Overview (02 compare_view.timeline). */
+  private readonly stages: CompareTimeline;
   /** The shared control row, which the shell rearranges on phones (02 layout.phone.controls). */
   readonly controls: ControlRow;
   private readonly options: CompareOptions;
@@ -91,12 +96,12 @@ export class CompareView {
   private readonly phaseItems = new Map<string, HTMLElement>();
   private readonly announcer: HTMLElement;
   private position: number;
-  private mode: Mode;
+  private level: Level;
   private playing = false;
   private rate: Speed = 1;
   private timer: unknown;
   /**
-   * The position last announced, so a mode switch, a repeated render or a pause where the
+   * The position last announced, so a change of level, a repeated render or a pause where the
    * position was already announced stays quiet.
    */
   private announced: number;
@@ -108,25 +113,19 @@ export class CompareView {
   constructor(root: HTMLElement, options: CompareOptions) {
     this.options = options;
     this.clock = options.clock ?? browserClock;
-    this.mode = options.mode;
+    this.level = options.level;
     const { compare, phases, panes } = options;
     this.phaseLabels = new Map(phases.map((p) => [p.id, p.label]));
     this.panes = [this.pane(panes[0], 0), this.pane(panes[1], 1)];
-    this.timeline = new CompareTimeline(
-      phases.map((p) => p.id),
-      [this.input(this.panes[0]), this.input(this.panes[1])],
-    );
+    const ids = phases.map((p) => p.id);
+    const inputs = [this.input(this.panes[0]), this.input(this.panes[1])] as const;
+    this.events = new CompareTimeline(ids, inputs);
+    this.stages = new CompareTimeline(ids, [
+      stageInput(inputs[0], this.panes[0].spans),
+      stageInput(inputs[1], this.panes[1].spans),
+    ]);
     this.position = this.timeline.clamp(options.step);
     this.announced = this.position;
-
-    this.modeSwitch = el('div', { class: 'segmented', role: 'group', 'aria-label': 'View' });
-    for (const mode of ['architecture', 'protocol'] as const) {
-      const b = button(mode === 'architecture' ? 'Architecture' : 'Protocol', () =>
-        this.setMode(mode),
-      );
-      b.dataset['mode'] = mode;
-      this.modeSwitch.append(b);
-    }
 
     // The shared control row (02 compare_view.controls, controls.row).
     this.controls = new ControlRow({
@@ -139,9 +138,11 @@ export class CompareView {
       next: () => this.next(),
       speed: (speed) => this.setSpeed(speed),
       jump: (step) => this.act(() => this.navigate(step)),
+      zoom: (level) => this.setLevel(level),
     });
-    const steps = this.timeline.length;
+    const steps = this.events.length;
     this.controls.reserve(phases.map((p) => `Step ${steps} of ${steps} · ${p.label}`));
+    for (const pane of this.panes) pane.view.setLevel(this.level);
     this.bar = this.controls.buttons;
     const phaseList = el('ol', { class: 'compare-phases small', 'aria-label': 'Semantic phases' });
     for (const phase of phases) {
@@ -181,15 +182,23 @@ export class CompareView {
     return this.position;
   }
 
-  get viewMode(): Mode {
-    return this.mode;
+  /** The shared timeline at the current level. */
+  get timeline(): CompareTimeline {
+    return this.level === 'overview' ? this.stages : this.events;
   }
 
-  /** Follows a step and mode read from the address. */
-  follow(step: number, mode: Mode): void {
+  /** Follows a step and level read from the address. */
+  follow(step: number, level: Level): void {
+    this.level = level;
+    for (const pane of this.panes) pane.view.setLevel(level);
     this.position = this.timeline.clamp(step);
-    this.setMode(mode);
     this.render();
+  }
+
+  /** Zooms in (+1) or out (-1) from the current level, if there is a level there. */
+  zoomBy(direction: 1 | -1): void {
+    const level = zoomed(this.level, direction);
+    if (level) this.setLevel(level);
   }
 
   next(): void {
@@ -268,11 +277,43 @@ export class CompareView {
     this.render();
   }
 
-  setMode(mode: Mode): void {
-    if (mode === this.mode) return;
-    this.mode = mode;
-    for (const pane of this.panes) pane.view.setMode(mode);
-    this.render();
+  /**
+   * Changes the zoom level of both panes, keeping the place of the first pane with a step in the
+   * current semantic phase; the other follows to the same phase (02 compare_view.defaults).
+   */
+  setLevel(level: Level): void {
+    if (level === this.level) return;
+    const from = this.level;
+    this.act(() => {
+      const step = this.timeline.at(this.position);
+      const side = step.panes.findIndex((p) => p.status === 'stepping' || p.status === 'done');
+      this.level = level;
+      for (const pane of this.panes) pane.view.setLevel(level);
+      if (side === 0 || side === 1) {
+        const pane = this.panes[side];
+        const cursor = zoomCursor(
+          pane.spans,
+          this.cursorOf(pane, from, step.panes[side].cursor),
+          from,
+          level,
+        );
+        // On the stage timeline a pane's cursor counts stages.
+        const at = level === 'overview' ? pane.stops.indexOf(cursor) : cursor;
+        this.position = this.timeline.stepOf(side, at);
+      } else this.position = 0;
+      if (this.playing) {
+        if (this.position >= this.timeline.length) this.stop();
+        else this.schedule();
+      }
+      this.render();
+      const where = this.controls.status.textContent ?? '';
+      this.controls.announce(level, where);
+    });
+  }
+
+  /** A pane's event cursor for its position on the timeline of `level`. */
+  private cursorOf(pane: Pane, level: Level, at: number): number {
+    return level === 'overview' ? (pane.stops[at] ?? 0) : at;
   }
 
   dispose(): void {
@@ -322,6 +363,7 @@ export class CompareView {
   private pane(spec: PaneSpec, side: 0 | 1): Pane {
     const { scenario, label } = spec;
     const player = new Player(createPlayback(scenario));
+    const spans = stageSpans(scenario.overview, player.playback.events);
     const slider = el('input', {
       type: 'range',
       min: '0',
@@ -336,7 +378,7 @@ export class CompareView {
     const diagram = el('div', { class: 'diagram-pane', role: 'region' });
     const view = new DiagramView(diagram, player, {
       labels: this.options.labels,
-      mode: this.mode,
+      level: this.level,
       name: `${label} sequence diagram`,
       id: `compare-${side === 0 ? 'left' : 'right'}`,
     });
@@ -350,7 +392,8 @@ export class CompareView {
       diagram,
       el('p', {}, inspect),
     );
-    return { spec, player, view, slider, position, message, inspect, root };
+    const stops = stageStops(spans);
+    return { spec, player, spans, stops, view, slider, position, message, inspect, root };
   }
 
   private phaseLabel(id: string | undefined): string {
@@ -364,6 +407,12 @@ export class CompareView {
   private paneWhere(pane: Pane, at: PaneAt, semantic: string | undefined): string {
     const { player, spec } = pane;
     const k = player.cursor;
+    if (this.level === 'overview') {
+      const m = pane.stops.length - 1;
+      return at.status === 'placeholder'
+        ? `No stage in ${this.phaseLabel(semantic)} · ${at.cursor} of ${m} played`
+        : `Stage ${at.cursor} of ${m}`;
+    }
     if (at.status === 'placeholder') {
       return `No step in ${this.phaseLabel(semantic)} · ${k} of ${player.playback.length} played`;
     }
@@ -389,13 +438,11 @@ export class CompareView {
     if (at.status === 'placeholder') {
       return [el('p', { class: 'message' }, this.placeholder(scenario.id, phase))];
     }
-    const event = pane.player.playback.event(at.cursor);
+    const cursor = pane.player.cursor;
+    const event = pane.player.playback.event(cursor);
     if (!event) return [];
-    const labels = this.options.labels;
-    const from = labels[event.sender] ?? event.sender;
-    const to = labels[event.receiver] ?? event.receiver;
-    return [
-      ...(at.status === 'done'
+    const done =
+      at.status === 'done'
         ? [
             el(
               'p',
@@ -403,7 +450,17 @@ export class CompareView {
               `Done with ${this.phaseLabel(phase).toLowerCase()}; ${other.spec.label} continues.`,
             ),
           ]
-        : []),
+        : [];
+    // The Overview names the stage, not the event (02 compare_view.pane).
+    if (this.level === 'overview') {
+      const stage = stageAt(pane.spans, cursor);
+      return [...done, el('p', { class: 'message' }, stage?.stage.sentence ?? '')];
+    }
+    const labels = this.options.labels;
+    const from = labels[event.sender] ?? event.sender;
+    const to = labels[event.receiver] ?? event.receiver;
+    return [
+      ...done,
       el('p', { class: 'message' }, event.explanation),
       el('p', { class: 'small muted' }, `${from} → ${to} · ${operationLabel(event)}`),
     ];
@@ -426,30 +483,34 @@ export class CompareView {
       if (id === step.phase) item.setAttribute('aria-current', 'step');
       else item.removeAttribute('aria-current');
     }
-    for (const b of this.modeSwitch.querySelectorAll<HTMLButtonElement>('button')) {
-      b.setAttribute('aria-pressed', String(b.dataset['mode'] === this.mode));
-    }
+    this.controls.setLevel(this.level);
     const announcements: string[] = [];
     for (const side of [0, 1] as const) {
       const pane = this.panes[side];
       const at = step.panes[side];
+      const cursor = this.cursorOf(pane, this.level, at.cursor);
       pane.view.setHeld(at.status === 'placeholder');
-      pane.player.jump(at.cursor);
+      pane.player.jump(cursor);
       const paneWhere = this.paneWhere(pane, at, step.phase);
       pane.position.textContent = paneWhere;
+      // At the Overview a pane's slider runs over its stages.
+      pane.slider.max = String(
+        this.level === 'overview' ? pane.stops.length - 1 : pane.player.playback.length,
+      );
       pane.slider.value = String(at.cursor);
       pane.slider.setAttribute('aria-valuetext', paneWhere);
       pane.root.dataset['status'] = at.status;
       const other = this.panes[side === 0 ? 1 : 0];
       pane.message.replaceChildren(...this.paneMessage(pane, at, other, step.phase));
-      const route = `#/${pane.spec.tab}/${pane.spec.scenario.id}/${at.cursor}${this.mode === 'protocol' ? '/protocol' : ''}`;
+      const route = `#/${pane.spec.tab}/${pane.spec.scenario.id}/${cursor}${levelSuffix(this.level)}`;
       pane.inspect.href = route;
-      pane.inspect.textContent = `Inspect step ${at.cursor} in ${pane.spec.label}`;
-      const n = pane.player.playback.length;
+      pane.inspect.textContent = `Inspect step ${cursor} in ${pane.spec.label}`;
+      const overview = this.level === 'overview';
+      const n = overview ? pane.stops.length - 1 : pane.player.playback.length;
       announcements.push(
         at.status === 'placeholder'
           ? `${pane.spec.label}: ${this.placeholder(pane.spec.scenario.id, step.phase)}`
-          : `${pane.spec.label} step ${at.cursor} of ${n}${at.status === 'done' ? ', done with this phase' : ''}.`,
+          : `${pane.spec.label} ${overview ? 'stage' : 'step'} ${at.cursor} of ${n}${at.status === 'done' ? ', done with this phase' : ''}.`,
       );
     }
     // Quiet while playing; the position is announced once playback pauses or ends, and after
@@ -472,6 +533,6 @@ export class CompareView {
         if (!this.options.pageScroll?.userScrolled) this.keepInView(changed);
       }
     }
-    this.options.onChange(this.position, this.mode);
+    this.options.onChange(this.position, this.level);
   }
 }

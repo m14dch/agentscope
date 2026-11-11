@@ -216,7 +216,7 @@ for (const [width, height] of [
     test.use({ viewport: { width, height } });
 
     for (const [tab, route] of TABS) {
-      for (const mode of ['', '/protocol']) {
+      for (const mode of ['/architecture', '/protocol']) {
         test(`${tab}${mode}: Tab reaches every control with a visible focus, and keys operate them`, async ({
           page,
         }) => {
@@ -274,7 +274,7 @@ for (const [width, height] of [
           }
 
           // Enter expands a diagram group (architecture mode).
-          if (mode === '') {
+          if (mode === '/architecture') {
             await page.reload();
             await ready(page);
             await tabTo(page, '[data-group][aria-expanded="false"]');
@@ -302,7 +302,7 @@ for (const [width, height] of [
           // The mode switch: Enter on the other mode's button switches the view.
           await page.reload();
           await ready(page);
-          const other = mode === '' ? 'Protocol' : 'Architecture';
+          const other = mode === '/architecture' ? 'Protocol' : 'Architecture';
           await tabTo(page, 'button', other);
           await page.keyboard.press('Enter');
           await expect(page.getByRole('button', { name: other, exact: true })).toHaveAttribute(

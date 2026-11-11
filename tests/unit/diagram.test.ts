@@ -3,7 +3,7 @@ import {
   estimate,
   layout,
   type DiagramLayout,
-  type Mode,
+  type Level,
   operationLabel,
   SIZES,
   wrap,
@@ -25,10 +25,10 @@ function scenario(id: string): Scenario {
 
 const build = (
   scn: Scenario,
-  mode: Mode,
+  level: Level,
   cursor: number,
   expanded: Iterable<string> = [],
-): DiagramLayout => layout({ scenario: scn, labels, mode, cursor, expanded: new Set(expanded) });
+): DiagramLayout => layout({ scenario: scn, labels, level, cursor, expanded: new Set(expanded) });
 
 describe('labels', () => {
   const events = scenario('mcp-balance').events;

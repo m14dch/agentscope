@@ -19,7 +19,7 @@ test('the header shows the light wordmark as the level-1 heading, linked to the 
   page,
 }) => {
   // RAG has the scenario picker, the widest header (02 navigation.scenario_picker).
-  await page.goto('./#/rag/rag-query/3');
+  await page.goto('./#/rag/rag-query/3/architecture');
   const heading = page.getByRole('heading', { level: 1 });
   await expect(heading).toHaveAccessibleName('AgentScope');
   await expect(heading.getByRole('link', { name: 'AgentScope' })).toHaveAttribute('href', '#/');
@@ -40,7 +40,7 @@ test('the header shows the light wordmark as the level-1 heading, linked to the 
   for (const other of [
     page.getByRole('navigation', { name: 'Modules' }),
     page.locator('.picker'),
-    page.getByRole('group', { name: 'View', exact: true }),
+    page.getByRole('group', { name: 'Zoom', exact: true }),
     page.locator('.simulated'),
   ]) {
     const b = await other.boundingBox();
