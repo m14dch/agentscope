@@ -602,18 +602,28 @@ test('from 48rem the diagram and the controls are unchanged', async ({ page }) =
   expect(await controls.evaluate((e) => getComputedStyle(e).position)).toBe('static');
   const speed = page.getByRole('combobox', { name: 'Play speed' });
   await expect(page.locator('.control-row .speed')).toContainText('Play speed');
-  // Narrowing to a phone moves the buttons into the bar with the position line, and the
-  // speed into the menu; the slider stays in the row. Widening puts them back in place.
+  // Narrowing to a phone moves the position line and the slider into the bar with the
+  // buttons, and the speed into the menu. Widening puts them back in place.
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(list(page)).toBeVisible();
   await expect(controls.getByRole('button')).toHaveCount(4);
   await expect(controls.locator('.status')).toHaveText(/^Step 14 of 28/);
   await expect(page.locator('#menu .speed')).toHaveCount(1);
-  await expect(page.locator('.control-row .timeline input')).toHaveCount(1);
+  await expect(controls.getByRole('slider', { name: 'Step', exact: true })).toBeVisible();
+  // The slider and the position line sit above the buttons, inside the bar.
+  const sliderBox = await controls.getByRole('slider').boundingBox();
+  const buttonBox = await controls.getByRole('button').first().boundingBox();
+  expect((sliderBox?.y ?? 0) + (sliderBox?.height ?? 0)).toBeLessThanOrEqual(buttonBox?.y ?? 0);
+  // A focused button's name shows above the whole bar, covering neither line nor slider.
+  await controls.getByRole('button', { name: 'Next step' }).focus();
+  const label = await controls.locator('[data-icon="next"] .control-label').boundingBox();
+  const barBox = await controls.boundingBox();
+  expect((label?.y ?? 0) + (label?.height ?? 0)).toBeLessThanOrEqual((barBox?.y ?? 0) + 0.5);
   await page.setViewportSize({ width: 768, height: 1000 });
   await expect(page.locator('svg.diagram')).toBeVisible();
   await expect(controls.getByRole('button')).toHaveCount(4);
   await expect(page.locator('.control-row .speed')).toContainText('Play speed');
   await expect(speed).toBeVisible();
   await expect(page.locator('.control-row .timeline .status')).toHaveText(/^Step 14 of 28/);
+  await expect(page.locator('.control-row .timeline input')).toHaveCount(1);
 });

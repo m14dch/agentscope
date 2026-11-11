@@ -1,7 +1,8 @@
 /**
  * App shell (02-ui-ux.yaml navigation, layout, controls, learning): one quiet frame with
- * tabs, the scenario picker, the mode switch, the learning question, the playback controls,
- * the diagram beside the step's message, and the step timeline.
+ * tabs, the scenario picker, the mode switch, the learning question,
+ * the control row (playback buttons, play speed and step timeline), and the diagram beside
+ * the step's message.
  */
 import { Player } from '../engine/player.ts';
 import { ControlRow } from './controls.ts';
@@ -472,11 +473,12 @@ export class Shell {
   }
 
   /**
-   * On phones the playback buttons become the bottom bar with the position line, and the play
-   * speed moves into the menu; the slider stays in the row's place (02 layout.phone.controls).
+   * On phones the playback buttons become the bottom bar with the position line and the step
+   * slider, and the play speed moves into the menu (02 layout.phone.controls).
    */
   private toPhoneControls(row: ControlRow): void {
-    relocate([row.status], row.buttons, (this.headerListeners ??= new AbortController()).signal);
+    const signal = (this.headerListeners ??= new AbortController()).signal;
+    relocate([row.status, row.slider], row.buttons, signal);
     this.toMenu(undefined, [row.speed]);
   }
 

@@ -10,8 +10,8 @@
 
 @media (max-width: 47.99rem) {
   :root {
-    /* The bottom bar's height: the position line, a gap, the buttons and the padding. */
-    --bar-space: calc(var(--leading-small) + 44px + 3 * var(--space-1));
+    /* The bottom bar's height: the position line, the slider, the buttons, gaps and padding. */
+    --bar-space: calc(var(--leading-small) + 2 * 44px + 4 * var(--space-1));
     /* Focused elements scroll clear of the bar. */
     scroll-padding-bottom: calc(
       var(--bar-space) + var(--space-1) + env(safe-area-inset-bottom, 0px)
@@ -136,8 +136,8 @@
     margin-top: 0;
   }
 
-  /* The bottom bar: the position, then Reset, Previous step, Play or Pause and Next step in
-     equal widths (02 layout.phone.controls). */
+  /* The bottom bar: the position, the step slider, then Reset, Previous step, Play or Pause
+     and Next step in equal widths (02 layout.phone.controls). */
   .controls {
     position: fixed;
     z-index: 2;
@@ -154,30 +154,39 @@
     border-top: var(--line-hair) solid var(--color-rule);
   }
 
-  .controls > .status {
+  .controls > .status,
+  .controls > input {
     order: -1;
     grid-column: 1 / -1;
+    width: 100%;
     margin: 0;
   }
 
+  /* The focused button's name shows above the whole bar, clear of the position line. */
   .controls .icon-button {
+    position: static;
     width: auto;
   }
 
-  /* At the screen's bottom edge the focused button's name shows above it. */
+  .controls .icon-button .control-label {
+    left: var(--page-margin);
+  }
+
+  .controls .icon-button:last-child .control-label {
+    left: auto;
+    right: var(--page-margin);
+  }
+
   .controls .icon-button:focus-visible .control-label,
   .controls .icon-button:hover .control-label {
     top: auto;
     bottom: calc(100% + var(--space-1) / 2);
   }
 
-  /* What stays of the control row in the page: the step slider, alone at full width. */
+  /* Everything of the control row is in the bar or the menu; nothing stays in the page. */
   .control-row {
     display: block;
-  }
-
-  .control-row .timeline input {
-    width: 100%;
+    margin: 0;
   }
 
   /* Touch targets of at least 44 × 44 px, except controls inside a sentence or code. */

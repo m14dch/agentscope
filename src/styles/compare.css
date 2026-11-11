@@ -1,5 +1,5 @@
 /* Compare view (02-ui-ux.yaml compare_view): two panes in sync, then the aspects. */
-.compare-timeline {
+.compare-phase-line {
   margin-bottom: var(--space-3);
 }
 

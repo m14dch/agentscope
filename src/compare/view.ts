@@ -150,7 +150,8 @@ export class CompareView {
       phaseList.append(item);
     }
     this.announcer = el('div', { class: 'visually-hidden', 'aria-live': 'polite' });
-    const timeline = el('div', { class: 'compare-timeline' }, phaseList, this.announcer);
+    // The semantic phase labels below the control row (02 compare_view.phase_line).
+    const phaseLine = el('div', { class: 'compare-phase-line' }, phaseList, this.announcer);
 
     const aspects = el(
       'section',
@@ -169,7 +170,7 @@ export class CompareView {
     root.replaceChildren(
       el('section', { class: 'lesson' }, el('h2', { tabindex: '-1' }, compare.headline)),
       this.controls.root,
-      timeline,
+      phaseLine,
       el('div', { class: 'compare-panes' }, ...this.panes.map((p) => p.root)),
       aspects,
     );

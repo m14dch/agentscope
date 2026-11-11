@@ -250,12 +250,20 @@ test('the control row: named icon buttons with their keys, one play speed, the t
   const speed = page.getByRole('combobox', { name: 'Play speed' });
   await expect(speed).toHaveValue('1');
   await expect(speed.locator('option')).toHaveText(['0.5×', '1×', '2×', '4×']);
+  // The arrow keys on the menu change the speed and do not step (controls.keyboard_scope).
+  await speed.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(speed).toHaveValue('2');
+  await expect(status(page)).toHaveText('Step 0 of 28');
   await speed.selectOption('4');
   await buttons.nth(2).click();
   await expect(buttons.nth(2)).toHaveAccessibleName('Pause');
   await page.clock.runFor(400);
   await expect(status(page)).toHaveText(/^Step 1 of 28/);
-  await page.clock.runFor(375);
+  // The next step comes at 750 ms, not before.
+  await page.clock.runFor(340);
+  await expect(status(page)).toHaveText(/^Step 1 of 28/);
+  await page.clock.runFor(20);
   await expect(status(page)).toHaveText(/^Step 2 of 28/);
   await buttons.nth(0).click();
   await expect(status(page)).toHaveText('Step 0 of 28');
