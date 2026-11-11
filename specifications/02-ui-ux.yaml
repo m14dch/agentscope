@@ -280,7 +280,9 @@ diagram:
     self_arrows: An event whose sender is its receiver loops to the right of its lifeline,
       with the label to the right of the loop.
     participant_labels: Registry labels at the top of each lifeline, wrapped to the lifeline
-      spacing.
+      spacing. While the diagram region scrolls vertically they stay at its top on a paper band
+      that hides what passes beneath, so every lifeline stays named; they scroll horizontally
+      with their lifelines, and the current step is scrolled clear of them.
   visibility:
     past: line keeps its kind's style; label in ink-muted
     current: emphasized
