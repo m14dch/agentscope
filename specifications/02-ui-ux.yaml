@@ -282,7 +282,8 @@ diagram:
     participant_labels: Registry labels at the top of each lifeline, wrapped to the lifeline
       spacing. While the diagram region scrolls vertically they stay at its top on a paper band
       that hides what passes beneath, so every lifeline stays named; they scroll horizontally
-      with their lifelines, and the current step is scrolled clear of them.
+      with their lifelines, and the current step is scrolled clear of them. They come before
+      the diagram in reading order, so assistive technology meets them before the steps.
   visibility:
     past: line keeps its kind's style; label in ink-muted
     current: emphasized
@@ -333,12 +334,15 @@ modes:
     reached events include an error adds × and the error kind to its caption, in the error
     colour. A group expands or collapses on click, Enter or Space; expanded, it shows its
     events up to the cursor with protocol-mode styling. Expansion is kept while the learner
-    steps through the scenario.'
+    steps through the scenario. Lifelines pass under a group''s takeaway and caption, not
+    through them.'
   scrolling: Only a cursor change or a mode switch scrolls, and only the diagram's own
     scroll region, never the page (on phones the page also scrolls to keep the stepping area
     in view, layout.phone.stepping_area); toggling a group or laying out again keeps the scroll
-    position. Keyboard focus stays on the same group or region across steps. Arrow keys
-    scroll the diagram region while it has focus.
+    position. It scrolls only as far as needed to bring the current step or group into view,
+    horizontally never past its left edge, so an arrow that fits keeps both its sender and
+    its receiver in view. Keyboard focus stays on the same group or region across steps. Arrow
+    keys scroll the diagram region while it has focus.
   protocol: 'Technical level: show all individual events with exact logical messages;
     the inspector holds payloads, boundaries and errors.'
   default_mode: architecture
