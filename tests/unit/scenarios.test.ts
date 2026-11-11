@@ -503,6 +503,21 @@ describe('bundled registry', () => {
     );
   });
 
+  it('labels every final model answer as simulated (02 learning.simulated_behaviour)', () => {
+    // 08 definition_of_done: no fictional model output represented as real inference.
+    const answers = Object.values(loadRegistry()).flatMap((s) =>
+      s.events.filter(
+        (e) =>
+          e.protocol === 'LLM_API' &&
+          e.message_type === 'RESPONSE' &&
+          /answer$/i.test(e.operation) &&
+          e.sender !== 'agent',
+      ),
+    );
+    expect(answers.length).toBeGreaterThanOrEqual(13);
+    for (const e of answers) expect(e.explanation, e.id).toMatch(/^Simulated model output/);
+  });
+
   it('expands the Combined variant from the composed events (03 composition_format.variants)', () => {
     const registry = loadRegistry();
     const base = registry['combined-balance-explanation'] as Scenario;
