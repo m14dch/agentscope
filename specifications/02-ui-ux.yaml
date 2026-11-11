@@ -365,11 +365,13 @@ zoom_levels:
     names, step numbers or payloads. The inspector shows the current stage''s sentence as its message
     line (before the first stage, the scenario''s question) and no step details; the parameters, the
     prediction prompts and the panels below the workspace (model context, ingestion, retrieval, the
-    Combined answer) appear from Architecture on. The learning question heads the page at every level;
-    the headline, which states the message the stages tell, is shown at the Overview only.'
+    Combined answer) appear from Architecture on. The learning question heads the page at every level.
+    The headline names the mechanism and its protocol (for example MCP), so it is shown from
+    Architecture on, where it states what the groups show; at the Overview the stage sentences carry
+    the message.'
   architecture: 'Conceptual level: collapse each scenario phase into one expandable group
-    headed by its takeaway (the phase label is secondary). Shows the learning question and
-    plain explanations.'
+    headed by its takeaway (the phase label is secondary). Shows the learning question, the
+    headline and plain explanations.'
   architecture_groups: 'Groups follow the events in order: one group per consecutive run
     of a phase''s events, so a phase that resumes after another (the MCP tool call around
     its backend call) appears again, captioned as continued and without repeating its
@@ -597,7 +599,8 @@ compare_view:
     Pause and Next sit with Reset in the bottom bar and the play speed and the zoom control in the
     menu (layout.phone).'
   pane: 'Each pane shows its scenario''s question, its position ("Step <k> of <n> · <scenario phase
-    label>", at the Overview "Stage <s> of <m>") with its own step slider, the current event''s
+    label>", at the Overview "Stage <s> of <m>", or "No stage in <phase> · <s> of <m> played" for a
+    waiting pane) with its own step slider, over the stages at the Overview, the current event''s
     explanation with sender → receiver and operation (inspector.message_line; at the Overview the
     current stage''s sentence), its sequence diagram, and a link "Inspect step <k> in <tab>"
     to the scenario''s own route at that step and zoom level, where the inspector, the context panel and the
