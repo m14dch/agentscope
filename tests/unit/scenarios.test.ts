@@ -348,6 +348,27 @@ describe('more validation rules', () => {
     expect(validateRegistry({ base: b }, ctx)).toEqual(['base/events[2]: missing id']);
   });
 
+  it('requires carries and annotations on MCP, LLM and HTTP events and checks them', () => {
+    const scn = base();
+    const [e1, e2, e3] = scn.events as [ScenarioEvent, ScenarioEvent, ScenarioEvent];
+    for (const e of [e1, e2]) {
+      Object.assign(e, { protocol: 'HTTP', transport: 'https', execution_type: 'NETWORK' });
+    }
+    e1.carries = ['the request line'];
+    e3.carries = ['ends with a full stop.'];
+    e3.payload = { a: 1, b: 2 };
+    e3.annotations = [
+      { heading: 'A', sentence: 'Explains a.', paths: ['a', 'missing'], values: { b: 'b' } },
+    ];
+    expect(validateRegistry({ base: scn }, { ...ctx, annotated: ['HTTP'] })).toEqual([
+      'base/e2: missing carries',
+      'base/e2: missing annotations',
+      'base/e3: carries must be a non-empty list of phrases of at most 100 characters without a final full stop',
+      'base/e3: annotations[0] path "missing" does not exist in the payload',
+      'base/e3: annotations[0] value path "b" lies outside the group\'s paths',
+    ]);
+  });
+
   it('rejects a variants key (03 one_scenario_per_use_case)', () => {
     const specs = structuredClone(sources) as SpecSources;
     (specs.rag as Record<string, unknown>)['variants'] = [];

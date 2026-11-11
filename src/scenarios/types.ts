@@ -65,6 +65,21 @@ export interface ScenarioEvent {
   state_changes?: StateChange[];
   context_changes?: ContextChange[];
   prediction?: Prediction;
+  /** Short phrases naming what the message carries (03 event_schema.carries). */
+  carries?: string[];
+  /** Groups that explain the payload field by field (03 annotation_rules). */
+  annotations?: AnnotationGroup[];
+}
+
+/** One annotation group (03 event_schema.annotations). */
+export interface AnnotationGroup {
+  heading: string;
+  /** One sentence on why the group exists. */
+  sentence: string;
+  /** JSON paths of the payload members the group holds. */
+  paths: string[];
+  /** Meaning of the value at each JSON path inside the group, one bullet each. */
+  values?: Record<string, string>;
 }
 
 export interface Phase {
