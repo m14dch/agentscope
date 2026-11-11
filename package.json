@@ -22,6 +22,7 @@
     "check": "npm run validate:specs && npm run lint && npm run format:check && npm run typecheck && npm test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@eslint/js": "10.0.1",
     "@fontsource-variable/inter": "5.3.0",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
