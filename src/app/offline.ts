@@ -65,6 +65,27 @@ export function activated(worker: ServiceWorker): Promise<boolean> {
   });
 }
 
+/** How many times a worker that became redundant is replaced by the registration's new one. */
+const REDUNDANT_RETRIES = 3;
+
+/**
+ * Whether the registration's active worker confirms a complete cache. A worker that
+ * becomes redundant while the page waits (a newer build replaced it) is not the end:
+ * the registration's active worker, if any, is asked again.
+ */
+export async function activeWorkerReady(
+  registration: Pick<ServiceWorkerRegistration, 'active'>,
+): Promise<boolean> {
+  let worker = registration.active;
+  for (let attempt = 0; worker && attempt <= REDUNDANT_RETRIES; attempt += 1) {
+    if (await activated(worker)) return confirmComplete(worker);
+    const next = registration.active;
+    if (next === worker) return false;
+    worker = next;
+  }
+  return false;
+}
+
 /**
  * Registers the service worker and reports readiness. Does nothing where service
  * workers cannot run (insecure origins, browsers without support); failures stay quiet,
@@ -75,8 +96,7 @@ export async function enableOffline(): Promise<void> {
   try {
     await navigator.serviceWorker.register(appUrl('sw.js'), { scope: appUrl('') });
     const registration = await navigator.serviceWorker.ready;
-    const worker = registration.active;
-    if (worker && (await activated(worker)) && (await confirmComplete(worker))) markReady();
+    if (await activeWorkerReady(registration)) markReady();
   } catch {
     // Registration or caching failed: no indicator.
   }

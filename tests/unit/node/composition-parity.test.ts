@@ -23,7 +23,9 @@ function pythonProblems(inputs: unknown[]): (string | null)[] {
 describe('answer_composition checks', () => {
   it('validate_specs.py reports the same problem as the app for every malformed composition', () => {
     const composition = (
-      specSources().comparison.combined as unknown as { answer_composition: Record<string, unknown> }
+      specSources().comparison.combined as unknown as {
+        answer_composition: Record<string, unknown>;
+      }
     ).answer_composition;
     const comparisons = composition['comparisons'] as Record<string, unknown>[];
     const inputs: unknown[] = [

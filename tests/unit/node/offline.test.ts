@@ -61,6 +61,10 @@ describe('precacheManifest', () => {
         'v',
       ).hash,
     ).not.toBe(hash);
+    // The worker template feeds the hash: a changed worker gets a new cache.
+    expect(precacheManifest(build, 'v', 'template a').hash).not.toBe(
+      precacheManifest(build, 'v', 'template b').hash,
+    );
     // The generated files do not feed the hash.
     expect(
       precacheManifest(
@@ -312,6 +316,11 @@ describe('service worker', () => {
     await worker.dispatch('install');
     worker.fetched.length = 0;
     expect(await worker.served(worker.request('assets/index-a.js'))).toBe('assets/index-a.js');
+    expect(
+      await worker.served(
+        worker.request('assets/index-a.js', { cache: 'only-if-cached', mode: 'same-origin' }),
+      ),
+    ).toBe('assets/index-a.js');
     for (const url of ['', '#/rag/rag-query/3', 'index.html#/mcp']) {
       expect(await worker.served(worker.request(url, { mode: 'navigate' })), url).toBe(
         'index.html',
@@ -348,6 +357,7 @@ describe('service worker', () => {
       worker.request('assets/index-a.js', { method: 'POST' }),
       worker.request('https://example.test/other/index.html'),
       worker.request('https://elsewhere.test/agentscope/index.html'),
+      worker.request('assets/index-a.js', { cache: 'only-if-cached', mode: 'no-cors' }),
     ]) {
       expect(await worker.dispatch('fetch', { request }), request.url).toBeUndefined();
     }

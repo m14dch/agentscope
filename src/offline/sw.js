@@ -70,10 +70,13 @@ async function complete() {
 
 /**
  * The cache key for a GET request in the scope, or undefined when the worker leaves the
- * request to the network untouched (other methods, other origins, outside the scope).
+ * request to the network untouched (other methods, other origins, outside the scope,
+ * only-if-cached requests that are not same-origin mode).
  */
 function cacheKey(request) {
   if (request.method !== 'GET') return undefined;
+  // fetch() throws on these (DevTools sends them); the browser handles them itself.
+  if (request.cache === 'only-if-cached' && request.mode !== 'same-origin') return undefined;
   const url = new URL(request.url);
   url.hash = '';
   if (!url.href.startsWith(SCOPE)) return undefined;
