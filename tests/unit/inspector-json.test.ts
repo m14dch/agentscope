@@ -31,7 +31,7 @@ describe('payload trees', () => {
         }
       }
     }
-    expect(count).toBeGreaterThan(250);
+    expect(count).toBeGreaterThan(80);
   });
 
   it('fold jsonrpc and _meta into one line naming them', () => {
@@ -91,7 +91,7 @@ describe('transport lines', () => {
         expect(all).toHaveLength(Object.keys(http.headers ?? {}).length);
       });
     }
-    expect(count).toBe(68);
+    expect(count).toBe(16);
   });
 
   it('fold the headers a sender repeats from its previous request', () => {

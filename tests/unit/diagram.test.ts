@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  arrowLabel,
-  errorKind,
   estimate,
   layout,
   type DiagramLayout,
   type Mode,
+  operationLabel,
   SIZES,
   wrap,
 } from '../../src/diagram/model.ts';
@@ -31,38 +30,10 @@ const build = (
   expanded: Iterable<string> = [],
 ): DiagramLayout => layout({ scenario: scn, labels, mode, cursor, expanded: new Set(expanded) });
 
-describe('error arrows', () => {
-  it('mark exactly where failures occur on the wire, with their kind', () => {
-    const found: string[] = [];
-    for (const scn of scenarios) {
-      for (const e of scn.events) {
-        const kind = errorKind(e);
-        if (kind) found.push(`${e.id} ${kind}`);
-      }
-    }
-    expect(found.sort()).toEqual([
-      'mcp-jsonrpc-error:mcp-23 protocol',
-      'mcp-not-found:mcp-21 transport',
-      'mcp-not-found:mcp-23 tool execution',
-      'mcp-unauthorized:mcp-21 transport',
-      'mcp-unauthorized:mcp-23 tool execution',
-    ]);
-  });
-
-  it('label the kind after ×', () => {
-    const e = scenario('mcp-not-found').events.find((x) =>
-      x.id.endsWith(':mcp-23'),
-    ) as ScenarioEvent;
-    expect(arrowLabel(e)).toBe('× tool execution error · MCP · tools/call result');
-    const model = { ...e, protocol: 'LLM_API' as const, payload: {}, http: { status: 503 } };
-    expect(errorKind(model)).toBe('model');
-  });
-});
-
 describe('labels', () => {
   const events = scenario('mcp-balance').events;
   const label = (id: string): string =>
-    arrowLabel(events.find((e) => e.id === id) as ScenarioEvent);
+    operationLabel(events.find((e) => e.id === id) as ScenarioEvent);
 
   it('prefix protocol messages and leave internal steps plain', () => {
     expect(label('mcp-14')).toBe('MCP · tools/call');
@@ -167,7 +138,7 @@ describe('architecture mode', () => {
   });
 });
 
-describe('architecture groups in variants', () => {
+describe('architecture groups in every scenario', () => {
   it('put causes before effects when every group is expanded', () => {
     for (const scn of scenarios) {
       const keys = new Set(build(scn, 'architecture', 0).groups.map((g) => g.key));
@@ -175,27 +146,6 @@ describe('architecture groups in variants', () => {
       const order = model.groups.flatMap((g) => g.arrows.map((a) => a.index));
       expect(order, scn.id).toEqual(scn.events.map((_, i) => i));
     }
-  });
-
-  it('mark a reached error on its group and skip phases without events', () => {
-    const scn = scenario('mcp-not-found');
-    const at = (id: string): number => scn.events.findIndex((e) => e.id.endsWith(`:${id}`)) + 1;
-    const before = build(scn, 'architecture', at('mcp-20'));
-    expect(before.groups.every((g) => g.error === undefined)).toBe(true);
-    const after = build(scn, 'architecture', at('mcp-23'));
-    expect(after.groups.find((g) => g.key === 'backend')?.error).toBe('transport');
-    expect(after.groups.find((g) => g.key === 'tool#2')?.error).toBe('tool execution');
-    const svg = renderSvg(after, 'T');
-    expect(svg).toContain('<tspan class="group-error"> · × transport error</tspan>');
-    const jsonrpc = build(scenario('mcp-jsonrpc-error'), 'architecture', 0);
-    expect(jsonrpc.groups.map((g) => g.key)).not.toContain('backend');
-  });
-
-  it("use the variant's own takeaways", () => {
-    const groups = build(scenario('mcp-not-found'), 'architecture', 0).groups;
-    expect(groups.find((g) => g.key === 'answer')?.phase.takeaway).toBe(
-      'The simulated answer explains that no balance is available instead of inventing one.',
-    );
   });
 
   it('frame their expanded labels and keep labels clear of leftward heads', () => {
@@ -283,20 +233,14 @@ describe('render', () => {
   });
 
   it('names each group by its visible text, takeaway then caption (WCAG 2.5.3)', () => {
-    const model = build(scenario('mcp-not-found'), 'architecture', 23);
+    const model = build(scenario('mcp-balance'), 'architecture', 23);
     const svg = renderSvg(model, 'T');
     for (const g of model.groups) {
-      const visible = [
-        g.takeaway.join(' '),
-        `${g.caption.slice(2)}${g.error ? ` · × ${g.error} error` : ''}`,
-      ]
-        .filter(Boolean)
-        .join(' ');
+      const visible = [g.takeaway.join(' '), g.caption.slice(2)].filter(Boolean).join(' ');
       expect(svg).toContain(
         `data-group="${g.key}" data-phase="${g.phase.id}"${g.current ? ' data-current=""' : ''} role="button" tabindex="0" aria-expanded="${g.expanded}" aria-label="${visible.replace(/'/g, '&#39;')}"`,
       );
     }
-    expect(model.groups.some((g) => g.error)).toBe(true);
     expect(model.groups.some((g) => g.takeaway.length > 1)).toBe(true);
     // Wrapped lines are separate words, not run together.
     expect(svg).toMatch(/<\/tspan> <tspan/);
@@ -352,12 +296,11 @@ describe('the step list of phones (02 diagram.phone_list)', () => {
     expect(html).not.toContain('participant');
   });
 
-  it('draws the line encoding: responses open, self-calls as a loop, errors marked', () => {
-    const html = renderList(build(scenario('mcp-not-found'), 'protocol', 28), 't', labels);
+  it('draws the line encoding: responses open, self-calls as a loop', () => {
+    const html = renderList(build(scenario('mcp-balance'), 'protocol', 28), 't', labels);
     expect(html).toContain('row-head--response');
     expect(html).toContain('row-arrow--in-process');
     expect(html).toContain('to itself');
-    expect(html).toMatch(/row--error[^>]*>[\s\S]*?× tool execution error/);
   });
 
   it('stacks the architecture groups as buttons, expanded ones listing their reached steps', () => {

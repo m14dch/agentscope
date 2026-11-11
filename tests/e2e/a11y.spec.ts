@@ -15,17 +15,11 @@ const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const ROUTES = [
   '#/mcp/mcp-balance/0',
   '#/mcp/mcp-balance/12',
-  '#/mcp/mcp-not-found/23',
-  '#/mcp/mcp-jsonrpc-error/18',
-  '#/mcp/mcp-resources/12',
   '#/rag/rag-index/6',
   '#/rag/rag-query/10',
-  '#/rag/rag-prompt-injection/10',
-  '#/rag/rag-stale/10',
   '#/compare/compare-rag-mcp/8',
   '#/compare/compare-rag-mcp/28',
   '#/combined/combined-balance-explanation/35',
-  '#/combined/combined-missing-terms/20',
 ];
 
 const WIDTHS = [

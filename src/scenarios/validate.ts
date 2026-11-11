@@ -77,10 +77,7 @@ function checkMcp(
         `protocol version ${String(version)} differs from pinned revision ${ctx.revision}`,
       );
     if (headers['Mcp-Method'] !== method) err(where, 'Mcp-Method header does not match method');
-    if (
-      (method === 'tools/call' || method === 'resources/read') &&
-      headers['Mcp-Name'] !== (params['name'] ?? params['uri'])
-    ) {
+    if (method === 'tools/call' && headers['Mcp-Name'] !== params['name']) {
       err(where, 'Mcp-Name header does not match body');
     }
     if (e.correlation_id !== String(p['id'])) err(where, 'correlation_id differs from JSON-RPC id');
@@ -293,13 +290,6 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
   const { registry, problems } = buildRegistry(sources);
   problems.push(...validateRegistry(registry, contextFrom(sources)));
   const err = (where: string, msg: string): void => void problems.push(`${where}: ${msg}`);
-  for (const v of [
-    ...sources.mcp.variants,
-    ...sources.rag.variants,
-    ...(sources.comparison.combined.variants ?? []),
-  ]) {
-    if (!text(v.lesson).trim()) err(v.id, 'variant has no lesson');
-  }
   const comb = sources.comparison.combined;
   if (registry[comb.id]?.events.length !== comb.expanded_event_count) {
     err(

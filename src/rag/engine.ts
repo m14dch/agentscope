@@ -5,24 +5,15 @@
  * define them. Mirrors rag_engine() in specifications/tools/validate_specs.py; its
  * results must equal reference_results exactly.
  */
-import type { Json, JsonObject } from '../scenarios/types.ts';
+import type { JsonObject } from '../scenarios/types.ts';
 
 export interface RagDocument {
   id: string;
   version: string;
   title: string;
-  trust: 'official' | 'untrusted';
+  trust: string;
   visibility: string;
   text: string;
-  /** Untrusted documents: the instruction addressed to the assistant that it must ignore. */
-  injected_instruction?: string;
-}
-
-export interface PreviousVersion {
-  id: string;
-  version: string;
-  derive_from: string;
-  replace: { from: string; to: string };
 }
 
 export interface Evidence {
@@ -43,8 +34,6 @@ export interface AnswerFact {
 export interface RagFixtures {
   query: string;
   documents: RagDocument[];
-  previous_versions: PreviousVersion[];
-  untrusted_documents: RagDocument[];
   embedding: {
     model: string;
     dimensions: string[];
@@ -60,7 +49,7 @@ export interface IndexedDocument {
   documentId: string;
   version: string;
   text: string;
-  trust: 'official' | 'untrusted';
+  trust: string;
 }
 
 /**
@@ -147,7 +136,7 @@ export interface IntroSentence {
  */
 export type AnswerPart =
   | { kind: 'intro'; source: IntroSource; text: string }
-  | { kind: 'group' | 'conflict' | 'gap' | 'note' | 'no-evidence' | 'comparison'; text: string };
+  | { kind: 'group' | 'gap' | 'no-evidence' | 'comparison'; text: string };
 
 export interface Answer {
   text: string;
@@ -159,21 +148,8 @@ export interface Answer {
   supported: Set<string>;
 }
 
-/** Fixture changes of a variant (03 variant_format.fixture_overrides) the corpus honours. */
-export interface CorpusOverrides {
-  /** Index these versions of every document instead of its current one. */
-  versions?: string[];
-  /** Untrusted documents added to the index. */
-  extra?: string[];
-  /** Documents left out of the index. */
-  exclude?: string[];
-}
-
 export const NO_EVIDENCE_ANSWER =
   'I could not find sufficiently relevant information in the indexed documents to answer this question.';
-
-export const INJECTION_NOTE =
-  'Note: a retrieved document contained instructions addressed to the assistant; they were treated as data and ignored.';
 
 /**
  * Python's round(x, digits): the exact decimal value of the double, rounded half to even.
@@ -218,19 +194,6 @@ export function tokens(text: string): string[] {
   return text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
 }
 
-const vkey = (version: string): number[] => version.split('.').map(Number);
-
-/** Compares versions numerically, segment by segment. */
-export function compareVersions(a: string, b: string): number {
-  const x = vkey(a);
-  const y = vkey(b);
-  for (let i = 0; i < Math.max(x.length, y.length); i += 1) {
-    const d = (x[i] ?? -1) - (y[i] ?? -1);
-    if (d) return d;
-  }
-  return 0;
-}
-
 /** Delimits a citation placeholder; a private-use character no fixture contains. */
 const MARK = '\uE000';
 
@@ -243,20 +206,12 @@ function joinAnd(items: string[]): string {
     : `${items.slice(0, -1).join(', ')} and ${items.at(-1) as string}`;
 }
 
-/** In a conflict sentence a predicate stands alone, so its last comma becomes ' and '. */
-function alone(predicate: string): string {
-  const i = predicate.lastIndexOf(', ');
-  return i < 0 ? predicate : `${predicate.slice(0, i)} and ${predicate.slice(i + 2)}`;
-}
-
 /** The engine over one set of fixtures. Every function is pure. */
 export class RagEngine {
   readonly fixtures: RagFixtures;
   private readonly lexicon: Map<string, number[]>;
   private readonly stopwords: Set<string>;
-  private readonly official: Map<string, RagDocument>;
-  private readonly untrusted: Map<string, RagDocument>;
-  private readonly injected: string[];
+  private readonly documents: Map<string, RagDocument>;
 
   constructor(fixtures: RagFixtures) {
     this.fixtures = fixtures;
@@ -267,11 +222,7 @@ export class RagEngine {
       for (const w of group.words) this.lexicon.set(w, weights);
     }
     this.stopwords = new Set(fixtures.keyword_retrieval.stopwords);
-    this.official = new Map(fixtures.documents.map((d) => [d.id, d]));
-    this.untrusted = new Map(fixtures.untrusted_documents.map((d) => [d.id, d]));
-    this.injected = fixtures.untrusted_documents.flatMap((d) =>
-      d.injected_instruction ? [d.injected_instruction] : [],
-    );
+    this.documents = new Map(fixtures.documents.map((d) => [d.id, d]));
   }
 
   /** embedding.vector: 0.1 smoothing plus lexicon weights, L2-normalized, 4 decimals. */
@@ -329,46 +280,21 @@ export class RagEngine {
     return [...new Set(tokens(query))].filter((t) => !this.stopwords.has(t)).sort();
   }
 
-  trustOf(documentId: string): 'official' | 'untrusted' {
-    return this.untrusted.has(documentId) ? 'untrusted' : 'official';
+  /** The trust level of a document (05 fixtures.documents trust). */
+  trustOf(documentId: string): string {
+    const d = this.documents.get(documentId);
+    if (!d) throw new RangeError(`unknown document ${documentId}`);
+    return d.trust;
   }
 
-  /**
-   * The indexed document versions: each official document in each requested version
-   * (a previous version is derived by its replace rule; a version that does not exist is
-   * not indexed), then the added untrusted documents, minus the excluded ones.
-   */
-  corpus(overrides: CorpusOverrides = {}): IndexedDocument[] {
-    const versions = overrides.versions ?? [
-      ...new Set(this.fixtures.documents.map((d) => d.version)),
-    ];
-    const exclude = new Set(overrides.exclude ?? []);
-    const out: IndexedDocument[] = [];
-    for (const d of this.fixtures.documents) {
-      if (exclude.has(d.id)) continue;
-      for (const v of versions) {
-        if (v === d.version) {
-          out.push({ documentId: d.id, version: v, text: d.text, trust: 'official' });
-          continue;
-        }
-        const pv = this.fixtures.previous_versions.find((p) => p.id === d.id && p.version === v);
-        if (pv)
-          out.push({
-            documentId: d.id,
-            version: v,
-            // A function replacement: a '$' in the text is literal, as in Python's str.replace.
-            text: d.text.replaceAll(pv.replace.from, () => pv.replace.to),
-            trust: 'official',
-          });
-      }
-    }
-    for (const id of overrides.extra ?? []) {
-      const d = this.untrusted.get(id);
-      if (!d) throw new RangeError(`unknown untrusted document ${id}`);
-      if (!exclude.has(id))
-        out.push({ documentId: id, version: d.version, text: d.text, trust: 'untrusted' });
-    }
-    return out;
+  /** The indexed documents: every document of the fixtures at its version (05 inputs). */
+  corpus(): IndexedDocument[] {
+    return this.fixtures.documents.map((d) => ({
+      documentId: d.id,
+      version: d.version,
+      text: d.text,
+      trust: d.trust,
+    }));
   }
 
   /** chunking.windows and chunking.chunk_id, with each chunk's vector. */
@@ -416,11 +342,6 @@ export class RagEngine {
     return { queryVector, queryTerms, ranked, selected };
   }
 
-  /** Whether a chunk contains an instruction injected into an untrusted document. */
-  injectedIn(chunk: { text: string }): boolean {
-    return this.injected.some((i) => chunk.text.includes(i));
-  }
-
   /**
    * answer_rules: the evidence-based answer, its parts and its citations. `intro` is written
    * before the answer groups (the Combined scenario's balance and account sentences).
@@ -439,7 +360,6 @@ export class RagEngine {
       marked.set(c.id, c);
       return `${MARK}${c.id}${MARK}`;
     };
-    const official = selected.filter((c) => this.official.has(c.documentId));
     const parts: AnswerPart[] = intro.map((s) => ({
       kind: 'intro',
       source: s.source,
@@ -449,10 +369,9 @@ export class RagEngine {
     const missing: string[] = [];
     for (const group of this.fixtures.answer_groups) {
       const runs: { subject: string; preds: { pred: string; chunk: EvidenceItem }[] }[] = [];
-      const conflicts: string[] = [];
       for (const f of this.fixtures.answer_facts.filter((x) => x.group === group.id)) {
         const vals = new Map<string, EvidenceItem[]>();
-        for (const c of official) {
+        for (const c of selected) {
           const ev = f.evidence[c.version] ?? f.evidence['*'];
           if (ev && c.documentId === f.documentId && c.text.includes(ev.span)) {
             const list = vals.get(ev.predicate) ?? [];
@@ -465,29 +384,12 @@ export class RagEngine {
           continue;
         }
         supported.add(f.id);
-        if (vals.size === 1) {
-          const [pred, cs] = [...vals][0] as [string, EvidenceItem[]];
-          const best = [...cs].sort(
-            (a, b) => compareVersions(b.version, a.version) || byId(a, b),
-          )[0] as EvidenceItem;
-          const last = runs.at(-1);
-          if (last && last.subject === f.subject) last.preds.push({ pred, chunk: best });
-          else runs.push({ subject: f.subject, preds: [{ pred, chunk: best }] });
-        } else {
-          const ordered = [...vals].sort((a, b) =>
-            compareVersions((a[1][0] as EvidenceItem).version, (b[1][0] as EvidenceItem).version),
-          );
-          const alts = ordered
-            .map(([pred, cs]) => {
-              const c = cs[0] as EvidenceItem;
-              return `version ${c.version}: ${f.subject} ${alone(pred)} [${cite(c)}]`;
-            })
-            .join('; ');
-          const newest = (ordered.at(-1)?.[1][0] as EvidenceItem).version;
-          conflicts.push(
-            `The indexed documents conflict on ${f.aspect} (${alts}); version ${newest} is the newest.`,
-          );
-        }
+        // One version per document, so one predicate; of several chunks, the lowest ID.
+        const [pred, cs] = [...vals][0] as [string, EvidenceItem[]];
+        const best = [...cs].sort(byId)[0] as EvidenceItem;
+        const last = runs.at(-1);
+        if (last && last.subject === f.subject) last.preds.push({ pred, chunk: best });
+        else runs.push({ subject: f.subject, preds: [{ pred, chunk: best }] });
       }
       const phrases = runs.map(({ subject, preds }) => {
         const items = preds.map(({ pred, chunk }, i) => {
@@ -498,15 +400,12 @@ export class RagEngine {
       });
       if (phrases.length)
         parts.push({ kind: 'group', text: `${group.label}: ${phrases.join('; ')}.` });
-      parts.push(...conflicts.map((text) => ({ kind: 'conflict' as const, text })));
     }
     if (missing.length)
       parts.push({
         kind: 'gap',
         text: `The retrieved evidence does not cover ${joinAnd(missing)}.`,
       });
-    if (selected.some((c) => this.injectedIn(c)))
-      parts.push({ kind: 'note', text: INJECTION_NOTE });
     // Numbered part by part in order, which numbers them as the joined text would.
     const cited: EvidenceItem[] = [];
     const placeholder = new RegExp(`${MARK}([^${MARK}]+)${MARK}`, 'g');
@@ -574,23 +473,4 @@ export function modelMessage(answer: Answer): string {
   return answer.cited.length
     ? `${answer.text}\n\nSources:\n${sourceLines(answer.cited).join('\n')}`
     : answer.text;
-}
-
-/** Translates a variant's fixture_overrides into corpus overrides (05 variants). */
-export function corpusOverrides(fixtureOverrides: Readonly<Record<string, Json>> | undefined) {
-  const fo = fixtureOverrides ?? {};
-  const out: CorpusOverrides = {};
-  const indexed = fo['indexed_versions'];
-  if (indexed && typeof indexed === 'object' && !Array.isArray(indexed)) {
-    const found = new Set<string>();
-    for (const v of Object.values(indexed)) {
-      for (const x of Array.isArray(v) ? v : [v]) if (typeof x === 'string') found.add(x);
-    }
-    out.versions = [...found].sort();
-  }
-  const strings = (v: Json | undefined): string[] =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-  if (strings(fo['add_documents']).length) out.extra = strings(fo['add_documents']);
-  if (strings(fo['exclude_documents']).length) out.exclude = strings(fo['exclude_documents']);
-  return out;
 }

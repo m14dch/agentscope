@@ -4,7 +4,7 @@
  * A tab is shown only when the step has content for it. The inspector is rebuilt only
  * when the step changes, and focus stays on the equivalent control.
  */
-import { type ErrorKind, errorKind, operationLabel } from '../diagram/model.ts';
+import { operationLabel } from '../diagram/model.ts';
 import type {
   EarlierMessage,
   EarlierRevision,
@@ -37,28 +37,8 @@ export interface InspectorContext {
   jump: (step: number) => void;
   /** Selects a tracked value, or clears the selection (02 lineage_selection.select). */
   select: (selection: Selection | undefined) => void;
-  /** 07-security-protocols.yaml error_taxonomy, by key (tool_execution, protocol, ...). */
-  errorTaxonomy?: Readonly<Record<string, string>> | undefined;
   /** 04-mcp-scenarios.yaml protocol.earlier_revision_handshake, for server/discover. */
   earlierRevision?: EarlierRevision | undefined;
-}
-
-/** Each error kind's key in 07-security-protocols.yaml error_taxonomy. */
-const TAXONOMY_KEY: Record<ErrorKind, string> = {
-  'tool execution': 'tool_execution',
-  protocol: 'protocol',
-  transport: 'transport',
-  model: 'model',
-};
-
-/** The error line of a step (02 inspector.error_line); undefined unless it is an error arrow. */
-export function errorLine(
-  event: ScenarioEvent,
-  taxonomy: Readonly<Record<string, string>> = {},
-): { kind: ErrorKind; label: string; definition: string } | undefined {
-  const kind = errorKind(event);
-  if (!kind) return undefined;
-  return { kind, label: `× ${kind} error`, definition: taxonomy[TAXONOMY_KEY[kind]] ?? '' };
 }
 
 /** Whether a step offers the earlier-revision comparison (02 inspector.earlier_revision). */
@@ -338,20 +318,9 @@ export class Inspector {
   private message(event: ScenarioEvent): Node[] {
     const from = this.context.labels[event.sender] ?? event.sender;
     const to = this.context.labels[event.receiver] ?? event.receiver;
-    const error = errorLine(event, this.context.errorTaxonomy);
     return [
       el('p', 'message', event.explanation),
       el('p', 'small muted', `${from} → ${to} · ${operationLabel(event)}`),
-      ...(error
-        ? [
-            el(
-              'p',
-              'error-line small',
-              el('span', 'error-kind', error.label),
-              ...(error.definition ? [`. ${error.definition}`] : []),
-            ),
-          ]
-        : []),
     ];
   }
 

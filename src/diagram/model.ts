@@ -1,28 +1,12 @@
 /**
- * Sequence diagram model (02-ui-ux.yaml diagram and modes): error kinds, arrow labels and
+ * Sequence diagram model (02-ui-ux.yaml diagram and modes): arrow labels and
  * geometry as pure functions of the scenario, the mode, the cursor and the expanded groups.
  */
 import type { Phase, Scenario, ScenarioEvent } from '../scenarios/types.ts';
 
 export type Mode = 'architecture' | 'protocol';
-export type ErrorKind = 'protocol' | 'tool execution' | 'transport' | 'model';
 export type LineKind = 'network' | 'in-process' | 'simulated';
 export type Visibility = 'past' | 'current' | 'future';
-
-type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj =>
-  v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {};
-
-/** Where a failure occurs on the wire (02 diagram.error_events); undefined if none. */
-export function errorKind(e: ScenarioEvent): ErrorKind | undefined {
-  const p = obj(e.payload);
-  if (p['jsonrpc'] === '2.0' && Object.hasOwn(p, 'error')) return 'protocol';
-  if (e.protocol === 'MCP' && obj(p['result'])['isError'] === true) return 'tool execution';
-  const status = e.http?.status;
-  if (typeof status === 'number' && status >= 400)
-    return e.protocol === 'LLM_API' ? 'model' : 'transport';
-  return undefined;
-}
 
 const PREFIX: Partial<Record<ScenarioEvent['protocol'], string>> = {
   MCP: 'MCP',
@@ -31,16 +15,10 @@ const PREFIX: Partial<Record<ScenarioEvent['protocol'], string>> = {
   DB: 'DB',
 };
 
-/** The operation, prefixed with its protocol (02 diagram.labels), without any error mark. */
+/** The arrow's direct text label: the operation, prefixed with its protocol (02 diagram.labels). */
 export function operationLabel(e: Pick<ScenarioEvent, 'protocol' | 'operation'>): string {
   const prefix = PREFIX[e.protocol];
   return prefix && !e.operation.startsWith(prefix) ? `${prefix} · ${e.operation}` : e.operation;
-}
-
-/** The arrow's direct text label (02 diagram.labels and error_events). */
-export function arrowLabel(e: ScenarioEvent): string {
-  const kind = errorKind(e);
-  return kind ? `× ${kind} error · ${operationLabel(e)}` : operationLabel(e);
 }
 
 export function lineKind(e: ScenarioEvent): LineKind {
@@ -111,7 +89,6 @@ export interface Arrow {
   labelX: number;
   labelY: number;
   line: LineKind;
-  error: ErrorKind | undefined;
   visibility: Visibility;
   /** Current step or its pair. */
   emphasized: boolean;
@@ -131,8 +108,6 @@ export interface Group {
   takeaway: string[];
   /** Disclosure marker, phase label and step count. */
   caption: string;
-  /** Kind of the first error among the group's reached events, if any. */
-  error: ErrorKind | undefined;
   y: number;
   height: number;
   x1: number;
@@ -191,7 +166,7 @@ function lifelines(
     const a = col.get(e.sender) ?? 0;
     const b = col.get(e.receiver) ?? 0;
     if (Math.abs(a - b) !== 1) continue;
-    const need = measure(arrowLabel(e), true) + 2 * SIZES.labelGap;
+    const need = measure(operationLabel(e), true) + 2 * SIZES.labelGap;
     const gap = Math.min(a, b);
     gaps[gap] = Math.min(SIZES.maxSpacing, Math.max(gaps[gap] ?? 0, need));
   }
@@ -223,7 +198,7 @@ export function layout(input: LayoutInput): DiagramLayout {
     const xs = x.get(e.sender) ?? 0;
     const xr = x.get(e.receiver) ?? 0;
     const self = e.sender === e.receiver;
-    const label = arrowLabel(e);
+    const label = operationLabel(e);
     // A leftward arrow's head sits at its left end; its label starts past the head.
     const labelX = self
       ? xs + SIZES.selfWidth + SIZES.labelGap
@@ -247,7 +222,6 @@ export function layout(input: LayoutInput): DiagramLayout {
       labelX,
       labelY: self ? y + SIZES.selfHeight / 2 + 4 : y - SIZES.labelGap,
       line: lineKind(e),
-      error: errorKind(e),
       visibility: vis,
       emphasized,
       selected: index < cursor && !!input.selected?.has(index),
@@ -297,12 +271,9 @@ export function layout(input: LayoutInput): DiagramLayout {
             Math.max(SIZES.groupMinText, spanRight - textX - SIZES.groupPad),
             strong,
           );
-      const reached = members.filter(([, i]) => i < cursor);
-      const error = reached.map(([e]) => errorKind(e)).find((k) => k !== undefined);
       const steps = members.length === 1 ? '1 step' : `${members.length} steps`;
       const name = continued ? `${phase.label}, continued` : phase.label;
       const caption = `${open ? '▾' : '▸'} ${name} · ${steps}`;
-      const errorText = error ? ` · × ${error} error` : '';
       const header = SIZES.groupPad + (takeaway.length + 1) * SIZES.headerLine + SIZES.groupPad;
       let inner = start + header;
       const shown: Arrow[] = [];
@@ -317,7 +288,7 @@ export function layout(input: LayoutInput): DiagramLayout {
         }
         inner += SIZES.row / 2;
       }
-      const textWidth = Math.max(0, ...takeaway.map(strong), measure(caption + errorText));
+      const textWidth = Math.max(0, ...takeaway.map(strong), measure(caption));
       const textRight = Math.max(labelsRight, textX + textWidth);
       right = Math.max(right, textRight + SIZES.margin);
       groups.push({
@@ -326,7 +297,6 @@ export function layout(input: LayoutInput): DiagramLayout {
         continued,
         takeaway,
         caption,
-        error,
         y: start,
         height: inner - start,
         x1: left,

@@ -17,17 +17,12 @@ export const TAB_LABELS: Record<Tab, string> = {
 
 /** Scenario IDs per tab, in picker order (02 navigation.tab_contents). */
 export function tabScenarios(sources: SpecSources): Record<Tab, string[]> {
-  const ragBase = ['rag-query', 'rag-index'].filter((id) =>
-    sources.rag.scenarios.some((s) => s.id === id),
-  );
   return {
-    mcp: [...sources.mcp.scenarios.map((s) => s.id), ...sources.mcp.variants.map((v) => v.id)],
-    rag: [...ragBase, ...sources.rag.variants.map((v) => v.id)],
+    mcp: sources.mcp.scenarios.map((s) => s.id),
+    // The question first, then the index it searches.
+    rag: ['rag-query', 'rag-index'].filter((id) => sources.rag.scenarios.some((s) => s.id === id)),
     compare: [sources.comparison.compare.id],
-    combined: [
-      sources.comparison.combined.id,
-      ...(sources.comparison.combined.variants ?? []).map((v) => v.id),
-    ],
+    combined: [sources.comparison.combined.id],
   };
 }
 

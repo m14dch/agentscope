@@ -55,17 +55,9 @@
   stroke-width: var(--line-focus);
 }
 
-.arrow--error {
-  stroke: var(--color-error);
-}
-
 .arrow-label {
   fill: var(--color-ink);
   font-size: var(--size-small);
-}
-
-.arrow-label--error {
-  fill: var(--color-error);
 }
 
 /* Arrowheads: filled for requests, open for responses. */
@@ -89,11 +81,6 @@
 /* Past steps keep their line style; only the label recedes. */
 .arrow-label--past {
   fill: var(--color-ink-muted);
-}
-
-/* An error that is also the current step: the error colour wins, the weight stays. */
-.arrow-label--current.arrow-label--error {
-  fill: var(--color-error);
 }
 
 /* Labels may cross lifelines; a paper halo keeps them legible. */
@@ -146,10 +133,6 @@
 .group-label {
   fill: var(--color-ink-muted);
   font-size: var(--size-small);
-}
-
-.group-error {
-  fill: var(--color-error);
 }
 
 .group:focus {
@@ -227,10 +210,6 @@
   font-weight: var(--weight-strong);
 }
 
-.row--error .row-label {
-  color: var(--color-error);
-}
-
 .row-route {
   font-weight: var(--weight-strong);
 }
@@ -272,10 +251,6 @@
 
 .row-arrow--current .row-line {
   stroke-width: var(--line-focus);
-}
-
-.row-arrow--error {
-  color: var(--color-error);
 }
 
 .row-head--request {
@@ -340,10 +315,6 @@
 
 .phase-caption .row-label--selected {
   color: var(--color-ink);
-}
-
-.phase-error {
-  color: var(--color-error);
 }
 
 .phase .rows {

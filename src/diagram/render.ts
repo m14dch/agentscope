@@ -29,10 +29,6 @@ function renderArrow(a: Arrow, ids: string, names: Readonly<Record<string, strin
     line.push('arrow--current');
     label.push('arrow-label--current');
   } else label.push('arrow-label--past');
-  if (a.error) {
-    line.push('arrow--error');
-    label.push('arrow-label--error');
-  }
   const marker = `url(#${ids}-${head(a)})`;
   const { x1, x2, y } = a;
   const shape = a.self
@@ -65,24 +61,18 @@ function renderGroup(g: Group, ids: string, names: Readonly<Record<string, strin
   // Paper behind the takeaway and caption, so lifelines do not run through the text.
   const textTop = g.y + SIZES.groupPad;
   const band = `<rect class="group-text-band" x="${textX - 4}" y="${textTop}" width="${g.textWidth + 8}" height="${captionY + 4 - textTop}" />`;
-  const error = g.error ? `<tspan class="group-error"> · × ${esc(g.error)} error</tspan>` : '';
   const takeaway = g.takeaway.length
     ? `<text class="group-takeaway" x="${textX}" y="${firstLine}">${lines}</text>`
     : '';
   // The name is the visible text in reading order (WCAG 2.5.3 label in name): the takeaway,
-  // then the caption without its fold mark (aria-expanded states it), then the error.
-  const name = [
-    g.takeaway.join(' '),
-    `${g.caption.replace(/^[▸▾] /, '')}${g.error ? ` · × ${g.error} error` : ''}`,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  // then the caption without its fold mark (aria-expanded states it).
+  const name = [g.takeaway.join(' '), g.caption.replace(/^[▸▾] /, '')].filter(Boolean).join(' ');
   const steps = g.arrows.length
     ? `<g role="list" aria-label="${esc(g.phase.label)} steps">${g.arrows.map((a) => renderArrow(a, ids, names)).join('')}</g>`
     : '';
   return `<g class="${cls.join(' ')}" data-group="${esc(g.key)}" data-phase="${esc(g.phase.id)}"${current} role="button" tabindex="0" aria-expanded="${g.expanded}" aria-label="${esc(name)}">
 <rect class="group-frame" x="${g.x1}" y="${g.y}" width="${g.x2 - g.x1}" height="${g.height}" />${band}${bar}${takeaway}
-${g.selected ? markRect(textX, captionY, g.captionWidth) : ''}<text class="group-label${g.selected ? ' arrow-label--selected' : ''}" x="${textX}" y="${captionY}">${esc(g.caption)}${error}</text>
+${g.selected ? markRect(textX, captionY, g.captionWidth) : ''}<text class="group-label${g.selected ? ' arrow-label--selected' : ''}" x="${textX}" y="${captionY}">${esc(g.caption)}</text>
 </g>${steps}`;
 }
 

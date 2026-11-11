@@ -126,28 +126,26 @@ function offenders(found: Found): string[] {
 // Below 48rem the diagram is the step list, the controls the bottom bar and the menu holds
 // the switches (02 layout.phone); those pages are checked at a phone's width too.
 const PHONE_ROUTES = new Set([
-  './#/mcp/mcp-not-found/23/protocol',
+  './#/mcp/mcp-balance/23/protocol',
   './#/mcp/mcp-balance/14',
-  './#/rag/rag-prompt-injection/10',
+  './#/rag/rag-query/10',
   './#/compare/compare-rag-mcp/16',
 ]);
 
 for (const route of [
   './',
   './#/design',
-  './#/mcp/mcp-not-found/23/protocol',
+  './#/mcp/mcp-balance/23/protocol',
   './#/mcp/mcp-balance/14',
   './#/mcp/mcp-balance/2/protocol',
   // The ingestion panel with a selected chunk, overlap and the vector's dots.
   './#/rag/rag-index/10',
-  // The retrieval panel: retained dots, the projection, the prompt with an untrusted block,
-  // the answer with citations, and the version panel.
-  './#/rag/rag-prompt-injection/10',
-  './#/rag/rag-stale/10',
+  // The retrieval panel: retained dots, the projection, the prompt and the answer with citations.
+  './#/rag/rag-query/10',
   // Both compare panes, one of them done with its phase.
   './#/compare/compare-rag-mcp/16',
   // The combined answer with its provenance labels, sources and the evidence gap.
-  './#/combined/combined-missing-terms/35/protocol',
+  './#/combined/combined-balance-explanation/35/protocol',
   // An unknown route: the error line and its link back to the tab.
   './#/compare/unknown',
 ]) {

@@ -1,14 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Playback } from '../../src/engine/playback.ts';
-import {
-  contextModel,
-  hasContext,
-  SOURCE_LABELS,
-  toolMessageLabel,
-} from '../../src/inspector/context.ts';
+import { contextModel, hasContext, toolMessageLabel } from '../../src/inspector/context.ts';
 import { createPlayback } from '../../src/rag/bundled.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
-import type { Scenario } from '../../src/scenarios/types.ts';
+import type { Scenario, ScenarioEvent } from '../../src/scenarios/types.ts';
 
 const registry = loadRegistry();
 
@@ -44,10 +39,20 @@ describe('context panel model', () => {
   });
 
   it('never counts content the agent keeps to itself as seen', () => {
-    const scn = scenario('mcp-resources');
+    // The server's self-description, stored but never sent to the model.
+    const scn = structuredClone(scenario('mcp-balance'));
+    const discovered = scn.events.find((e) => e.id === 'mcp-03') as ScenarioEvent;
+    discovered.context_changes = [
+      {
+        target: 'agent_state',
+        action: 'append',
+        description: 'Server identity stored',
+        value_ref: 'payload.result._meta',
+      },
+    ];
     const p = new Playback(scn);
     const end = contextModel(p.events, p.snapshot(p.length), p.snapshot(p.length - 1));
-    expect(end.memory.find((m) => m.description === 'OpenAPI resource stored')?.unseen).toBe(true);
+    expect(end.memory.find((m) => m.description === 'Server identity stored')?.unseen).toBe(true);
     expect(end.memory.find((m) => m.description === 'User question received')?.unseen).toBe(false);
   });
 
@@ -113,67 +118,20 @@ describe('labels the review asked for', () => {
     expect(user?.text).toBe(
       'Question: What is my current account balance, and would another account type offer better conditions?\n\nRetrieved documents:',
     );
-    expect(user?.documents.map((d) => [d.documentId, d.version, d.chunkId, d.untrusted])).toEqual([
-      ['account-opening.md', '1.2', 'account-opening@1.2-c50o10-001', false],
-      ['everyday-account.md', '1.2', 'everyday-account@1.2-c50o10-002', false],
-      ['everyday-account.md', '1.2', 'everyday-account@1.2-c50o10-001', false],
-      ['account-opening.md', '1.2', 'account-opening@1.2-c50o10-002', false],
-      ['savings-account.md', '1.2', 'savings-account@1.2-c50o10-001', false],
+    expect(user?.documents.map((d) => [d.documentId, d.version, d.chunkId])).toEqual([
+      ['account-opening.md', '1.2', 'account-opening@1.2-c50o10-001'],
+      ['everyday-account.md', '1.2', 'everyday-account@1.2-c50o10-002'],
+      ['everyday-account.md', '1.2', 'everyday-account@1.2-c50o10-001'],
+      ['account-opening.md', '1.2', 'account-opening@1.2-c50o10-002'],
+      ['savings-account.md', '1.2', 'savings-account@1.2-c50o10-001'],
     ]);
     expect(user?.documents[0]?.text).toMatch(/^Opening an account Anyone aged 18/);
     expect(call?.tool).toBeUndefined();
     expect(tool).toMatchObject({ role: 'tool', tool: 'get_customer_balance', documents: [] });
+    expect(toolMessageLabel('get_customer_balance')).toBe(
+      'Tool data · get_customer_balance result',
+    );
     expect(tool?.text).toContain('12500.75');
-  });
-
-  it('labels an untrusted document block in the model-visible context', () => {
-    const scn = scenario('rag-prompt-injection');
-    const p = createPlayback(scn);
-    const k = p.events.findIndex((e) => e.id.endsWith(':retrieve-10')) + 1;
-    const user = contextModel(p.events, p.snapshot(k), undefined).messages?.find(
-      (m) => m.role === 'user',
-    );
-    expect(user?.documents.filter((d) => d.untrusted).map((d) => d.documentId)).toEqual([
-      'community-faq.md',
-    ]);
-  });
-
-  it('labels a call to an unknown tool as failed, not as tool data', () => {
-    const scn = scenario('mcp-jsonrpc-error');
-    const p = createPlayback(scn);
-    const k = p.events.findIndex((e) => e.id.endsWith(':mcp-26')) + 1;
-    const model = contextModel(p.events, p.snapshot(k), p.snapshot(k - 1));
-    const tool = model.messages?.find((m) => m.role === 'tool');
-    expect(tool).toMatchObject({ tool: 'get_balance', source: 'tool-failed' });
-    expect(toolMessageLabel('tool-failed', 'get_balance')).toBe('Tool call failed · get_balance');
-    expect(
-      model.memory.find((m) => m.description === 'Tool message stored in conversation')?.source,
-    ).toBe('tool-failed');
-    expect(SOURCE_LABELS['tool-failed']).toBe('Tool call failed');
-  });
-
-  it('labels an isError result of an existing tool as its error result, still tool data', () => {
-    const scn = scenario('mcp-not-found');
-    const p = createPlayback(scn);
-    const k = p.events.findIndex((e) => e.id.endsWith(':mcp-26')) + 1;
-    const model = contextModel(p.events, p.snapshot(k), p.snapshot(k - 1));
-    const tool = model.messages?.find((m) => m.role === 'tool');
-    expect(tool).toMatchObject({ tool: 'get_customer_balance', source: 'tool-error' });
-    expect(toolMessageLabel('tool-error', 'get_customer_balance')).toBe(
-      'Tool data · get_customer_balance error result',
-    );
-    expect(
-      model.memory
-        .filter((m) => m.description.startsWith('Tool '))
-        .map((m) => [m.description, m.source]),
-    ).toEqual([
-      ['Tool result received', 'tool-error'],
-      ['Tool message stored in conversation', 'tool-error'],
-    ]);
-    // A successful call stays plain tool data.
-    const ok = createPlayback(scenario('mcp-balance'));
-    const end = contextModel(ok.events, ok.snapshot(ok.length), undefined);
-    expect(end.messages?.find((m) => m.role === 'tool')?.source).toBe('tool');
   });
 
   it('does not label an empty list of retained chunks as document evidence', () => {
