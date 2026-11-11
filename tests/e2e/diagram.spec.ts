@@ -229,3 +229,35 @@ test('arrow keys scroll the focused diagram region instead of stepping', async (
   await expect(page.locator('.status').filter({ hasText: 'Step 5 of 28' })).toBeVisible();
   await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
 });
+
+test('the participant names stay at the top of the region while it scrolls, above the current step', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page, route('mcp-multiple-tools', 40, 'protocol'));
+  await page.locator('[data-current][data-index="39"]').waitFor();
+  const state = () =>
+    page.evaluate(() => {
+      const region = document.querySelector('.diagram-scroller') as HTMLElement;
+      const r = region.getBoundingClientRect();
+      const names = [...region.querySelectorAll('.participant')].map((t) =>
+        t.getBoundingClientRect(),
+      );
+      const band = region.querySelector('.participants-band')?.getBoundingClientRect();
+      const current = region.querySelector('[data-current]')?.getBoundingClientRect();
+      return {
+        scrolled: region.scrollTop,
+        namesInside: names.every((n) => n.top >= r.top && n.bottom <= r.bottom),
+        bandAtTop: Math.abs((band?.top ?? -1) - r.top) < 1,
+        currentBelowNames: !!band && !!current && current.top >= band.bottom,
+      };
+    });
+  const end = await state();
+  expect(end.scrolled).toBeGreaterThan(0);
+  expect(end).toMatchObject({ namesInside: true, bandAtTop: true, currentBelowNames: true });
+  // Scrolling by hand keeps them in place too.
+  await page.locator('.diagram-scroller').evaluate((el) => el.scrollTo({ top: 200 }));
+  await expect.poll(async () => (await state()).bandAtTop).toBe(true);
+  expect((await state()).namesInside).toBe(true);
+});

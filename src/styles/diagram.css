@@ -5,6 +5,12 @@
   stroke-width: var(--line-hair);
 }
 
+/* The names stay at the top of the region while it scrolls; their band hides what passes
+   beneath them. */
+.participants-band {
+  fill: var(--color-paper);
+}
+
 .participant {
   fill: var(--color-ink);
   font-size: var(--size-small);
