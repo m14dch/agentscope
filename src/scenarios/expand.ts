@@ -1,18 +1,8 @@
 /**
- * Variant expansion and scenario composition (03-simulation-engine.yaml variant_format
- * and composition_format). Mirrors specifications/tools/validate_specs.py exactly; a
- * golden test compares both registries.
+ * Scenario composition (03-simulation-engine.yaml composition_format). Mirrors
+ * specifications/tools/validate_specs.py exactly; a golden test compares both registries.
  */
-import type {
-  Composition,
-  Json,
-  Registry,
-  Scenario,
-  ScenarioEvent,
-  SpecSources,
-  Variant,
-} from './types.ts';
-import { parameterProblem } from './parameters.ts';
+import type { Composition, Json, Registry, Scenario, ScenarioEvent, SpecSources } from './types.ts';
 
 type Node = Json | ScenarioEvent | undefined;
 
@@ -62,86 +52,17 @@ export function setPath(obj: Node, path: string, value: Json): boolean {
   return false;
 }
 
-/**
- * Sets scenario_id and sequence, and (unless `prefix` is false) prefixes event and pair IDs
- * with the scenario ID.
- */
-function finalize(scn: Scenario, id: string, prefix = true): Scenario {
+/** Sets scenario_id and sequence, and prefixes event and pair IDs with the scenario ID. */
+function finalize(scn: Scenario, id: string): Scenario {
   scn.events.forEach((e, i) => {
     e.scenario_id = id;
     e.sequence = i + 1;
-    if (!prefix) return;
     // A missing or non-string ID stays as it is, so validation reports it.
     if (typeof e.id === 'string') e.id = `${id}:${e.id}`;
     if (typeof e.pair_id === 'string') e.pair_id = `${id}:${e.pair_id}`;
   });
   scn.id = id;
   return scn;
-}
-
-export function expandVariant(base: Scenario, variant: Variant, problems: string[]): Scenario {
-  const scn = structuredClone(base);
-  const events = scn.events;
-  const index = (eid: string, op: string): number => {
-    const i = events.findIndex((e) => e.id === eid);
-    if (i < 0) problems.push(`${variant.id}: ${op} names unknown event ${eid}`);
-    return i;
-  };
-  for (const op of variant.operations ?? []) {
-    switch (op.op) {
-      case 'patch': {
-        const i = index(op.event, 'patch');
-        if (i < 0) break;
-        for (const [path, value] of Object.entries(op.set)) {
-          if (!setPath(events[i], path, structuredClone(value))) {
-            problems.push(`${variant.id}: patch path ${path} does not exist in ${op.event}`);
-          }
-        }
-        break;
-      }
-      case 'replace': {
-        const i = index(op.event, 'replace');
-        if (i >= 0) events[i] = structuredClone(op.with);
-        break;
-      }
-      case 'remove':
-        for (const eid of op.events) {
-          const i = index(eid, 'remove');
-          if (i >= 0) events.splice(i, 1);
-        }
-        break;
-      case 'insert_after': {
-        const i = index(op.event, 'insert_after');
-        if (i >= 0) events.splice(i + 1, 0, ...structuredClone(op.events));
-        break;
-      }
-      default:
-        problems.push(`${variant.id}: unknown operation ${(op as { op: string }).op}`);
-    }
-  }
-  for (const [name, value] of Object.entries(variant.parameter_overrides ?? {})) {
-    const parameter =
-      scn.parameters && Object.hasOwn(scn.parameters, name) ? scn.parameters[name] : undefined;
-    if (parameter) {
-      const problem = parameterProblem(name, parameter, value);
-      if (problem) problems.push(`${variant.id}: parameter_overrides ${problem}`);
-      parameter.default = structuredClone(value);
-    } else problems.push(`${variant.id}: parameter_overrides names unknown parameter ${name}`);
-  }
-  for (const [id, override] of Object.entries(variant.phase_overrides ?? {})) {
-    const phase = scn.phases.find((p) => p.id === id);
-    if (!phase) problems.push(`${variant.id}: phase_overrides names unknown phase ${id}`);
-    else if (!override.takeaway?.trim())
-      problems.push(`${variant.id}: phase_overrides ${id} has no takeaway`);
-    else phase.takeaway = override.takeaway;
-  }
-  if (variant.question !== undefined) scn.question = variant.question;
-  if (variant.fixture_overrides !== undefined)
-    scn.fixture_overrides = structuredClone(variant.fixture_overrides);
-  scn.title = variant.title;
-  // A variant is presented by its lesson.
-  scn.headline = variant.lesson ?? '';
-  return finalize(scn, variant.id);
 }
 
 const COMPOSED_FIELDS = [
@@ -155,16 +76,8 @@ const COMPOSED_FIELDS = [
   'derived_events',
 ] as const;
 
-/**
- * The composed scenario. With `prefix` false its event IDs stay local, as the base of its
- * variants (03 composition_format.variants).
- */
-export function compose(
-  comp: Composition,
-  registry: Registry,
-  problems: string[],
-  prefix = true,
-): Scenario {
+/** The composed scenario (03 composition_format). */
+export function compose(comp: Composition, registry: Registry, problems: string[]): Scenario {
   const events: ScenarioEvent[] = [];
   for (const step of comp.compose) {
     if ('copy' in step) {
@@ -200,48 +113,22 @@ export function compose(
     if (Object.hasOwn(comp, k)) scn[k] = structuredClone(comp[k]);
   }
   scn['events'] = events;
-  return finalize(scn as unknown as Scenario, comp.id, prefix);
+  return finalize(scn as unknown as Scenario, comp.id);
 }
 
-/**
- * Builds the registry: base scenarios, expanded variants, then the Combined composition and
- * its variants.
- */
+/** Builds the registry: the scenarios of 04 and 05, then the Combined composition. */
 export function buildRegistry(sources: SpecSources): { registry: Registry; problems: string[] } {
   const problems: string[] = [];
   const registry: Registry = {};
-  const invalid = new Set<string>();
   for (const scn of [...sources.mcp.scenarios, ...sources.rag.scenarios]) {
     if (!Array.isArray(scn.events)) {
       problems.push(`${scn.id}: events must be a list`);
-      invalid.add(scn.id);
       continue;
     }
     // A copy, so consumers of the registry cannot change the bundled sources.
     registry[scn.id] = structuredClone(scn);
   }
-  for (const variant of [...sources.mcp.variants, ...sources.rag.variants]) {
-    const base = Object.hasOwn(registry, variant.extends) ? registry[variant.extends] : undefined;
-    if (!base) {
-      const why = invalid.has(variant.extends) ? 'invalid' : 'unknown';
-      problems.push(`${variant.id}: extends ${why} scenario ${variant.extends}`);
-      continue;
-    }
-    registry[variant.id] = expandVariant(base, variant, problems);
-  }
   const comb = sources.comparison.combined;
-  // Composed once with local IDs, so copy-step problems are reported once; its variants
-  // expand from it.
-  const local = compose(comb, registry, problems, false);
-  registry[comb.id] = finalize(structuredClone(local), comb.id);
-  for (const variant of comb.variants ?? []) {
-    if (variant['extends'] !== comb.id) {
-      problems.push(
-        `${variant.id}: extends ${String(variant['extends'])}, not the composed scenario ${comb.id}`,
-      );
-      continue;
-    }
-    registry[variant.id] = expandVariant(local, variant as unknown as Variant, problems);
-  }
+  registry[comb.id] = compose(comb, registry, problems);
   return { registry, problems };
 }

@@ -6,23 +6,13 @@ import type { Page } from '@playwright/test';
 import { readSpecSources } from '../../scripts/spec-sources';
 import { partSource, STATEMENT_LABELS } from '../../src/inspector/combined';
 import { RagDerivation } from '../../src/rag/derive';
-import type { JsonObject, Scenario } from '../../src/scenarios/types';
 import { expect, test } from './fixtures';
 
-interface Case {
-  id: string;
-  title: string;
-  question: string;
-  lesson?: string;
-  expected_answer: string;
-  expected_sources: string[];
-}
 const combined = (
   parse(readFileSync('specifications/06-comparison-scenarios.yaml', 'utf8')) as {
-    combined: Case & { variants: Case[] };
+    combined: { question: string; expected_answer: string; expected_sources: string[] };
   }
 ).combined;
-const [missing] = combined.variants;
 const product = parse(readFileSync('specifications/00-product.yaml', 'utf8')) as {
   primary_questions: { combined: string };
 };
@@ -77,11 +67,9 @@ async function shownStatements(page: Page): Promise<[string, string][]> {
 
 const derivation = new RagDerivation(readSpecSources('specifications'));
 
-/** The statements the engine composes for a case: [label, text] per answer part. */
-function expectedStatements(fixtureOverrides?: JsonObject): [string, string][] {
-  return derivation
-    .combinedAnswer({} as Scenario, {}, fixtureOverrides)
-    .parts.map((p) => [STATEMENT_LABELS[partSource(p)], p.text]);
+/** The statements the engine composes: [label, text] per answer part. */
+function expectedStatements(): [string, string][] {
+  return derivation.combinedAnswer({}).parts.map((p) => [STATEMENT_LABELS[partSource(p)], p.text]);
 }
 
 test('combined-walkthrough: tool data and document evidence stay apart from question to answer', async ({
@@ -208,33 +196,6 @@ test('combined-walkthrough: tool data and document evidence stay apart from ques
   await expect(answerPanel(page)).toHaveCount(0);
   await expect(page.getByRole('slider', { name: 'Step' })).toBeFocused();
   await expect(operationLine(page)).toContainText('tools/call result');
-
-  // combined-missing-terms: the answer states the evidence gap instead of comparing.
-  if (!missing) throw new Error('no Combined variant');
-  await page.locator('.picker summary').click();
-  const item = page.locator('.picker li').filter({ hasText: missing.title });
-  await expect(item).toContainText(missing.lesson ?? '');
-  await item.getByRole('link').click();
-  await expect(page).toHaveURL(/#\/combined\/combined-missing-terms\/0$/);
-  await expect(page.locator('.headline')).toHaveText(missing.lesson ?? '');
-  await jump(page, 35);
-  const gap = await shownStatements(page);
-  expect(gap).toEqual(
-    expectedStatements((missing as unknown as { fixture_overrides: JsonObject }).fixture_overrides),
-  );
-  expect(gap.map(([, text]) => text).join(' ')).toBe(missing.expected_answer);
-  expect(gap.slice(-2)).toEqual([
-    [
-      'Not in the evidence',
-      "The retrieved evidence does not cover the Savings account's fee and interest, the Savings account's minimum balance, the Savings account's card access, the Savings account's withdrawal rules and transfers between the accounts.",
-    ],
-    [
-      'Comparison',
-      "Without the Savings account terms I can't say whether another account type would offer better conditions.",
-    ],
-  ]);
-  await expect(answerPanel(page).locator('.source-line')).toHaveText(missing.expected_sources);
-  await expect(answerPanel(page)).not.toContainText('savings-account.md');
 });
 
 test('on narrow screens each label sits above its statement', async ({ page }) => {
@@ -249,21 +210,10 @@ test('on narrow screens each label sits above its statement', async ({ page }) =
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
-test('a failed tool call is labelled as failed in context, and labels keep their separator', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 820, height: 900 });
-  await open(page, '#/mcp/mcp-jsonrpc-error/16');
-  await page.getByRole('button', { name: 'Model context' }).click();
-  const tool = seen(page).locator('.context-list > li').filter({ hasText: 'tool ·' });
-  await expect(tool).toContainText('Tool call failed · get_balance');
-  await expect(tool).not.toContainText('Tool data');
-  await expect(
-    agentState(page).locator('li').filter({ hasText: 'Tool message stored in conversation' }),
-  ).toContainText('Tool call failed · Tool message stored in conversation');
-
+test('a source label never breaks from its separator in context', async ({ page }) => {
   // At 820 px no separator after a label wraps onto a line of its own.
-  for (const hash of ['#/mcp/mcp-not-found/26', '#/combined/combined-balance-explanation/33']) {
+  await page.setViewportSize({ width: 820, height: 900 });
+  for (const hash of ['#/mcp/mcp-balance/26', '#/combined/combined-balance-explanation/33']) {
     await open(page, hash);
     await page.getByRole('button', { name: 'Model context' }).click();
     const orphans = await page.locator('#context-panel').evaluate((panel) =>
@@ -281,9 +231,6 @@ test('a failed tool call is labelled as failed in context, and labels keep their
       }),
     );
     expect(orphans, hash).toEqual([]);
-    // An isError result of an existing tool is still tool data, named an error result.
-    if (hash.includes('mcp-not-found'))
-      await expect(seen(page)).toContainText('Tool data · get_customer_balance error result');
   }
   await expect(seen(page)).toContainText('Tool data · get_customer_balance result');
 });

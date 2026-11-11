@@ -95,7 +95,7 @@ export interface Scenario {
   title: string;
   question?: string;
   learning_question: string;
-  /** One sentence stating the main message; for an expanded variant, its lesson. */
+  /** One sentence stating the main message. */
   headline: string;
   participants: string[];
   phases: Phase[];
@@ -107,28 +107,6 @@ export interface Scenario {
   /** Events that play only while their boolean parameter is on. */
   optional_steps?: OptionalStep[];
   context_rule?: string;
-  /** A variant's fixture changes, copied on expansion for the scenario's engine. */
-  fixture_overrides?: JsonObject;
-}
-
-export type VariantOperation =
-  | { op: 'patch'; event: string; set: Record<string, Json> }
-  | { op: 'replace'; event: string; with: ScenarioEvent }
-  | { op: 'remove'; events: string[] }
-  | { op: 'insert_after'; event: string; events: ScenarioEvent[] };
-
-export interface Variant {
-  id: string;
-  title: string;
-  extends: string;
-  question?: string;
-  /** One sentence stating what the variant teaches. */
-  lesson: string;
-  fixture_overrides?: JsonObject;
-  parameter_overrides?: JsonObject;
-  operations?: VariantOperation[];
-  /** Replaces the takeaways of base phases that are not true for the variant. */
-  phase_overrides?: Record<string, { takeaway?: string }>;
 }
 
 export interface CopyStep {
@@ -160,7 +138,6 @@ export interface Composition {
   compose: CompositionStep[];
   expanded_event_count: number;
   derived_events?: string[];
-  variants?: (Omit<Variant, 'extends'> & JsonObject)[];
 }
 
 /** One message of an earlier protocol revision, shown only for comparison. */
@@ -191,18 +168,14 @@ export interface SpecSources {
   mcp: {
     protocol: { revision: string; earlier_revision_handshake?: EarlierRevision };
     scenarios: Scenario[];
-    variants: Variant[];
   } & JsonObject;
-  rag: { scenarios: Scenario[]; variants: Variant[] } & JsonObject;
+  rag: { scenarios: Scenario[] } & JsonObject;
   comparison: {
     semantic_phases: { id: string; label: string }[];
     compare: Compare;
     combined: Composition;
   } & JsonObject;
-  security: {
-    trust_boundaries: { id: string }[];
-    error_taxonomy?: Record<string, string>;
-  } & JsonObject;
+  security: { trust_boundaries: { id: string }[] } & JsonObject;
 }
 
 /** The Compare view's data (06-comparison-scenarios.yaml compare). */
@@ -221,5 +194,5 @@ export type Compare = {
   aspects?: { label: string; sentence: string }[];
 } & JsonObject;
 
-/** Base scenarios, expanded variants, the composed scenario and its variants, in that order. */
+/** The scenarios of 04 and 05, then the composed scenario, in that order. */
 export type Registry = Record<string, Scenario>;

@@ -204,11 +204,6 @@ describe('parameter changes', () => {
     );
     expect(index.setParameters({ chunk_size_words: 100 })).toBeGreaterThan(0);
   });
-
-  it("start from a variant's parameter_overrides", () => {
-    expect(new Playback(scenario('rag-conflict')).snapshot(0).retrieval_config['top_k']).toBe(8);
-    expect(new Playback(scenario('rag-hybrid')).snapshot(0).retrieval_config['rerank']).toBe(true);
-  });
 });
 
 class FakeClock implements Clock {

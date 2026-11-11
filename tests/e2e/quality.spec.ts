@@ -19,21 +19,10 @@ const gates = (
 /** Every scenario of the MCP, RAG and Combined tabs, and Compare, by route. */
 const ROUTES = [
   'mcp/mcp-balance',
-  'mcp/mcp-resources',
-  'mcp/mcp-not-found',
-  'mcp/mcp-unauthorized',
-  'mcp/mcp-jsonrpc-error',
-  'mcp/mcp-multiple-tools',
   'rag/rag-query',
   'rag/rag-index',
-  'rag/rag-stale',
-  'rag/rag-no-match',
-  'rag/rag-conflict',
-  'rag/rag-hybrid',
-  'rag/rag-prompt-injection',
   'compare/compare-rag-mcp',
   'combined/combined-balance-explanation',
-  'combined/combined-missing-terms',
 ];
 
 /** The step status: Compare's own above its panes' (each pane has a status too). */
@@ -294,8 +283,8 @@ for (const [width, height] of [
             );
           }
 
-          // The scenario picker opens with Enter and a scenario is chosen with Enter.
-          if (!compare) {
+          // The scenario picker, on RAG only, opens with Enter and a scenario is chosen with Enter.
+          if (tab === 'RAG') {
             await page.reload();
             await ready(page);
             const url = page.url();

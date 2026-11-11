@@ -94,11 +94,17 @@ test('architecture mode marks the group caption holding the selected value with 
 });
 
 test('Escape in the scenario picker closes it and keeps the selection', async ({ page }) => {
-  await open(page, '#/mcp/mcp-balance/24/protocol');
+  // Only RAG has a scenario picker (02 navigation.scenario_picker).
+  await open(page, '#/rag/rag-query/10/protocol');
   await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
-  await page.getByRole('button', { name: 'Select balance 12500.75' }).click();
+  await page
+    .getByRole('button', { name: /^Select / })
+    .first()
+    .click();
+  const marks = await page.locator('.step .label-mark').count();
+  expect(marks).toBeGreaterThan(0);
   await page.locator('.picker summary').click();
   await page.keyboard.press('Escape');
   await expect(page.locator('.picker')).not.toHaveAttribute('open', '');
-  await expect(page.locator('.step .label-mark')).toHaveCount(5);
+  await expect(page.locator('.step .label-mark')).toHaveCount(marks);
 });

@@ -15,7 +15,7 @@ event_schema:
   - message_type
   - explanation
   fields:
-    id: Unique string across the expanded registry
+    id: Unique string across the registry
     scenario_id: Scenario registry ID
     phase: ID of one of the scenario's phases
     sequence: Integer, strictly increasing from 1 within a scenario
@@ -87,7 +87,7 @@ state_model:
   - 'lineage maps each tracked key to its occurrences {event, value} in events 1 to cursor,
     in order.'
   - 'retrieval_config maps each scenario parameter to its current value: the default,
-    replaced by the variant''s parameter_overrides, then by the learner''s changes. Values
+    replaced by the learner''s changes. Values
     are finite, stay within the parameter''s min and max, are whole numbers when the default
     is one, and are one of the parameter''s options when it lists them.'
   random_access: Recompute from initial state or cached deterministic snapshots
@@ -97,7 +97,7 @@ state_model:
     ID. Changing a parameter and changing it back yields identical snapshots.
   backward: No imperative reverse side effects
 invariants:
-- Event IDs unique across the expanded registry
+- Event IDs unique across the registry
 - Sequence strictly increasing within scenario
 - Each pair_id resolves to exactly one event whose pair_id points back
 - JSON-RPC request IDs match their responses; correlation_id equals the JSON-RPC id
@@ -135,11 +135,10 @@ scenario_format:
   - parameters
   - derived_events
   - optional_steps
-  - fixture_overrides
   optional_fields:
     derived_events: Local (unprefixed) IDs of events whose payload values, explanation
-      and tracked_values the scenario's engine recomputes from the fixtures, the scenario's
-      fixture_overrides and retrieval_config with pure functions (05-rag-scenarios.yaml
+      and tracked_values the scenario's engine recomputes from the fixtures and retrieval_config
+      with pure functions (05-rag-scenarios.yaml
       derived_event_rules). Playback plays the derived events, never the YAML values,
       which show the base scenario at its default parameters (an optional step at its
       defaults with its enabling parameter on). Every other field of a derived event,
@@ -147,7 +146,6 @@ scenario_format:
     optional_steps: 'List of {events, enabled_by}: local event IDs that play only while
       the boolean parameter enabled_by is true. Otherwise playback omits them and numbers
       the remaining events from 1. A request and its response share one entry.'
-    fixture_overrides: Copied from the variant on expansion, for the scenario's engine.
   validation: 'At build and startup, check: required scenario and event fields; enum
     values of protocol, transport, execution_type and message_type; unique event IDs;
     sequence and scenario_id; declared phases and participants; reciprocal pairs; a
@@ -171,45 +169,19 @@ scenario_format:
     (timestamps, .inf, .nan, sexagesimal numbers), duplicate keys, keys that are not
     strings, anchors, aliases, explicit tags and merge keys are build errors.'
   golden_test: Every bundled file equals PyYAML safe_load of the same file, and the
-    TypeScript registry (base scenarios, expanded variants, the composed scenario and its
-    variants)
-    equals the registry of validate_specs.py --dump-registry.
-variant_format:
-  description: A variant is a base scenario plus ordered edit operations. Expansion
-    produces a complete scenario that passes the same validation.
-  fields:
-    id: Variant scenario ID
-    title: Display title
-    extends: Base scenario ID
-    question: Optional replacement question
-    fixture_overrides: Optional fixture changes interpreted by the relevant engine
-    parameter_overrides: Optional parameter values
-    operations: Optional ordered list of edit operations
-    lesson: Required. One sentence stating what the variant teaches
-    phase_overrides: 'Optional {<phase id>: {takeaway}}. Replaces the takeaway of a base
-      phase whose takeaway is not true for the variant.'
-  operations:
-    patch: '{op: patch, event, set: {dotted.path: value}}. Replaces the value at each
-      path; numeric path segments index arrays.'
-    replace: '{op: replace, event, with: event}. Replaces the whole event.'
-    remove: '{op: remove, events: [ids]}. Removes events; pairs must stay reciprocal.'
-    insert_after: '{op: insert_after, event, events: [events]}. Inserts new events
-      after the named event.'
-  expansion:
-  - Deep-copy the base scenario
-  - Apply operations in order using local (unprefixed) event IDs
-  - Set scenario_id to the variant ID and renumber sequence from 1
-  - Prefix every event ID and pair_id with '<variant id>:'
-  - Take the scenario ID and title from the variant, the question if given, and the
-    headline from the variant's lesson; parameter_overrides replace the defaults of the
-    named parameters; phase_overrides replace the named phases'' takeaways; copy the
-    variant's fixture_overrides; keep every other base field
-  - Validate the expanded scenario
+    TypeScript registry (the scenarios of 04 and 05, then the composed scenario) equals the
+    registry of validate_specs.py --dump-registry.
+  one_scenario_per_use_case: 'Each use case has exactly one scenario: mcp-balance (MCP), rag-index
+    and rag-query (RAG) and the composed Combined scenario. There are no variants: what a former
+    variant taught (failures, resources, several tools, stale or conflicting documents, prompt
+    injection, missing terms) is stated in a technical note of the base step it concerns, and
+    what the RAG parameters show (no match, keyword retrieval and reranking) is reached with
+    them (issue 46). A variants key in 04, 05 or 06 combined fails validation.'
 composition_format:
   description: Used by the Combined scenario (06-comparison-scenarios.yaml).
   steps:
     copy: '{scenario, from, to, phase_map?, patch?}. Copies the inclusive event range
-      of an already expanded scenario. phase_map renames phases; patch applies field
+      of a scenario of 04 or 05. phase_map renames phases; patch applies field
       replacements keyed by source event ID.'
     insert: '{insert: [events]}. Adds new events written for the composed scenario.'
   expansion:
@@ -220,11 +192,6 @@ composition_format:
     and derived_events from the composition
   - Copied ranges must contain complete request/response pairs
   - Validate the composed scenario
-  variants: 'A variant of the composed scenario (06-comparison-scenarios.yaml combined.variants)
-    extends the composition''s ID and expands as variant_format describes, from the composed
-    events before their IDs are prefixed, so its event IDs carry the variant ID only. It follows
-    the composed scenario in the registry. Fields the variant format does not name (such as
-    expected_answer) are reference data for the validators and are not copied.'
 deterministic_model:
   behavior: Select prewritten response templates from evidence states. RAG answers
     follow 05-rag-scenarios.yaml answer_rules.

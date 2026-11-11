@@ -42,14 +42,14 @@ test('navigation: jump to the last step, step back, switch view, reset and repla
 });
 
 test('a deep link restores tab, scenario, step and mode after reload', async ({ page }) => {
-  await open(page, '#/rag/rag-hybrid/5/protocol');
+  await open(page, '#/rag/rag-index/5/protocol');
   await expect(page.getByRole('link', { name: 'RAG' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('.picker summary')).toContainText('reranking');
+  await expect(page.locator('.picker summary')).toContainText('Ingest and index documents');
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page).toHaveURL(/#\/rag\/rag-hybrid\/6\/protocol$/);
+  await expect(page).toHaveURL(/#\/rag\/rag-index\/6\/protocol$/);
   await page.reload();
   await page.locator('[data-measured] svg.diagram').waitFor();
-  await expect(status(page)).toContainText('Step 6 of 13');
+  await expect(status(page)).toContainText('Step 6 of 10');
   await expect(page.getByRole('button', { name: 'Protocol' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -116,18 +116,28 @@ test('play pauses at a prediction', async ({ page }) => {
   await expect(status(page)).toContainText('Step 11 of 28');
 });
 
-test('the scenario picker lists variants with their lessons', async ({ page }) => {
+test('only RAG offers a scenario picker: the question and the index it searches', async ({
+  page,
+}) => {
+  // One scenario per use case (02 navigation.scenario_picker): MCP and Combined have none.
   await open(page, '#/mcp/mcp-balance/0');
+  await expect(page.locator('.picker')).toHaveCount(0);
+  await open(page, '#/combined/combined-balance-explanation/0');
+  await expect(page.locator('.picker')).toHaveCount(0);
+  await open(page, '#/rag/rag-query/0');
   await page.locator('.picker summary').click();
-  const item = page.locator('.picker li').filter({ hasText: 'isError true' });
-  await expect(item).toContainText(
-    'A backend failure comes back as a tool result with isError true',
+  await expect(page.locator('.picker li')).toHaveText([
+    'Conditions for opening and keeping an account',
+    'Ingest and index documents',
+  ]);
+  await expect(page.locator('.picker a[aria-current="true"]')).toHaveText(
+    'Conditions for opening and keeping an account',
   );
-  await item.getByRole('link').click();
-  await expect(page).toHaveURL(/#\/mcp\/mcp-not-found\/0$/);
+  await page.locator('.picker li').filter({ hasText: 'Ingest' }).getByRole('link').click();
+  await expect(page).toHaveURL(/#\/rag\/rag-index\/0$/);
   await expect(page.locator('.picker')).not.toHaveAttribute('open', '');
   await expect(page.locator('.lesson h2')).toHaveText(
-    'How does an AI assistant obtain your live account balance?',
+    'How does a document become searchable by meaning?',
   );
 });
 
@@ -226,10 +236,10 @@ test('after choosing a tab or a scenario, focus moves to the new page heading', 
   await page.keyboard.press('Enter');
   await page
     .locator('.picker li')
-    .filter({ hasText: 'No sufficiently relevant' })
+    .filter({ hasText: 'Ingest and index documents' })
     .getByRole('link')
     .press('Enter');
-  await expect(page).toHaveURL(/#\/rag\/rag-no-match\/0$/);
+  await expect(page).toHaveURL(/#\/rag\/rag-index\/0$/);
   await expect(page.locator('.lesson h2')).toBeFocused();
   // Back, and links inside the page.
   await page.goBack();

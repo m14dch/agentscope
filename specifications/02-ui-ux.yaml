@@ -15,7 +15,7 @@ design:
     charts, is recorded in the decision "Retained chunks keep the accent in the score plot and the
     projection (issue 15)" below);
     Naples Yellow marks what the learner selected or tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
-    label naming the kind.
+    naming them.
   - The RAG question changes to the handover's question and the communication layer
     (learning questions, takeaways, prediction prompts) was added to the scenario data
     (issue 22).
@@ -90,7 +90,8 @@ design:
     - Selection (Naples Yellow) is a background for what the learner selected or tracks,
       such as lineage values, always together with an ink underline so the mark does not
       depend on colour. Never put accent marks on selection.
-    - Error is used only for errors, always with a × and a text label naming the kind.
+    - Error is used only for the app's own errors (an unknown route, invalid scenario data), always
+      with a × and a text naming the error. No scenario shows a failure (03 one_scenario_per_use_case).
     - No other colour values exist outside the tokens, and no large saturated areas. The
       only exception is the approved brand images (layout brand); their colours stay inside
       those image files and never appear in styles, scripts or markup.
@@ -141,32 +142,39 @@ navigation:
   - Combined
   default: MCP
   tab_contents:
-    MCP: 04-mcp-scenarios.yaml scenarios, then its variants
-    RAG: 05-rag-scenarios.yaml rag-query, rag-index, then its variants
+    MCP: 04-mcp-scenarios.yaml mcp-balance
+    RAG: 05-rag-scenarios.yaml rag-query, then rag-index
     Compare: 06-comparison-scenarios.yaml compare
-    Combined: 06-comparison-scenarios.yaml combined, then its variants
+    Combined: 06-comparison-scenarios.yaml combined
   routes: '#/<tab>/<scenario>/<step>, with /protocol appended in protocol mode (for example
     #/mcp/mcp-balance/14/protocol). Missing parts take defaults: the tab''s first scenario,
     step 0, architecture mode. A step beyond the scenario is clamped. An unknown tab or
     scenario shows an error naming it, with a link to the tab. Stepping replaces the
     history entry; changing tab or scenario adds one. Parameters are not part of the route,
     so a step number refers to the events played at the scenario''s default parameters.'
+  removed_scenarios: 'Addresses of the variants removed in issue 46 still open: a removed scenario
+    shows its base scenario at step 0 in the same mode, and the address is replaced with the
+    base scenario''s (step 0, because a variant''s step numbers named other events). On MCP,
+    mcp-resources, mcp-not-found, mcp-unauthorized, mcp-jsonrpc-error and mcp-multiple-tools
+    open mcp-balance; on RAG, rag-stale, rag-no-match, rag-conflict, rag-hybrid and
+    rag-prompt-injection open rag-query; on Combined, combined-missing-terms opens
+    combined-balance-explanation. On another tab such an ID is unknown.'
   route_steps: 'While the parameters differ from the defaults, the address shows the step at
     which the current event is played at the defaults; if it is not played there, the step of
     the nearest earlier current event that is, else 0. A step read from the address names the
     event played at that step at the defaults; the cursor goes to that event, or if it is not
     played now to the nearest earlier default event that is, else to 0.'
-  scenario_picker: One menu per tab listing its scenarios by title; each variant shows
-    its lesson on a second line. The current scenario is marked.
+  scenario_picker: 'Only RAG has two scenarios, so only RAG has a picker: one menu "Scenario:
+    <title>" listing rag-query and rag-index by title, the current one marked, so the learner
+    switches between asking the question and building the index it searches. MCP and Combined
+    have one scenario each and no picker; the learning question names what they show.'
 layout:
   desktop:
   - 'Top bar: navigation, scenario, architecture/protocol toggle'
   - 'Main: resizable sequence diagram + payload inspector'
   - 'Bottom: execution timeline + a collapsible model-context panel, collapsed at start,
-    in rag-index the ingestion panel (rag_ingestion), in rag-query and its variants the
-    retrieval panel (rag_retrieval), in rag-stale and rag-conflict, the version panel
-    (rag_controls.version_panel) and, in the Combined scenario and its variants, the answer''s
-    provenance (combined_answer). Lineage lives in the inspector''s
+    in rag-index the ingestion panel (rag_ingestion), in rag-query the retrieval panel
+    (rag_retrieval) and, in the Combined scenario, the answer''s provenance (combined_answer). Lineage lives in the inspector''s
     Lineage tab and in the diagram (lineage_selection), not in a panel of its own'
   - 'Header: one persistent statement that everything is simulated and nothing leaves
     the browser'
@@ -193,7 +201,7 @@ layout:
       page or inside any region, in any tab, scenario, mode or panel, from 360 px wide.
     header: 'The wordmark (32 px high), then on its row a disclosure "Menu" (dotted underline
       like every fold); below them the tabs and the simulated statement, always visible.
-      The menu holds the scenario picker''s list of scenarios (shown in place, without the
+      The menu holds the scenario picker''s list of scenarios on RAG (shown in place, without the
       picker''s own fold), the architecture/protocol switch, the speeds, Start and Reset, each
       group labelled in small ink-muted text. These controls move into the menu; none is
       duplicated. It opens below the wordmark row and pushes the page down; it closes on
@@ -212,11 +220,11 @@ layout:
       2.5.8.'
     presentation: The diagram region shows the step list (diagram.phone_list) and scrolls
       vertically only; it is 30% of the screen's height (at least 9rem), so the stepping area
-      (the step list, then the prediction prompt, the message line and the error line below
-      it) fits above the bottom bar.
+      (the step list, then the prediction prompt and the message line below it) fits above the
+      bottom bar.
     stepping_area: 'After a change of step or of the prediction prompt (not a parameter
       change, a lineage selection or a fold), if the step list''s region does not start inside
-      the screen or the last of the prompt, the message line and the error line ends below the
+      the screen or the last of the prompt and the message line ends below the
       top of the bottom bar, the page scrolls at once (no animation) so the region starts 8 px
       below the top of the screen, as far as the page can scroll. The current row or group is
       then in view inside the region, whose list scrolls at once too
@@ -238,7 +246,7 @@ layout:
       that waits through a phase or is done with it did not change. This is the only case in
       which the page scrolls by itself (modes.scrolling).'
     inspector: 'Below the diagram region, in this order: the prediction prompt when shown
-      (learning.prediction), the message line and the error line, always visible; then a
+      (learning.prediction) and the message line, always visible; then a
       toggle "Step details" (aria-expanded, dotted underline) over the tabs, collapsed at
       start and kept as the learner left it while stepping. Long values and code wrap; no
       tab scrolls sideways.'
@@ -265,7 +273,6 @@ diagram:
     response: open arrowhead
     current_and_pair: accent line, 2 px, and the label in weight 600, so the current step
       stays distinct in greyscale
-    error: error line; the label starts with × and names the kind from error_events
   labels: 'Each arrow carries its operation as a direct text label, prefixed with the
     protocol for messages that cross a protocol boundary: MCP, HTTP, LLM API and DB (for
     example MCP · tools/call). The prefix is left out when the operation already starts
@@ -293,9 +300,9 @@ diagram:
     region, from the same events, visibility, marks and expanded groups as the diagram.
     Protocol mode lists each reached event in order (future steps are not listed, so the
     current step is the last row): its step number in small ink-muted text, its arrow label
-    (labels, error_events), and below it the sender and the receiver by registry label,
+    (labels), and below it the sender and the receiver by registry label,
     joined by a short arrow 32 px long drawn with the event''s encoding (line kind, filled or
-    open head, the accent for the current step and its pair, the error colour for an error).
+    open head, the accent for the current step and its pair).
     A self-call names its participant once, followed by a short loop. Each row names its two
     participants, so there are no lifelines and no participant header. Architecture mode
     stacks the groups of modes.architecture_groups as flat sections in order, separated by a
@@ -313,13 +320,6 @@ diagram:
   rendering: SVG lifelines, arrows and labels generated from ordered event data. The
     header states once that everything is simulated; arrows carry no per-arrow simulation
     label.
-  error_events: 'An error arrow marks where a failure occurs on the wire, with its kind
-    from 07-security-protocols.yaml error_taxonomy: protocol error when the payload is a
-    JSON-RPC response with an error object; tool execution error when an MCP result has
-    isError true; transport error for any other HTTP response with status 4xx or 5xx;
-    model error for an LLM API response with status 4xx or 5xx. The label reads × <kind>
-    error · <operation>. Steps that only hand the failure on inside the agent are not
-    error arrows; their explanation says what happens.'
 
 modes:
   architecture: 'Conceptual level: collapse each scenario phase into one expandable group
@@ -330,9 +330,7 @@ modes:
     its backend call) appears again, captioned as continued and without repeating its
     takeaway. A phase without events has no group. A group spans at least the lifelines
     its events touch and widens only to fit its takeaway. The group holding the current
-    step is the current group: an accent bar and its takeaway in weight 600. A group whose
-    reached events include an error adds × and the error kind to its caption, in the error
-    colour. A group expands or collapses on click, Enter or Space; expanded, it shows its
+    step is the current group: an accent bar and its takeaway in weight 600. A group expands or collapses on click, Enter or Space; expanded, it shows its
     events up to the cursor with protocol-mode styling. The current step is visible without
     a click: when the cursor enters a group (stepping forward or back, a jump, a link to a
     step), that group expands, so the current group is always expanded unless the learner
@@ -353,7 +351,7 @@ modes:
     its receiver in view. Keyboard focus stays on the same group or region across steps. Arrow
     keys scroll the diagram region while it has focus.
   protocol: 'Technical level: show all individual events with exact logical messages;
-    the inspector holds payloads, boundaries and errors.'
+    the inspector holds payloads and boundaries.'
   default_mode: architecture
   switch_preserves_position: true
 learning:
@@ -409,12 +407,6 @@ controls:
 inspector:
   message_line: Always visible above the tabs. The event's explanation, then sender →
     receiver and operation. Replaces separate Overview and Explanation tabs.
-  error_line: 'On a step that is an error arrow (diagram.error_events), one more line follows
-    the message line: × and the kind in the error colour and weight 600 (for example "×
-    tool execution error"), then that kind''s definition from 07-security-protocols.yaml
-    error_taxonomy in ink. The sender → receiver line then shows the operation without
-    the error mark, so the kind is stated once. Steps that only hand a failure on carry
-    no error line.'
   earlier_revision: 'On a server/discover request the Payload tab ends with a collapsed
     control, "Compare with the initialize handshake of revision 2025-11-25", underlined
     dotted like other folds. Opened, it shows the summary and each message of 04-mcp-scenarios.yaml
@@ -493,15 +485,9 @@ context_panel:
     separator after it never break apart. In agent state an entry stored from a tool result or
     a tool message says "Tool data", and a non-empty list of retained chunks says "Document
     evidence". In the model-visible context a tool message says "Tool data · <tool> result",
-    naming the tool of its tool call. The outcome of the MCP tools/call that produced it
-    qualifies both: a result with isError true is "Tool data · error result" in agent state
-    and "Tool data · <tool> error result" in the context, still data from the tool; a call that
-    failed at the protocol level (a JSON-RPC error response, such as an unknown tool) returned
-    no tool data and says "Tool call failed" in agent state and "Tool call failed · <tool>" in
-    the context. A message carrying document blocks shows
+    naming the tool of its tool call. A message carrying document blocks shows
     its own text first, then each block below it in prompt order as "Document evidence ·
-    <document ID> v<version> · chunk <chunk ID>" (with "· untrusted" for an untrusted
-    document), followed by the block''s text. Other entries and messages carry no source
+    <document ID> v<version> · chunk <chunk ID>", followed by the block''s text. Other entries and messages carry no source
     label.'
 lineage_selection:
   select: 'In the Lineage tab each tracked value can be selected (a toggle button); one
@@ -593,18 +579,9 @@ rag_controls:
     - 10
     - 20
     default: 10
-  version_panel: 'In rag-stale and rag-conflict, show source and indexed document versions
-    side by side: below the timeline from step 0, a section "Source and indexed versions"
-    lists every official document with its source version (05 fixtures.documents) and the
-    versions the index holds, or "not indexed". For each document whose indexed versions
-    differ from or add to its source version, the source text and each other indexed text
-    stand side by side (two columns from 64rem, stacked below), with the words that differ
-    in weight 600 and one sentence stating the difference in words, for example "Version
-    1.0 says ''CHF 7 per month'' where version 1.2 says ''CHF 5 per month''."'
   placement: 'A row of labelled option groups below the playback controls, shown from step
     0 in the scenarios that have the parameters (chunk size and overlap in rag-index; top K,
-    threshold, reranking, keyword retrieval and fetch full documents in rag-query and its
-    variants). A change recomputes the derived events at once (controls.action_rules.parameter_change);
+    threshold, reranking, keyword retrieval and fetch full documents in rag-query). A change recomputes the derived events at once (controls.action_rules.parameter_change);
     the values are not part of the route and return to their defaults with a new scenario.'
   control_kinds: 'Options (chunk size, overlap) and top K are groups of pressed buttons, one
     per value (top K 1 to 8). The threshold is a slider from min to max in steps of 0.01
@@ -636,7 +613,7 @@ rag_ingestion:
   embedding_note: Above the vector, the principle of 05-rag-scenarios.yaml that the demo
     embedding stands in for a learned model, as written there (two plain sentences).
 rag_retrieval:
-  shown_in: 'Scenarios that derive retrieve-12, the answer (rag-query and its variants; the
+  shown_in: 'Scenarios that derive retrieve-12, the answer (rag-query; the
     Combined scenario derives only retrieve-05 and retrieve-06 and has no panel), below the
     timeline, from the step that returns the scored chunks (retrieve-05). Scores, the
     threshold, the selection, the prompt and the answer are read from the played events
@@ -656,8 +633,7 @@ rag_retrieval:
     order in which the prompt carries it) or retrieve-06''s discard reason; retained dots are
     filled in the accent, the others hollow. Before retrieve-06 a line names the step that
     applies top K and the threshold. Once hybrid-02 is reached each hit shows its keyword
-    score, and once hybrid-03 is reached each candidate shows its reranker score. A chunk of
-    an untrusted document says "untrusted" in its row. With reranking (retrieve-06 rerank),
+    score, and once hybrid-03 is reached each candidate shows its reranker score. With reranking (retrieve-06 rerank),
     one sentence below says that the <k> best by reranker score are retained, so a retained
     chunk can score lower than a dropped one. The outcome wraps within its column; no text
     leaves its column. The threshold''s label keeps clear of the top end of its line.'
@@ -665,12 +641,9 @@ rag_retrieval:
     − technical, both from −1 to 1, equal scales): the axes are named by meaning at their
     ends (rules ← → cost, technical ↓ ↑ product), every chunk point and the question''s point
     (retrieve-03) are labelled directly (in the compact form below, only the question''s
-    point), and retained points are filled in the accent. Chunks
-    with identical vectors and the same outcome (both retained, or both dropped for the same
-    reason; the versions of one chunk in rag-conflict)
-    share one label at their common point, naming each version once (for example
-    "savings-account@1.0/1.2 · 001"); each chunk is still its own point for assistive
-    technology. A label sits right or left of its point; where it would overlap another label,
+    point), and retained points are filled in the accent. At rag-query''s chunking (05
+    derived_event_rules.inputs) no two chunks share a vector, so every point has its own
+    label. A label sits right or left of its point; where it would overlap another label,
     a point, the question''s mark, an axis, an axis name or a leader line, it moves up or down
     by a line, nearest first, beside a leader line kept as short as that allows: of the
     candidate layouts in which every label fits (several horizontal positions of the plot and
@@ -685,7 +658,7 @@ rag_retrieval:
     width (phones, below 768 px), the plot takes a compact form instead of scrolling: the
     square plot at the available width (side at most 360 px) with its axes, their names and
     every point marked as above, only the question labelled at its point; then, below it, a
-    list of the chunk points in score order, each with its label (shared labels as above), its
+    list of the chunk points in score order, each with its label, its
     position named by the axes with 2 decimals (for example "everyday-account@1.2 · 001: rules
     0.31, product 0.62"; a coordinate that rounds to 0.00 is written "on the rules–cost axis"
     or "on the technical–product axis" instead of a value) and "retained" in words when it
@@ -702,10 +675,7 @@ rag_retrieval:
     written as retrieve-10 writes them) side by side (two columns from 64rem, stacked
     below), each message with its role. Until retrieve-10 a line says the prompt is assembled
     and the model has not seen it; from retrieve-10 it names the step that sent it. Each
-    document block is set apart with its ID, version, chunk and trust; an untrusted block
-    starts with the words "Untrusted document" in weight 600, and the instruction injected
-    into it (05 fixtures.untrusted_documents injected_instruction) is set in weight 600 and
-    followed by "(instruction inside a document: treated as data)".'
+    document block is set apart with its ID, version, chunk and trust.'
   answer: 'From retrieve-12, the answer (labelled simulated, learning.simulated_behaviour) with
     each [n] as a button that never breaks from the punctuation after it, then the source
     lines exactly as 05 answer_rules writes them. A citation opens its evidence below the
@@ -720,7 +690,7 @@ rag_retrieval:
     (stepping back before retrieve-05) while it holds focus, focus moves to the step slider,
     as in rag_ingestion.
 combined_answer:
-  shown_in: 'The Combined scenario and its variants, below the timeline, from the step that
+  shown_in: 'The Combined scenario, below the timeline, from the step that
     displays the answer (c-08); absent before. The answer and its sources are read from the
     played c-08, the balance from the played tools/call result (mcp-23) and chunk text from the
     index the scenario searches, so the screen always equals the events.'
@@ -732,9 +702,8 @@ combined_answer:
     answer_composition.rule, 05 answer_rules), recomputed for the scenario as its derived events
     are, never found by parsing the text: "Tool data · MCP" for an intro sentence whose source
     is tool, "Session context" for one whose source is session, "Document evidence · RAG" for
-    each group sentence and each conflict sentence, "Not in the evidence" for the sentence
-    naming the unsupported aspects or the no-evidence answer, "Note" for the injection note, and
-    "Comparison" for the comparison sentence, if one applies. Joined by single spaces, the
+    each group sentence, "Not in the evidence" for the sentence naming the unsupported aspects,
+    and "Comparison" for the comparison sentence. Joined by single spaces, the
     statements are exactly the answer of c-08; where they are not, the answer is shown as one
     unlabelled statement.'
   links: 'The balance in the tool statement is a button that opens the tool result below the
@@ -747,9 +716,6 @@ combined_answer:
   sources: 'Below the statements the sources, in the order of the statements: "Tool data" with
     "<tool> result, returned at step <n>" (a jump link), then "Documents" with the source lines
     exactly as 05 answer_rules writes them.'
-  gap: In a variant whose evidence lacks terms (combined-missing-terms), the "Not in the
-    evidence" statement names them and the comparison statement says that no comparison is
-    made; the gap is stated in words like every other statement.
   focus: As rag_retrieval.focus, with this panel's heading and the step slider.
 accessibility:
 - Keyboard operable controls

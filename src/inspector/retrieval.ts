@@ -3,16 +3,10 @@
  * threshold, the fixed 2D projection, the prompt before and after retrieval, and the answer
  * whose citations open their evidence next to the source document. Scores, selection, prompt
  * and answer are read from the played events, so the panel always equals them; chunk text
- * and vectors come from the index the scenario searches. Also the version panel
- * (02 rag_controls.version_panel). The models are pure; the views render them.
+ * and vectors come from the index the scenario searches. The models are pure; the views
+ * render them.
  */
-import {
-  type Chunk,
-  type IndexedDocument,
-  type PreviousVersion,
-  sourceLines,
-  words,
-} from '../rag/engine.ts';
+import { type Chunk, type IndexedDocument, sourceLines, words } from '../rag/engine.ts';
 import { thresholdText } from '../rag/derive.ts';
 import type { Json, ScenarioEvent } from '../scenarios/types.ts';
 import type { Selection } from './inspector.ts';
@@ -70,7 +64,6 @@ export interface ScoreRow {
   documentId: string;
   version: string;
   score: number;
-  untrusted: boolean;
   /** From hybrid-02, once reached, for keyword hits. */
   keyword?: number;
   /** From hybrid-03, once reached, for candidates at or above the threshold. */
@@ -120,7 +113,6 @@ export interface RetrievalModel {
 export interface SearchedIndex {
   docs: readonly IndexedDocument[];
   chunks: readonly Chunk[];
-  trustOf: (documentId: string) => 'official' | 'untrusted';
   project: Projection;
 }
 
@@ -218,7 +210,6 @@ export function retrievalModel(
       documentId,
       version: String(m['version']),
       score: Number(m['score']),
-      untrusted: index.trustOf(documentId) === 'untrusted',
       vector,
       point: index.project(vector),
     };
@@ -296,14 +287,10 @@ export function answerParts(text: string): (string | number)[] {
 }
 
 /** One segment of a prompt message: plain text, or a document block with its attributes. */
-export type PromptPart =
-  { text: string } | { block: Record<string, string>; text: string; injected: string[] };
+export type PromptPart = { text: string } | { block: Record<string, string>; text: string };
 
-/**
- * Splits a message into plain text and its <document …> blocks; `instructions` are the
- * injected instructions to mark inside untrusted blocks.
- */
-export function promptParts(content: string, instructions: readonly string[]): PromptPart[] {
+/** Splits a message into plain text and its <document …> blocks. */
+export function promptParts(content: string): PromptPart[] {
   const out: PromptPart[] = [];
   const re = /<document ([^>]*)>\n([\s\S]*?)\n<\/document>\n?/g;
   let last = 0;
@@ -312,8 +299,7 @@ export function promptParts(content: string, instructions: readonly string[]): P
     const block = Object.fromEntries(
       [...(m[1] ?? '').matchAll(/(\w+)="([^"]*)"/g)].map((a) => [a[1] ?? '', a[2] ?? '']),
     );
-    const text = m[2] ?? '';
-    out.push({ block, text, injected: instructions.filter((i) => text.includes(i)) });
+    out.push({ block, text: m[2] ?? '' });
     last = re.lastIndex;
   }
   if (last < content.length) out.push({ text: content.slice(last) });
@@ -347,24 +333,6 @@ export function pointLabel(chunkId: string): string {
   return m ? `${m[1] ?? ''} · ${m[2] ?? ''}` : chunkId;
 }
 
-/**
- * One label for chunks that share a point: the versions of one chunk as
- * '<stem>@<v1>/<v2> · <nnn>', other chunks' labels joined by commas.
- */
-export function sharedLabel(chunkIds: readonly string[]): string {
-  const parts = chunkIds.map((id) => /^(.*)@([^@]+)-(c\d+o\d+-\d+)$/.exec(id));
-  const [first] = parts;
-  if (
-    first &&
-    parts.every((m) => m && m[1] === first[1] && m[3] === first[3]) &&
-    chunkIds.length > 1
-  ) {
-    const seq = pointLabel(chunkIds[0] as string).split(' · ')[1] ?? '';
-    return `${first[1] ?? ''}@${parts.map((m) => m?.[2] ?? '').join('/')} · ${seq}`;
-  }
-  return chunkIds.map(pointLabel).join(', ');
-}
-
 /** An axis-aligned box in pixels. */
 export interface Box {
   left: number;
@@ -380,8 +348,6 @@ export interface ProjectedPoint {
   label: string;
   /** The chunk ID; empty for the question. */
   id: string;
-  /** Further chunks with the identical vector and outcome, sharing this point and label. */
-  also?: string[];
   retained: boolean;
 }
 
@@ -701,71 +667,6 @@ export function positionLine(p: ProjectedPoint): string {
   return `${p.label}: ${x}, ${y}${p.retained ? ' · retained' : ''}`;
 }
 
-/** One document's source version and the versions the index holds. */
-export interface VersionRow {
-  documentId: string;
-  source: string;
-  indexed: string[];
-  /** Each indexed version other than the source version, beside the source text. */
-  pairs: {
-    version: string;
-    sourceWords: string[];
-    otherWords: string[];
-    /** Word ranges [from, to) that differ, in each text. */
-    sourceDiff: [number, number];
-    otherDiff: [number, number];
-    sentence: string;
-  }[];
-}
-
-/** The words that differ between two texts: everything between common prefix and suffix. */
-export function wordDiff(
-  a: readonly string[],
-  b: readonly string[],
-): { a: [number, number]; b: [number, number] } {
-  let p = 0;
-  while (p < a.length && p < b.length && a[p] === b[p]) p += 1;
-  let s = 0;
-  while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s])
-    s += 1;
-  return { a: [p, a.length - s], b: [p, b.length - s] };
-}
-
-/** The version panel's rows (02 rag_controls.version_panel). */
-export function versionRows(
-  documents: readonly { id: string; version: string; text: string }[],
-  previous: readonly PreviousVersion[],
-  corpus: readonly IndexedDocument[],
-): VersionRow[] {
-  return documents.map((d) => {
-    const held = corpus.filter((c) => c.documentId === d.id);
-    const sourceWords = words(d.text);
-    return {
-      documentId: d.id,
-      source: d.version,
-      indexed: held.map((c) => c.version),
-      pairs: held
-        .filter((c) => c.version !== d.version)
-        .map((c) => {
-          const otherWords = words(c.text);
-          const diff = wordDiff(sourceWords, otherWords);
-          const pv = previous.find((p) => p.id === d.id && p.version === c.version);
-          const sentence = pv
-            ? `Version ${c.version} says '${pv.replace.to}' where version ${d.version} says '${pv.replace.from}'.`
-            : `Version ${c.version} differs from version ${d.version}.`;
-          return {
-            version: c.version,
-            sourceWords,
-            otherWords,
-            sourceDiff: diff.a,
-            otherDiff: diff.b,
-            sentence,
-          };
-        }),
-    };
-  });
-}
-
 // ---------------------------------------------------------------------------------------
 // Views
 
@@ -803,47 +704,24 @@ export const thresholdLabel = (x: number): string => Number(thresholdText(x)).to
 const score4 = (x: number): string => x.toFixed(4);
 
 /**
- * The projected points to draw: the question (if reached), then every chunk. Chunks with
- * identical vectors and the same outcome share one point and one label
- * (02 rag_retrieval.projection), at the place of the first in score order.
+ * The projected points to draw: the question (if reached), then every chunk in score order,
+ * each with its own label (02 rag_retrieval.projection).
  */
 export function projectedPoints(model: RetrievalModel): ProjectedPoint[] {
-  const groups: { row: ScoreRow; ids: string[] }[] = [];
-  const retained = (r: ScoreRow): boolean => r.outcome?.retained === true;
-  // Both retained, or both dropped for the same reason (or both not yet decided).
-  const outcome = (r: ScoreRow): string =>
-    !r.outcome ? '' : r.outcome.retained ? 'retained' : `dropped: ${r.outcome.reason}`;
-  for (const r of model.rows) {
-    const same = groups.find(
-      (g) =>
-        r.vector.length > 0 &&
-        g.row.vector.length === r.vector.length &&
-        g.row.vector.every((x, i) => x === r.vector[i]) &&
-        outcome(g.row) === outcome(r),
-    );
-    if (same) same.ids.push(r.chunkId);
-    else groups.push({ row: r, ids: [r.chunkId] });
-  }
   return [
     ...(model.query ? [{ ...model.query, label: 'question', id: '', retained: false }] : []),
-    ...groups.map(({ row, ids }) => {
-      const sorted = [...ids].sort();
-      return {
-        ...row.point,
-        label: ids.length > 1 ? sharedLabel(sorted) : pointLabel(row.chunkId),
-        id: row.chunkId,
-        ...(ids.length > 1 ? { also: ids.slice(1) } : {}),
-        retained: retained(row),
-      };
-    }),
+    ...model.rows.map((row) => ({
+      ...row.point,
+      label: pointLabel(row.chunkId),
+      id: row.chunkId,
+      retained: row.outcome?.retained === true,
+    })),
   ];
 }
 
 export interface RetrievalContext {
   /** The index the scenario searches at the current parameters. */
   index: () => SearchedIndex;
-  /** Instructions injected into untrusted documents (05 fixtures.untrusted_documents). */
-  instructions: readonly string[];
   /** Moves the cursor to a step (1-based). */
   jump: (step: number) => void;
   /** Takes focus when the panel disappears while holding it. */
@@ -953,7 +831,6 @@ export class RetrievalPanel {
         details.push(r.outcome.retained ? `retained, rank ${r.outcome.rank}` : r.outcome.reason);
       if (r.rerank !== undefined) details.push(`rerank ${score4(r.rerank)}`);
       if (r.keyword !== undefined) details.push(`keyword ${String(r.keyword)}`);
-      if (r.untrusted) details.push('untrusted');
       // The value sits on the side away from the threshold, so the line stays continuous.
       const below = sel !== undefined && r.score < sel.threshold;
       li.append(
@@ -1095,9 +972,7 @@ export class RetrievalPanel {
             ? {}
             : {
                 role: 'img',
-                'aria-label': p.also?.length
-                  ? `${name(p.id)}; label shared with ${p.also.join(', ')}`
-                  : name(p.id),
+                'aria-label': name(p.id),
               }),
         });
         if (p.id) g.dataset['chunk'] = p.id;
@@ -1105,8 +980,7 @@ export class RetrievalPanel {
           const [x1, y1, x2, y2] = l.leader;
           g.append(svg('line', { class: 'leader', x1, y1, x2, y2 }));
         }
-        const selected =
-          !!p.id && (p.id === marked || (typeof marked === 'string' && !!p.also?.includes(marked)));
+        const selected = !!p.id && p.id === marked;
         if (l && selected) {
           // Selection background plus an ink underline (02 design.colour.use).
           const { left, right, top, bottom } = l.box;
@@ -1147,19 +1021,6 @@ export class RetrievalPanel {
             svg('text', { class: 'point-label', x: l.x, y: l.y, 'text-anchor': l.anchor }, p.label),
           );
         root.append(g);
-        // Each chunk sharing the point stays its own point for assistive technology; its mark
-        // lies exactly on the first one's.
-        for (const id of p.also ?? []) {
-          const twin = svg('g', {
-            class: g.getAttribute('class') ?? 'point',
-            ...(layout.compact
-              ? {}
-              : { role: 'img', 'aria-label': `${name(id)}; label shared with ${p.id}` }),
-          });
-          twin.dataset['chunk'] = id;
-          twin.append(svg('circle', { class: 'mark', cx: at.x, cy: at.y, r: 4 }));
-          root.append(twin);
-        }
       });
       // The compact form names every chunk point in a list below the plot, in score order.
       const list = layout.compact
@@ -1170,8 +1031,7 @@ export class RetrievalPanel {
               ...points
                 .filter((p) => p.id)
                 .map((p) => {
-                  const selected =
-                    p.id === marked || (typeof marked === 'string' && !!p.also?.includes(marked));
+                  const selected = p.id === marked;
                   const [label, rest] = [p.label, positionLine(p).slice(p.label.length)];
                   const toggle = focusKey(
                     el(
@@ -1243,33 +1103,19 @@ export class RetrievalPanel {
 
   private messageText(m: PromptMessage): HTMLElement {
     const out = el('div', 'prompt-text');
-    for (const part of promptParts(m.content, this.context.instructions)) {
+    for (const part of promptParts(m.content)) {
       if (!('block' in part)) {
         out.append(el('pre', 'code-text', part.text.replace(/\n$/, '')));
         continue;
       }
-      const untrusted = part.block['trust'] === 'untrusted';
-      const block = el('div', `document-block${untrusted ? ' untrusted' : ''}`);
+      const block = el('div', 'document-block');
       const head = Object.entries(part.block)
         .map(([k, v]) => `${k}="${v}"`)
         .join(' ');
-      if (untrusted)
-        block.append(el('p', 'small untrusted-label', 'Untrusted document · treated as data'));
-      block.append(el('p', 'small muted code-text', `<document ${head}>`));
-      const text = el('p', 'code-text');
-      let rest = part.text;
-      for (const instruction of part.injected) {
-        const i = rest.indexOf(instruction);
-        if (i < 0) continue;
-        text.append(
-          rest.slice(0, i),
-          el('strong', 'injected', instruction),
-          el('span', 'small muted', ' (instruction inside a document: treated as data)'),
-        );
-        rest = rest.slice(i + instruction.length);
-      }
-      text.append(rest);
-      block.append(text);
+      block.append(
+        el('p', 'small muted code-text', `<document ${head}>`),
+        el('p', 'code-text', part.text),
+      );
       out.append(block);
     }
     return out;
@@ -1393,72 +1239,4 @@ export function renderEvidence(view: EvidenceView): HTMLElement {
     el('h5', 'evidence-title', title),
     el('div', 'retrieval-columns', ...columns),
   );
-}
-
-/** The version panel: source and indexed versions side by side. */
-export function renderVersions(rows: readonly VersionRow[]): HTMLElement {
-  const section = el('section', 'versions');
-  section.setAttribute('aria-labelledby', 'versions-title');
-  const table = el('table', 'version-table small');
-  const headRow = el('tr');
-  for (const h of ['Document', 'Source version', 'Indexed versions']) {
-    const th = el('th', undefined, h);
-    th.scope = 'col';
-    headRow.append(th);
-  }
-  table.append(el('thead', undefined, headRow));
-  const body = el('tbody');
-  for (const r of rows) {
-    const th = el('th', undefined, r.documentId);
-    th.scope = 'row';
-    body.append(
-      el(
-        'tr',
-        r.indexed.length ? undefined : 'muted',
-        th,
-        el('td', undefined, r.source),
-        el('td', undefined, r.indexed.length ? r.indexed.join(', ') : 'not indexed'),
-      ),
-    );
-  }
-  table.append(body);
-  const marked = (ws: readonly string[], [from, to]: [number, number]): HTMLElement => {
-    const p = el('p', 'evidence-text');
-    p.append(ws.slice(0, from).join(' '));
-    if (to > from) p.append(from ? ' ' : '', el('strong', 'diff', ws.slice(from, to).join(' ')));
-    const tail = ws.slice(to).join(' ');
-    if (tail) p.append(to > 0 ? ' ' : '', tail);
-    return p;
-  };
-  const pairs = rows.flatMap((r) =>
-    r.pairs.map((pair) =>
-      el(
-        'div',
-        'version-pair',
-        el('p', 'small', pair.sentence),
-        el(
-          'div',
-          'retrieval-columns',
-          el(
-            'div',
-            'retrieval-column',
-            el('h4', 'small muted', `Source: ${r.documentId} v${r.source}`),
-            marked(pair.sourceWords, pair.sourceDiff),
-          ),
-          el(
-            'div',
-            'retrieval-column',
-            el('h4', 'small muted', `Indexed: ${r.documentId} v${pair.version}`),
-            marked(pair.otherWords, pair.otherDiff),
-          ),
-        ),
-      ),
-    ),
-  );
-  section.append(
-    Object.assign(el('h3', undefined, 'Source and indexed versions'), { id: 'versions-title' }),
-    table,
-    ...pairs,
-  );
-  return section;
 }
