@@ -217,13 +217,15 @@ layout:
     centred; beyond it the paper is empty on both sides. Only the workspace (the diagram
     region with the splitter and the inspector; in Compare the two panes) may be wider, and
     only as far as its diagram needs: at most the diagram''s natural width plus the splitter
-    and the inspector at its current share (in Compare twice the wider pane''s natural width
-    plus the gap between the panes), and never wider than the screen less its side margins; it is centred on the same axis
+    and the inspector (in Compare twice the wider pane''s natural width plus the gap between
+    the panes), and never wider than the screen less its side margins; it is centred on the same axis
     and never narrower than the column. A diagram that fits the column (rag-query) keeps the
     column''s width; one that needs more (mcp-balance) gets it, so at 1920 px it does not
     scroll sideways. The natural width is the widest layout of the scenario at its current
     parameters (protocol mode with every step shown, or the current layout if wider), so
-    the workspace does not change width while stepping. Below 64rem, where the inspector
+    the workspace does not change width while stepping. The inspector''s share (splitter)
+    is of the workspace up to the column''s width, so a wider workspace gives all its extra
+    width to the diagram. Below 64rem, where the inspector
     stacks, nothing changes. Running text keeps a measure of about 45–75 characters: the
     learning question and headline are at most 36rem wide.'
   phone:
