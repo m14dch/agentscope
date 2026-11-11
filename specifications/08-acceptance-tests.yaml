@@ -132,7 +132,7 @@ e2e_tests:
     the lower changed pane's current row.
   - Verify every control outside running text is at least 44 × 44 px on MCP, RAG, Combined
     and Compare with the step details and the menu open, and the menu holds the scenario
-    list (on RAG), the view switch and the play speed, and the bottom bar holds Reset, Previous,
+    list (on RAG), the view switch and the play speed, and the bottom bar holds the position line, the step slider and Reset, Previous,
     Play/Pause and Next as named icon buttons.
   - Step through Compare in both modes and verify both panes use the step list without
     horizontal scrolling; verify the RAG projection takes its compact form.

@@ -215,13 +215,13 @@ layout:
       Escape anywhere on the page while it is open (focus returns to it), a pointer press
       outside it, a scenario choice or a change of view (focus returns to it).'
     controls: 'A bar fixed to the bottom edge of the screen, within thumb reach: the position
-      ("Step <k> of <n> · <phase>", the line the timeline shows from 48rem), then Reset,
-      Previous step, Play or Pause and Next step as their icons (controls.row) side by side in
-      equal widths. It stays in place while the page scrolls; the page ends with room for it
-      (and for the safe area at the screen''s bottom edge), and focused elements scroll clear of
-      it. In Compare it holds the compare step and the shared buttons. The step slider stays in
-      the control row''s place below the learning question, alone on its line at full width, so
-      it is not at the bottom of the page; each Compare pane''s slider stays in its pane.'
+      ("Step <k> of <n> · <phase>", the line the timeline shows from 48rem), then the step
+      slider at full width, then Reset, Previous step, Play or Pause and Next step as their icons
+      (controls.row) side by side in equal widths, so the progress sits next to the buttons. It
+      stays in place while the page scrolls; the page ends with room for it (and for the safe
+      area at the screen''s bottom edge), and focused elements scroll clear of it. In Compare it
+      holds the compare step, the shared slider and the shared buttons; each pane''s slider stays
+      in its pane.'
     touch_targets: 'Every control outside running text (buttons, tabs, the menu and its
       entries, toggles, sliders) is at least 44 × 44 px. Links and buttons inside a sentence
       (citations, step links, the lineage jumps) and folds inside code are exempt, as in WCAG
@@ -408,16 +408,18 @@ controls:
     time Play runs. There are no separate speed buttons.'
   row: 'One row below the learning question, in this order: Reset, Previous step, Play or Pause,
     Next step, the play speed (speed_control), then the timeline (layout.timeline): the step slider,
-    taking the remaining width, and the position line. The four buttons show the standard media
+    taking the remaining width but at least 16rem, and the position line. The four buttons show the standard media
     icons, inline SVG in ink at 24 px: a circular arrow (Reset), a bar and a triangle pointing left
     (Previous step), a triangle pointing right (Play) or two bars (Pause), and a triangle pointing
     right and a bar (Next step). Each button is named in text (Reset, Previous step, Play or Pause,
     Next step), declares its key of controls.keyboard (aria-keyshortcuts; Reset has none) and,
-    while it has focus, shows its name and key in small text next to it; nothing depends on hover.
+    while it has focus, shows its name and key in small text: below the button, clear of the
+    rule under the row, and on phones above the whole bottom bar, so it covers neither the
+    position line nor the slider; nothing depends on hover.
     While playing, Play shows the Pause icon and is named Pause. When the row is too narrow, the
-    timeline wraps onto its own line directly below the buttons. Below 48rem the buttons and the
-    position line form the bottom bar, the speed moves into the menu and the slider stays in the
-    row''s place (layout.phone).'
+    timeline wraps onto its own line directly below the buttons. Below 48rem the position line,
+    the slider and the buttons form the bottom bar and the speed moves into the menu
+    (layout.phone).'
   keyboard:
     ArrowRight: next
     ArrowLeft: previous
