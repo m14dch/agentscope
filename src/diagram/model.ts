@@ -145,6 +145,8 @@ export interface Group {
   selected: boolean;
   /** Measured caption width, for the selection mark behind it. */
   captionWidth: number;
+  /** Width of the widest line of the takeaway and caption, for the paper behind them. */
+  textWidth: number;
 }
 
 export interface DiagramLayout {
@@ -315,10 +317,8 @@ export function layout(input: LayoutInput): DiagramLayout {
         }
         inner += SIZES.row / 2;
       }
-      const textRight = Math.max(
-        labelsRight,
-        textX + Math.max(0, ...takeaway.map(strong), measure(caption + errorText)),
-      );
+      const textWidth = Math.max(0, ...takeaway.map(strong), measure(caption + errorText));
+      const textRight = Math.max(labelsRight, textX + textWidth);
       right = Math.max(right, textRight + SIZES.margin);
       groups.push({
         key,
@@ -335,6 +335,7 @@ export function layout(input: LayoutInput): DiagramLayout {
         current: isCurrent,
         selected: members.some(([, i]) => i < cursor && !!input.selected?.has(i)),
         captionWidth: measure(caption),
+        textWidth,
         arrows: shown,
       });
       y = inner;

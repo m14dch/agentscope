@@ -302,14 +302,32 @@ describe('render', () => {
     expect(svg).toMatch(/<\/tspan> <tspan/);
   });
 
-  it('draws the participant names last, on a paper band the view pins while scrolling', () => {
+  it('draws the participant names first, in a sticky header above the diagram', () => {
     const model = build(scenario('mcp-balance'), 'protocol', 5);
-    const svg = renderSvg(model, 'T');
-    const header = svg.indexOf('<g class="participants"');
-    expect(header).toBeGreaterThan(svg.lastIndexOf('class="step"'));
-    expect(header).toBeGreaterThan(svg.lastIndexOf('class="lifeline"'));
-    expect(svg).toContain(`data-header="${model.top - 8}"`);
-    expect(svg.slice(header).match(/class="participant"/g)).toHaveLength(model.lifelines.length);
+    const html = renderSvg(model, 'T');
+    const head = model.top - 8;
+    // Assistive technology meets the names before the steps.
+    expect(html.startsWith(`<div class="diagram-head" data-header="${head}">`)).toBe(true);
+    const diagram = html.indexOf('<svg class="diagram"');
+    expect(html.slice(0, diagram).match(/class="participant"/g)).toHaveLength(
+      model.lifelines.length,
+    );
+    expect(html.slice(diagram)).not.toContain('class="participant"');
+    // The diagram continues below the header in the same coordinates.
+    expect(html.slice(diagram)).toContain(
+      `height="${model.height - head}" viewBox="0 ${head} ${model.width} ${model.height - head}"`,
+    );
+  });
+
+  it("puts paper behind each group's text, so lifelines do not run through it", () => {
+    const model = build(scenario('mcp-balance'), 'architecture', 12);
+    const html = renderSvg(model, 'T');
+    for (const g of model.groups) {
+      expect(g.textWidth).toBeGreaterThan(0);
+      expect(html).toContain(
+        `<rect class="group-text-band" x="${g.x1 + 2 * SIZES.groupPad - 4}" y="${g.y + SIZES.groupPad}" width="${g.textWidth + 8}"`,
+      );
+    }
   });
 });
 
