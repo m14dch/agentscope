@@ -21,9 +21,14 @@ design:
     (issue 22).
   - Self-hosted fonts stay because the app must work offline; no other dependency is
     added for the design.
-  - Supporting colours are introduced only when a need appears (handover 4.1). White
-    reading surfaces, information and success are not used yet; white on cream (1.05:1)
-    would add a near-invisible box that carries no information.
+  - Supporting colours are introduced only when a need appears (handover 4.1). Information
+    and success are not used yet.
+  - 'The page is White, not the handover''s Cream (issue 47, user testing): the cream tint
+    carries no information, so paper is #ffffff, the handover''s White for reading surfaces,
+    and one surface serves page and reading alike. Every contrast rule still holds and each
+    on-paper ratio rises slightly (ink 13.6, ink-muted 6.0, accent-text 5.2, error 5.9,
+    accent 3.4 : 1); no other token changes. The approved wordmark keeps its own dark badge,
+    which reads on white as it did on cream.'
   - The approved silver-reticle wordmark and its favicon of issue 38 are the only brand
     marks. They are fixed images in public/brand/ and keep their own colours; they are not
     recoloured to the tokens, and their colours are not used anywhere else. The app is
@@ -58,12 +63,18 @@ design:
     code: JetBrains Mono (variable, self-hosted, OFL), Latin subset
     sizes: 'Three only: small 13/16 px for labels and metadata, text 16/24 px, title
       24/32 px. At most two per region.'
+    leading: 'Text that is read as sentences has a line height of at least 1.5: text 16/24 px;
+      small text that forms a sentence above the diagram (the simulated statement) 13/20 px.
+      Labels and metadata keep 13/16 px.'
+    block_spacing: 'Between the blocks above the diagram, on the 8 px grid: the header row,
+      8 px, the simulated statement, 24 px, the learning question, 8 px, the headline, 24 px,
+      the controls.'
     weights: 400 and 600 only
     hierarchy: Size, weight and position; never colour alone
     figures: Tabular figures for numbers; numbers right-aligned in tables
   colour:
     tokens:
-      paper: '#fff9ea'
+      paper: '#ffffff'
       ink: '#253122'
       ink-muted: '#5c6658'
       rule: '#b6bfc1'
@@ -72,7 +83,7 @@ design:
       selection: '#fbe6a0'
       error: '#b73535'
     names:
-      paper: Cream (supporting)
+      paper: White (supporting)
       ink: Deep Slate Olive (Wada 303)
       ink-muted: Derived from Deep Slate Olive for secondary text
       rule: Neutral Gray (Wada 303)
@@ -81,7 +92,8 @@ design:
       selection: Naples Yellow (Wada 303)
       error: Error (supporting)
     use:
-    - Paper (cream) is the page and the reading surface.
+    - Paper (white) is the page and the reading surface, and every band that hides what
+      passes beneath it (the participant header, the group text in the diagram).
     - Ink carries text and data. Ink-muted carries secondary text and past-step labels.
       Rule (Neutral Gray) carries structure only (lifelines, axes, separators), never
       text or meaning.
@@ -180,12 +192,22 @@ layout:
     simulated statement. index.html declares agentscope-silver-favicon.svg as an
     image/svg+xml icon. Both URLs resolve against the base path, are served from the app''s
     own files and are precached like every other file of the build.'
+  source_link: 'A text link "GitHub" to https://github.com/m14dch/agentscope ends the header
+    row, after the tabs and the controls there; it opens in the same tab, has no icon and is
+    styled like the tabs (ink, no underline). On phones (layout.phone.header) it is the last
+    entry of the menu. It is an ordinary link: nothing is fetched from GitHub, so the app
+    stays free of external requests.'
   offline_indicator: 'After the service worker has cached the build and activated (01-architecture.yaml
     deployment offline_mechanics readiness), the header''s simulated statement ends with "Available
     offline." in the same small ink-muted text. Nothing is shown before that, nor where no service
     worker runs (the development server, insecure origins); there is no progress or error message.'
   tablet: Stack inspector below horizontally scrollable diagram
   breakpoint: Side by side from 64rem; stacked below; the phone layout below 48rem
+  max_width: 'The page''s content (header, lesson, controls, diagram, inspector, timeline and
+    panels) is at most 90rem (1440 px) wide, centred, the side margins inside it; nothing
+    extends beyond it, the diagram region included, which scrolls inside it as before. Beyond
+    90rem the paper is empty on both sides. Running text keeps a measure of about 45–75
+    characters: the learning question and headline are at most 36rem wide.'
   phone:
     breakpoint: Below 48rem (768 px), which includes a desktop browser zoomed to 200%; from
       48rem the tablet and desktop layouts apply unchanged.
@@ -195,8 +217,8 @@ layout:
       like every fold); below them the tabs and the simulated statement, always visible.
       The menu holds the scenario picker''s list of scenarios (shown in place, without the
       picker''s own fold), the architecture/protocol switch, the speeds, Start and Reset, each
-      group labelled in small ink-muted text. These controls move into the menu; none is
-      duplicated. It opens below the wordmark row and pushes the page down; it closes on
+      group labelled in small ink-muted text, and last the GitHub link (layout.source_link).
+      These controls move into the menu; none is duplicated. It opens below the wordmark row and pushes the page down; it closes on
       Escape anywhere on the page while it is open (focus returns to it), a pointer press
       outside it, a scenario choice or a change of view (focus returns to it).'
     controls: 'A bar fixed to the bottom edge of the screen, within thumb reach: the position
