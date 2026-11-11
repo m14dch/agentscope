@@ -510,8 +510,11 @@ inspector:
     travel: 'A bullet whose value equals one of the event''s tracked values (03 lineage) ends
       with a second line in small text that says where the value travels: "First seen at step
       <k> (<sender> → <receiver>)", or "First seen here", for the first played event that
-      tracks the value (the participant alone for a self-call); then " · reaches the model at step <m>", or "here", for the first
-      played LLM request that tracks it, when that is a later step than k. Each step number is a link that jumps
+      tracks the value (participants by their registry label without its parenthetical, the
+      participant alone for a self-call); then, in step order, " · reaches the model at step
+      <m>" for the first played LLM request that tracks it and " · sent to <receiver> at step
+      <t>" for the first played MCP or HTTP event that tracks it, each only when it is a later
+      step than k, with "here" for the current step. Each step number is a link that jumps
       there. Later steps are named too: where a value goes is what the line teaches, and no
       prediction prompt asks about it. Values inside a longer string are not matched.'
     phone: 'The same on phones, inside "Step details": lines and callouts wrap and stack in
