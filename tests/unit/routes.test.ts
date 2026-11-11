@@ -53,6 +53,27 @@ describe('routes', () => {
     expect(ok('#/combined/combined-balance-explanation/3').mode).toBe('architecture');
   });
 
+  it("open a removed variant's base scenario at step 0, keeping the mode (02 removed_scenarios)", () => {
+    expect(ok('#/mcp/mcp-not-found/3')).toEqual({
+      tab: 'mcp',
+      scenario: 'mcp-balance',
+      step: 0,
+      mode: 'architecture',
+    });
+    expect(ok('#/rag/rag-hybrid/12/protocol')).toEqual({
+      tab: 'rag',
+      scenario: 'rag-query',
+      step: 0,
+      mode: 'protocol',
+    });
+    expect(ok('#/combined/combined-missing-terms').scenario).toBe('combined-balance-explanation');
+    // Only on its own tab.
+    expect(parseRoute('#/rag/mcp-not-found', tabs)).toMatchObject({
+      ok: false,
+      message: 'Unknown scenario: mcp-not-found',
+    });
+  });
+
   it('round-trip through formatRoute', () => {
     for (const hash of [
       '#/mcp/mcp-balance/14/protocol',

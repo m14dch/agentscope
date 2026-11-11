@@ -11,6 +11,7 @@ import type {
 } from '../../src/scenarios/types.ts';
 import {
   contextFrom,
+  loadScenarios,
   validateRegistry,
   type ValidationContext,
 } from '../../src/scenarios/validate.ts';
@@ -345,6 +346,17 @@ describe('more validation rules', () => {
     const b = base();
     delete (b.events[2] as Partial<ScenarioEvent>).id;
     expect(validateRegistry({ base: b }, ctx)).toEqual(['base/events[2]: missing id']);
+  });
+
+  it('rejects a variants key (03 one_scenario_per_use_case)', () => {
+    const specs = structuredClone(sources) as SpecSources;
+    (specs.rag as Record<string, unknown>)['variants'] = [];
+    (specs.comparison.combined as unknown as Record<string, unknown>)['variants'] = [];
+    expect(loadScenarios(specs).problems).toEqual([
+      '05: variants are not allowed: one scenario per use case',
+      '06 combined: variants are not allowed: one scenario per use case',
+    ]);
+    expect(loadScenarios(sources).problems).toEqual([]);
   });
 
   it('reports a base scenario without events instead of crashing', () => {

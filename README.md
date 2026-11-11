@@ -76,7 +76,8 @@ in use.
 
 - Deep Slate Olive carries text and data on a cream page, Neutral Gray carries structure only,
   Peach Red marks the current step, Naples Yellow marks what the learner selected or tracks, and
-  errors always carry a × and a label naming the kind. Colour is never the only signal.
+  the app's own errors (an unknown address, invalid scenario data) always carry a × and a text naming
+  them. Colour is never the only signal.
 - Colours exist only as tokens in `src/styles/tokens.css`. A unit test fails on hex values or
   colour functions anywhere else in `src/`, `public/` or `index.html`, and on tokens that differ
   from the spec or miss its contrast rules. A browser test fails if any colour the rendered pages

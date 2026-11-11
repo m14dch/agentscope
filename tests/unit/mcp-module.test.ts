@@ -62,6 +62,7 @@ describe('MCP scenario', () => {
   it('names the failure kinds on the tools/call result (issue 46)', () => {
     // The lesson of the removed failure variants, kept as one note on the step it concerns.
     const notes = registry['mcp-balance']?.events.find((e) => e.id === 'mcp-23')?.technical_notes;
-    expect(notes?.join(' ')).toMatch(/tool execution error.*protocol error.*transport/);
+    for (const kind of ['tool execution error', 'transport error', 'protocol error'])
+      expect(notes?.join(' ')).toContain(kind);
   });
 });

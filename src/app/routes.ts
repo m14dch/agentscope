@@ -36,6 +36,28 @@ export interface Route {
 
 export type Parsed = { ok: true; route: Route } | { ok: false; tab: Tab; message: string };
 
+/**
+ * The variants removed in issue 46, by tab, and the base scenario their addresses open
+ * (02 navigation.removed_scenarios).
+ */
+export const REMOVED_SCENARIOS: Readonly<Partial<Record<Tab, Readonly<Record<string, string>>>>> = {
+  mcp: {
+    'mcp-resources': 'mcp-balance',
+    'mcp-not-found': 'mcp-balance',
+    'mcp-unauthorized': 'mcp-balance',
+    'mcp-jsonrpc-error': 'mcp-balance',
+    'mcp-multiple-tools': 'mcp-balance',
+  },
+  rag: {
+    'rag-stale': 'rag-query',
+    'rag-no-match': 'rag-query',
+    'rag-conflict': 'rag-query',
+    'rag-hybrid': 'rag-query',
+    'rag-prompt-injection': 'rag-query',
+  },
+  combined: { 'combined-missing-terms': 'combined-balance-explanation' },
+};
+
 /** Parses a location hash; missing parts take the tab's defaults. */
 export function parseRoute(hash: string, tabs: Record<Tab, string[]>): Parsed {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -44,6 +66,16 @@ export function parseRoute(hash: string, tabs: Record<Tab, string[]>): Parsed {
     return { ok: false, tab: 'mcp', message: `Unknown page: ${tabPart}` };
   }
   const tab = tabPart as Tab;
+  const removed = REMOVED_SCENARIOS[tab];
+  const base =
+    scenarioPart !== undefined && removed && Object.hasOwn(removed, scenarioPart)
+      ? removed[scenarioPart]
+      : undefined;
+  if (base !== undefined && tabs[tab].includes(base)) {
+    // A removed variant's step numbers named other events, so its base opens at step 0.
+    const mode = parts.includes('protocol') ? 'protocol' : 'architecture';
+    return { ok: true, route: { tab, scenario: base, step: 0, mode } };
+  }
   const scenario = scenarioPart ?? tabs[tab][0];
   if (scenario === undefined || !tabs[tab].includes(scenario)) {
     return { ok: false, tab, message: `Unknown scenario: ${scenarioPart ?? ''}` };

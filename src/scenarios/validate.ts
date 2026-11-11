@@ -290,6 +290,15 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
   const { registry, problems } = buildRegistry(sources);
   problems.push(...validateRegistry(registry, contextFrom(sources)));
   const err = (where: string, msg: string): void => void problems.push(`${where}: ${msg}`);
+  // One scenario per use case (03 scenario_format.one_scenario_per_use_case): no variants.
+  for (const [where, doc] of [
+    ['04', sources.mcp],
+    ['05', sources.rag],
+    ['06 combined', sources.comparison.combined],
+  ] as const) {
+    if (Object.hasOwn(doc, 'variants'))
+      err(where, 'variants are not allowed: one scenario per use case');
+  }
   const comb = sources.comparison.combined;
   if (registry[comb.id]?.events.length !== comb.expanded_event_count) {
     err(
