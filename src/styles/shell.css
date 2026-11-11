@@ -1,8 +1,36 @@
 /* App shell (02-ui-ux.yaml layout): one quiet frame around the diagram. */
 .shell {
-  max-width: var(--content-max);
-  margin-inline: auto;
   padding: var(--space-2) var(--page-margin) var(--space-3);
+}
+
+/*
+ * The page uses no more width than its content needs (02 layout.max_width): every block lies
+ * in the centred 90rem column; only the workspace widens, as far as its diagram needs. The
+ * margins centre a block of the given width inside the page's margins.
+ */
+.shell > .shell-header,
+.shell .shell-content > * {
+  margin-inline: max(0px, calc((100% - var(--content-inner)) / 2));
+}
+
+/*
+ * The diagram's natural width (--diagram-width, from DiagramView), the splitter and the
+ * inspector. The inspector's share is of the workspace up to the column's width, so a wider
+ * workspace gives all its extra width to the diagram.
+ */
+.workspace {
+  --workspace-needed: max(
+    var(--content-inner),
+    calc(
+      var(--diagram-width, 0px) + var(--space-2) +
+        max(20rem, var(--inspector-share, 0.3) * var(--content-inner))
+    )
+  );
+}
+
+/* Compare's panes set --workspace-needed in compare.css. */
+.shell .shell-content > :is(.workspace, .compare-panes) {
+  margin-inline: max(0px, calc((100% - var(--workspace-needed, var(--content-inner))) / 2));
 }
 
 .shell-bar {
@@ -136,7 +164,9 @@
 /* Diagram and inspector side by side from 64rem; the splitter resizes them. */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--space-2) var(--inspector-width, 24rem);
+  grid-template-columns:
+    minmax(0, 1fr) var(--space-2)
+    clamp(20rem, calc(var(--inspector-share, 0.3) * min(100%, var(--content-inner))), 60%);
   border-top: var(--line-hair) solid var(--color-rule);
   border-bottom: var(--line-hair) solid var(--color-rule);
 }

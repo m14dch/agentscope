@@ -85,24 +85,32 @@ test('all three brand images ship with the build and are precached', () => {
 });
 
 // 02-ui-ux.yaml layout.max_width, layout.source_link and design.typography (issue #47).
-test('on a wide screen the content is at most 90rem wide and centred, the header ends with the GitHub link', async ({
+const WIDE = { width: 1920, height: 1080 };
+/** The 90rem column inside the 48 px side margins, centred in a 1920 px window. */
+const COLUMN = { left: (1920 - 1440) / 2 + 48, right: (1920 + 1440) / 2 - 48 };
+
+/** Left and right edge of an element. */
+async function edges(page: Page, selector: string): Promise<{ left: number; right: number }> {
+  const box = await page.locator(selector).first().boundingBox();
+  expect(box, selector).not.toBeNull();
+  return { left: box?.x ?? NaN, right: (box?.x ?? NaN) + (box?.width ?? NaN) };
+}
+
+test('on a wide screen the text lies in the centred 90rem column, the header ends with the GitHub link', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.setViewportSize(WIDE);
   await page.goto('./#/mcp/mcp-balance/3');
   const github = page.getByRole('link', { name: 'GitHub', exact: true });
   await expect(github).toBeVisible();
 
-  // Everything sits inside the centred 1440 px column, the diagram region included.
-  const shell = await page.locator('.shell').boundingBox();
-  expect(shell).not.toBeNull();
-  if (!shell) return;
-  expect(shell.width).toBeLessThanOrEqual(1440);
-  expect(Math.abs(shell.x - (1920 - shell.x - shell.width))).toBeLessThanOrEqual(1);
-  for (const region of [page.locator('.workspace'), page.locator('.timeline')]) {
-    const box = await region.boundingBox();
-    expect(box && box.x >= shell.x && box.x + box.width <= shell.x + shell.width).toBe(true);
+  // Header, controls and timeline fill the column; the lesson starts on its left edge.
+  for (const block of ['.shell-header', '.controls', '.timeline']) {
+    const { left, right } = await edges(page, block);
+    expect(left, block).toBeCloseTo(COLUMN.left, 0);
+    expect(right, block).toBeCloseTo(COLUMN.right, 0);
   }
+  expect((await edges(page, '.lesson')).left).toBeCloseTo(COLUMN.left, 0);
 
   // The link ends the header row: an ordinary link in the same tab, after the view switch.
   await expect(github).toHaveAttribute('href', 'https://github.com/m14dch/agentscope');
@@ -122,4 +130,31 @@ test('on a wide screen the content is at most 90rem wide and centred, the header
     });
     expect(ratio, text).toBeGreaterThanOrEqual(1.5);
   }
+});
+
+test('on a wide screen the workspace widens only as far as its diagram needs, centred', async ({
+  page,
+}) => {
+  await page.setViewportSize(WIDE);
+  const pane = page.locator('.workspace .diagram-pane');
+
+  // mcp-balance needs more than the column: no sideways scrolling, and not one pixel more.
+  await page.goto('./#/mcp/mcp-balance/99/protocol');
+  await page.locator('[data-measured]').waitFor();
+  await expect.poll(() => pane.evaluate((p) => p.scrollWidth - p.clientWidth)).toBe(0);
+  const spare = await pane.evaluate(
+    (p) => p.clientWidth - Number(p.querySelector('svg.diagram')?.getAttribute('width')),
+  );
+  expect(spare).toBeGreaterThanOrEqual(0);
+  expect(spare).toBeLessThanOrEqual(2);
+  const wide = await edges(page, '.workspace');
+  expect(wide.right - wide.left).toBeGreaterThan(COLUMN.right - COLUMN.left);
+  expect(Math.abs(wide.left - (1920 - wide.right))).toBeLessThanOrEqual(1);
+
+  // rag-query fits the column, so its workspace keeps the column's width.
+  await page.goto('./#/rag/rag-query/99/protocol');
+  await page.locator('[data-measured]').waitFor();
+  const narrow = await edges(page, '.workspace');
+  expect(narrow.left).toBeCloseTo(COLUMN.left, 0);
+  expect(narrow.right).toBeCloseTo(COLUMN.right, 0);
 });

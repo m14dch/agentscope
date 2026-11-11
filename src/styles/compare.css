@@ -29,6 +29,11 @@
  * the same height whatever the length of each message.
  */
 .compare-panes {
+  /* Wide enough for the wider pane's diagram twice (02 layout.max_width). */
+  --workspace-needed: max(
+    var(--content-inner),
+    calc(2 * var(--diagram-width, 0px) + var(--grid-gutter))
+  );
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(6, auto);

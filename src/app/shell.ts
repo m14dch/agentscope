@@ -683,6 +683,7 @@ export class Shell {
       labels: this.labels,
       mode: route.mode,
       name: 'Sequence diagram',
+      onNaturalWidth: (px) => workspace.style.setProperty('--diagram-width', `${px}px`),
     });
     const state: ScenarioView = {
       scenario,
@@ -853,17 +854,17 @@ export class Shell {
     const MIN_REM = 20;
     const MAX_SHARE = 60;
     const rem = (): number => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const minShare = (): number =>
-      Math.min(MAX_SHARE, ((MIN_REM * rem()) / Math.max(1, workspace.clientWidth)) * 100);
+    // The share is of the workspace up to the column's width, the header's (02 layout.max_width).
+    const base = (): number =>
+      Math.max(1, Math.min(workspace.clientWidth, this.header.clientWidth));
+    const minShare = (): number => Math.min(MAX_SHARE, ((MIN_REM * rem()) / base()) * 100);
     let share = 30;
     // The width is a share of the workspace, clamped in CSS too, so it stays within limits
     // when the window is resized (02 layout.splitter).
     const set = (value: number): void => {
       share = Math.round(Math.min(Math.max(value, minShare()), MAX_SHARE));
-      workspace.style.setProperty(
-        '--inspector-width',
-        `clamp(${MIN_REM}rem, ${share}%, ${MAX_SHARE}%)`,
-      );
+      // shell.css clamps the inspector to 20rem and 60% of the workspace.
+      workspace.style.setProperty('--inspector-share', String(share / 100));
       splitter.setAttribute('aria-valuenow', String(share));
       splitter.setAttribute('aria-valuemin', String(Math.round(minShare())));
       splitter.setAttribute('aria-valuemax', String(MAX_SHARE));
@@ -872,8 +873,8 @@ export class Shell {
     requestAnimationFrame(() => set(share));
     splitter.addEventListener('pointerdown', (down) => {
       splitter.setPointerCapture(down.pointerId);
-      const box = workspace.getBoundingClientRect();
-      const move = (e: PointerEvent): void => set(((box.right - e.clientX) / box.width) * 100);
+      const move = (e: PointerEvent): void =>
+        set(((workspace.getBoundingClientRect().right - e.clientX) / base()) * 100);
       const up = (): void => {
         splitter.removeEventListener('pointermove', move);
         splitter.removeEventListener('pointerup', up);

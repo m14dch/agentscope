@@ -33,6 +33,8 @@
 
   /* Width: the page's content and the measure of running text (02 layout.max_width) */
   --content-max: 90rem;
+  /* The column inside the page's side margins. */
+  --content-inner: calc(var(--content-max) - 2 * var(--page-margin));
   --measure: 36rem;
 
   /* Grid */
