@@ -17,7 +17,9 @@
     /* The bottom bar's height: the position line, a gap, the buttons and the padding. */
     --bar-space: calc(var(--leading-small) + 44px + 3 * var(--space-1));
     /* Focused elements scroll clear of the bar. */
-    scroll-padding-bottom: calc(var(--bar-space) + var(--space-1));
+    scroll-padding-bottom: calc(
+      var(--bar-space) + var(--space-1) + env(safe-area-inset-bottom, 0px)
+    );
   }
 
   .shell {
@@ -198,15 +200,18 @@
     padding-block: 14px;
   }
 
-  /* The diagram region: the step list, scrolling vertically only. */
+  /* The diagram region: the step list, 30% of the screen high, scrolling vertically only,
+     so the stepping area fits above the bar (02 layout.phone.presentation). */
   .workspace .diagram-pane,
   .compare-pane .diagram-pane {
-    min-height: min(16rem, 45svh);
-    max-height: 45svh;
+    height: max(9rem, 30svh);
+    min-height: 0;
+    max-height: none;
     overflow: hidden auto;
   }
 
   .inspector {
+    min-height: 0;
     padding-top: var(--space-1);
   }
 

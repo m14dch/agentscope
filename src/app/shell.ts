@@ -39,7 +39,7 @@ import {
   tabScenarios,
 } from './routes.ts';
 import { offlineIndicator } from './offline.ts';
-import { relocate } from './phone.ts';
+import { isPhone, relocate } from './phone.ts';
 import { CompareView } from '../compare/view.ts';
 import { appUrl } from '../base.ts';
 import '../styles/diagram.css';
@@ -184,6 +184,8 @@ export class Shell {
   /** Whether a page has been shown; the first one does not take focus. */
   private shown = false;
   private route: Route | undefined;
+  /** True while a parameter changes, which never scrolls the page (02 layout.phone.stepping_area). */
+  private adjusting = false;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -297,11 +299,14 @@ export class Shell {
     const row = el('div', { class: 'shell-bar' }, brand, nav);
     this.menu = this.phoneMenu(row);
     if (scenario && this.tabs[tab].length > 1) {
-      row.append(this.picker(tab, scenario));
-      const scenarios = this.menuRow('Scenario', this.scenarioList(tab, scenario));
-      scenarios.classList.add('menu-row--scenarios');
-      this.menu.body.append(scenarios);
-      this.menu.toggle.hidden = false;
+      const picker = this.picker(tab, scenario);
+      row.append(picker);
+      // On phones the picker's own list moves into the menu, shown in place.
+      const list = picker.querySelector('ul');
+      if (list) {
+        list.classList.add('menu-scenarios');
+        this.toMenu('Scenario', [list]).classList.add('menu-row--scenarios');
+      }
     }
     this.header.replaceChildren(
       row,
@@ -332,17 +337,23 @@ export class Shell {
       body.hidden = true;
       if (focus) toggle.focus();
     };
+    // A scenario choice closes it; so does a change of view, with focus back on the menu.
     body.addEventListener('click', (e) => {
-      if ((e.target as Element).closest('a')) close(false);
+      const target = e.target as Element;
+      if (target.closest('a')) close(false);
+      else if (target.closest('[data-mode]')) close(true);
     });
-    for (const node of [toggle, body] as HTMLElement[]) {
-      node.addEventListener('keydown', (e) => {
+    // Escape anywhere on the page closes the open menu, and does nothing else (it does not
+    // clear a lineage selection: the window's key handler skips a handled event).
+    document.addEventListener(
+      'keydown',
+      (e) => {
         if (e.key !== 'Escape' || body.hidden) return;
-        // Closing the menu is all this Escape does; it does not clear a lineage selection.
         e.preventDefault();
         close(true);
-      });
-    }
+      },
+      { signal },
+    );
     document.addEventListener(
       'pointerdown',
       (e) => {
@@ -369,36 +380,15 @@ export class Shell {
    * Puts a control into the menu while the phone layout applies (02 layout.phone.header);
    * `parent` is where it sits otherwise. The control moves; it is never copied.
    */
-  private toMenu(label: string | undefined, nodes: Element[], parent?: Element): void {
-    if (!this.menu) return;
-    parent?.append(...nodes);
+  private toMenu(label: string | undefined, nodes: Element[], parent?: Element): HTMLElement {
     const row = this.menuRow(label);
+    if (!this.menu) return row;
+    parent?.append(...nodes);
     // The scenario list, the longest, comes last.
     this.menu.body.insertBefore(row, this.menu.body.querySelector('.menu-row--scenarios'));
     this.menu.toggle.hidden = false;
     relocate(nodes, row, (this.headerListeners ??= new AbortController()).signal);
-  }
-
-  /** The scenarios of a tab as the menu lists them: the picker's list, shown in place. */
-  private scenarioList(tab: Tab, scenario: Scenario): HTMLElement {
-    return el(
-      'ul',
-      { class: 'menu-scenarios' },
-      ...this.tabs[tab].map((id) => {
-        const lesson = this.lessons.get(id);
-        const link = el(
-          'a',
-          { href: `#/${tab}/${id}/0`, 'aria-current': id === scenario.id ? 'true' : undefined },
-          this.registry[id]?.title ?? id,
-        );
-        return el(
-          'li',
-          {},
-          link,
-          ...(lesson ? [el('span', { class: 'small muted' }, lesson)] : []),
-        );
-      }),
-    );
+    return row;
   }
 
   private picker(tab: Tab, scenario: Scenario): HTMLElement {
@@ -629,6 +619,8 @@ export class Shell {
       details,
     );
     let shownPrompt: number | undefined;
+    /** The step and prompt last rendered, to tell a change of step from other renders. */
+    let rendered: string | undefined;
     const workspace = el('div', { class: 'workspace' }, diagram, splitter, inspector);
     this.attachSplitter(workspace, splitter);
 
@@ -753,6 +745,10 @@ export class Shell {
         );
       }
       this.syncUrl();
+      const position = `${k}:${promptAt ?? ''}`;
+      if (rendered !== undefined && position !== rendered && !this.adjusting)
+        this.keepInView(diagram, inspector, controls);
+      rendered = position;
     };
 
     const unsubscribe = player.subscribe(() => {
@@ -949,15 +945,35 @@ export class Shell {
   private setParameter(name: string, value: Json): void {
     const c = this.current;
     if (!c) return;
-    c.prompt = undefined;
-    c.player.setParameters({ [name]: value });
-    if (c.selection) {
-      const found = occurrences(c.player.playback.events, c.selection);
-      // A value no longer played (a chunk ID of other parameters) is no longer selected.
-      if (!found.length) c.selection = undefined;
-      c.view.setSelected(new Set(found));
+    this.adjusting = true;
+    try {
+      c.prompt = undefined;
+      c.player.setParameters({ [name]: value });
+      if (c.selection) {
+        const found = occurrences(c.player.playback.events, c.selection);
+        // A value no longer played (a chunk ID of other parameters) is no longer selected.
+        if (!found.length) c.selection = undefined;
+        c.view.setSelected(new Set(found));
+      }
+      c.render();
+    } finally {
+      this.adjusting = false;
     }
-    c.render();
+  }
+
+  /**
+   * On phones, after a change of step, brings the stepping area on screen: the step list's
+   * region, then the prediction prompt, the message line and the error line, above the bottom
+   * bar. If any of it is off screen, the page scrolls at once so the region starts 8 px below
+   * the top (02 layout.phone.stepping_area).
+   */
+  private keepInView(region: HTMLElement, inspector: HTMLElement, bar: HTMLElement): void {
+    if (!isPhone()) return;
+    const top = region.getBoundingClientRect().top;
+    const lines = inspector.querySelectorAll('.prediction, .message, .message ~ p');
+    const bottom = Math.max(0, ...[...lines].map((l) => l.getBoundingClientRect().bottom));
+    if (top >= 0 && bottom <= bar.getBoundingClientRect().top) return;
+    window.scrollTo({ top: window.scrollY + top - 8, behavior: 'instant' });
   }
 
   /** Selects a lineage value or clears the selection (02 lineage_selection). */

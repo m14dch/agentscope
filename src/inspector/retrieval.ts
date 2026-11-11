@@ -690,8 +690,14 @@ export function compactLayout(
  * with 2 decimals, and whether it is retained (02 rag_retrieval.projection).
  */
 export function positionLine(p: ProjectedPoint): string {
-  const x = `${p.x < 0 ? 'rules' : 'cost'} ${Math.abs(p.x).toFixed(2)}`;
-  const y = `${p.y < 0 ? 'technical' : 'product'} ${Math.abs(p.y).toFixed(2)}`;
+  // A coordinate that rounds to 0.00 lies on the other axis; it is named, not written as 0.
+  const zero = (v: number): boolean => Math.abs(v) < 0.005;
+  const x = zero(p.x)
+    ? 'on the technical–product axis'
+    : `${p.x < 0 ? 'rules' : 'cost'} ${Math.abs(p.x).toFixed(2)}`;
+  const y = zero(p.y)
+    ? 'on the rules–cost axis'
+    : `${p.y < 0 ? 'technical' : 'product'} ${Math.abs(p.y).toFixed(2)}`;
   return `${p.label}: ${x}, ${y}${p.retained ? ' · retained' : ''}`;
 }
 
@@ -854,6 +860,8 @@ export class RetrievalPanel {
   private open: number | undefined;
   private shown = '';
   private plot: { node: HTMLElement; draw: () => void } | undefined;
+  /** The chunk whose line is pressed in the compact projection, marked on the plot. */
+  private pointed: string | undefined;
   private readonly observer: ResizeObserver | undefined;
   private lastWidth = 0;
 
@@ -1027,6 +1035,15 @@ export class RetrievalPanel {
     const points = projectedPoints(model);
     const draw = (): void => {
       this.lastWidth = node.clientWidth;
+      const active = document.activeElement;
+      const restore =
+        active instanceof HTMLElement && node.contains(active)
+          ? active.dataset['focus']
+          : undefined;
+      const point = (id: string): void => {
+        this.pointed = this.pointed === id ? undefined : id;
+        draw();
+      };
       const layout = projectionLayout(points, Math.max(node.clientWidth, 240));
       // Too narrow for the plot and its labels: the plot scrolls in a named, focusable region.
       if (layout.width > node.clientWidth) {
@@ -1046,6 +1063,12 @@ export class RetrievalPanel {
         role: 'group',
         'aria-label': 'Chunks and the question in the fixed 2D projection',
       });
+      // In the compact form the list below carries the points for assistive technology.
+      if (layout.compact) {
+        root.removeAttribute('role');
+        root.removeAttribute('aria-label');
+        root.setAttribute('aria-hidden', 'true');
+      }
       const [ax1, ay1, ax2, ay2] = layout.axes.x;
       const [bx1, by1, bx2, by2] = layout.axes.y;
       root.append(
@@ -1068,10 +1091,14 @@ export class RetrievalPanel {
           `${id || 'The question'}: x ${p.x.toFixed(4)}, y ${p.y.toFixed(4)}${p.retained ? ', retained' : ''}`;
         const g = svg('g', {
           class: p.id ? (p.retained ? 'point retained' : 'point') : 'point query',
-          role: 'img',
-          'aria-label': p.also?.length
-            ? `${name(p.id)}; label shared with ${p.also.join(', ')}`
-            : name(p.id),
+          ...(layout.compact
+            ? {}
+            : {
+                role: 'img',
+                'aria-label': p.also?.length
+                  ? `${name(p.id)}; label shared with ${p.also.join(', ')}`
+                  : name(p.id),
+              }),
         });
         if (p.id) g.dataset['chunk'] = p.id;
         if (l?.leader) {
@@ -1100,6 +1127,13 @@ export class RetrievalPanel {
             }),
           );
         }
+        // The compact form: the pressed line's point, and the lineage-selected one, get an
+        // ink ring; tapping a point presses its line.
+        if (layout.compact && p.id) {
+          if (p.id === this.pointed || selected)
+            g.append(svg('circle', { class: 'point-ring', cx: at.x, cy: at.y, r: 9 }));
+          g.addEventListener('click', () => point(p.id));
+        }
         if (p.id) g.append(svg('circle', { class: 'mark', cx: at.x, cy: at.y, r: 4 }));
         else
           g.append(
@@ -1118,8 +1152,9 @@ export class RetrievalPanel {
         for (const id of p.also ?? []) {
           const twin = svg('g', {
             class: g.getAttribute('class') ?? 'point',
-            role: 'img',
-            'aria-label': `${name(id)}; label shared with ${p.id}`,
+            ...(layout.compact
+              ? {}
+              : { role: 'img', 'aria-label': `${name(id)}; label shared with ${p.id}` }),
           });
           twin.dataset['chunk'] = id;
           twin.append(svg('circle', { class: 'mark', cx: at.x, cy: at.y, r: 4 }));
@@ -1138,12 +1173,19 @@ export class RetrievalPanel {
                   const selected =
                     p.id === marked || (typeof marked === 'string' && !!p.also?.includes(marked));
                   const [label, rest] = [p.label, positionLine(p).slice(p.label.length)];
-                  const item = el(
-                    'li',
-                    p.retained ? 'retained' : undefined,
-                    el('span', selected ? 'chunk-mark' : undefined, label),
-                    rest,
+                  const toggle = focusKey(
+                    el(
+                      'button',
+                      'projection-item',
+                      el('span', selected ? 'chunk-mark' : undefined, label),
+                      rest,
+                    ),
+                    `point:${p.id}`,
                   );
+                  toggle.type = 'button';
+                  toggle.setAttribute('aria-pressed', String(p.id === this.pointed));
+                  toggle.addEventListener('click', () => point(p.id));
+                  const item = el('li', p.retained ? 'retained' : undefined, toggle);
                   item.dataset['chunk'] = p.id;
                   return item;
                 }),
@@ -1151,6 +1193,10 @@ export class RetrievalPanel {
           ]
         : [];
       node.replaceChildren(root, ...list);
+      if (restore)
+        node
+          .querySelector<HTMLElement>(`[data-focus="${CSS.escape(restore)}"]`)
+          ?.focus({ preventScroll: true });
     };
     this.plot = { node, draw };
     return figure;

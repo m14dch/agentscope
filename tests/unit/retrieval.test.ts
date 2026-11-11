@@ -350,6 +350,13 @@ describe('retrieval panel helpers', () => {
     expect(positionLine({ ...base, x: 0.5, y: -0.25, retained: false })).toBe(
       'everyday-account@1.2 · 001: cost 0.50, technical 0.25',
     );
+    // A coordinate that rounds to 0.00 names the axis the point lies on.
+    expect(positionLine({ ...base, x: 0.004, y: -0.95, retained: false })).toBe(
+      'everyday-account@1.2 · 001: on the technical–product axis, technical 0.95',
+    );
+    expect(positionLine({ ...base, x: -0.2, y: -0.001, retained: false })).toBe(
+      'everyday-account@1.2 · 001: rules 0.20, on the rules–cost axis',
+    );
   });
 
   it('gives the versions of one chunk with identical vectors one shared label', () => {

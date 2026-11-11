@@ -277,8 +277,23 @@
   overflow-wrap: anywhere;
 }
 
-.projection-list li {
-  padding-block: 0.25rem;
+/* Each line is a toggle that marks its point on the plot with an ink ring. */
+.projection-list .projection-item {
+  display: block;
+  width: 100%;
+  padding: 0.25rem 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+  text-align: left;
+}
+
+.projection-plot .point-ring {
+  fill: none;
+  stroke: var(--color-ink);
+  stroke-width: var(--line-network);
 }
 
 .projection-list span {

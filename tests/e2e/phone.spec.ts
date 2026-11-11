@@ -63,6 +63,28 @@ function overflow(page: Page): Promise<string[]> {
   });
 }
 
+/** Controls outside running text that are smaller than 44 × 44 px (02 layout.phone.touch_targets). */
+function smallTargets(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const found: string[] = [];
+    const controls = document.querySelectorAll(
+      'button, a[href], summary, select, input, [role="tab"], [tabindex="0"]',
+    );
+    for (const c of controls) {
+      // Inline controls in a sentence or in code are exempt (WCAG 2.5.8).
+      if (c.matches('.link, .citation, .balance') || c.closest('.json, .visually-hidden')) continue;
+      if (c.matches('.diagram-scroller, .tab-panel, [role="region"], h2, h3')) continue;
+      const box = c.getBoundingClientRect();
+      if (!box.width && !box.height) continue;
+      if (box.width < 44 || box.height < 43.5)
+        found.push(
+          `${c.tagName} "${(c.textContent ?? '').trim().slice(0, 30)}" ${Math.round(box.width)}×${Math.round(box.height)}`,
+        );
+    }
+    return found;
+  });
+}
+
 async function goTo(page: Page, hash: string): Promise<void> {
   await page.evaluate((h) => {
     location.hash = h;
@@ -142,6 +164,80 @@ for (const [width, height] of SIZES) {
       });
     }
 
+    for (const route of [
+      '#/mcp/mcp-balance/14',
+      '#/rag/rag-query/10',
+      '#/combined/combined-balance-explanation/35/protocol',
+      '#/compare/compare-rag-mcp/16',
+    ]) {
+      test(`every control outside running text is at least 44 × 44 px on ${route}`, async ({
+        page,
+      }) => {
+        await page.goto(`./${route}`);
+        await expect(
+          page.locator('[data-presentation="list"][data-measured]').first(),
+        ).toBeVisible();
+        await expand(page.getByRole('button', { name: 'Step details' }));
+        await expand(page.getByRole('button', { name: 'Model context' }));
+        await page.getByRole('button', { name: 'Menu' }).click();
+        await expect(page.locator('#menu')).toBeVisible();
+        expect(await overflow(page)).toEqual([]);
+        expect(await smallTargets(page)).toEqual([]);
+      });
+    }
+
+    for (const [tab, id] of SCENARIOS) {
+      test(`${id}: the current step, the prompt and the message stay above the bar while stepping with Next`, async ({
+        page,
+      }) => {
+        for (const mode of ['/protocol', '']) {
+          await page.goto(`./#/${tab}/${id}/0${mode}`);
+          await list(page).and(page.locator('[data-measured]')).waitFor();
+          await page.evaluate(() => window.scrollTo(0, 0));
+          const n = Number(
+            await page.getByRole('slider', { name: 'Step', exact: true }).getAttribute('max'),
+          );
+          const next = bar(page).getByRole('button', { name: 'Next', exact: true });
+          const status = page.locator('.controls .status');
+          for (let guard = 0; guard < 2 * n + 2; guard += 1) {
+            if ((await status.textContent())?.startsWith(`Step ${n} of ${n}`)) break;
+            await next.click();
+            const where = `${id}${mode} ${(await status.textContent()) ?? ''}`;
+            const barTop = (await bar(page).boundingBox())?.y ?? 0;
+            const shown = async (l: Locator): Promise<boolean> => {
+              const box = await l.boundingBox();
+              return !!box && box.y >= -0.5 && box.y + box.height <= barTop + 0.5;
+            };
+            const prompt = page.locator('.prediction');
+            if (await prompt.count()) expect(await shown(prompt), `${where}: prompt`).toBe(true);
+            for (const line of await page
+              .locator('.inspector .message, .inspector .message ~ p')
+              .all())
+              expect(await shown(line), `${where}: message`).toBe(true);
+            // The innermost current element: the row, or the group in architecture mode.
+            const current = list(page).locator('[data-current]').last();
+            await expect
+              .poll(
+                async () => {
+                  const region = await list(page).boundingBox();
+                  const box = await current.boundingBox();
+                  return (
+                    !!box &&
+                    !!region &&
+                    (await shown(current)) &&
+                    box.y >= region.y - 1 &&
+                    box.y + Math.min(box.height, region.height) <= region.y + region.height + 1
+                  );
+                },
+                { message: `${where}: current step` },
+              )
+              .toBe(true);
+          }
+          await expect(status).toHaveText(new RegExp(`^Step ${n} of ${n}`));
+        }
+      });
+    }
+
     test('Compare: both panes use the step list and nothing scrolls sideways', async ({ page }) => {
       for (const mode of ['', '/protocol']) {
         await page.goto(`./#/compare/compare-rag-mcp/0${mode}`);
@@ -171,7 +267,6 @@ test.describe('at 390 × 844', () => {
     await page.goto('./#/mcp/mcp-multiple-tools/0/protocol');
     await list(page).and(page.locator('[data-measured]')).waitFor();
     const n = 40;
-    const scrollY = await page.evaluate(() => window.scrollY);
     const status = page.locator('.controls .status');
     for (let guard = 0; guard < 2 * n; guard += 1) {
       for (const name of ['Previous', /^(Play|Pause)$/, 'Next'] as const) {
@@ -195,20 +290,17 @@ test.describe('at 390 × 844', () => {
       await bar(page).getByRole('button', { name: 'Next', exact: true }).click();
     }
     await expect(status).toHaveText(new RegExp(`^Step ${n} of ${n}`));
-    expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
     // Play and Pause from the bar.
     await bar(page).getByRole('button', { name: 'Previous', exact: true }).click();
     await bar(page).getByRole('button', { name: 'Play', exact: true }).click();
     await expect(status).toHaveText(new RegExp(`^Step ${n} of ${n}`));
   });
 
-  test('the menu holds the picker, the view switch, the speeds, Start and Reset; targets are 44 px', async ({
+  test('the menu holds the scenario list, the view switch, the speeds, Start and Reset', async ({
     page,
   }) => {
     await page.goto('./#/rag/rag-query/10');
     await list(page).and(page.locator('[data-measured]')).waitFor();
-    await expand(page.getByRole('button', { name: 'Step details' }));
-    await expand(page.getByRole('button', { name: 'Model context' }));
     const menu = page.getByRole('button', { name: 'Menu' });
     // Closed, the menu hides its controls; the tabs and the statement stay visible.
     await expect(page.getByRole('group', { name: 'View', exact: true })).toBeHidden();
@@ -222,34 +314,19 @@ test.describe('at 390 × 844', () => {
     await expect(body.getByRole('button', { name: 'Start' })).toBeVisible();
     await expect(body.getByRole('button', { name: 'Reset' })).toBeVisible();
     await expect(body.getByRole('link', { name: 'Ingest and index documents' })).toBeVisible();
-    expect(await overflow(page)).toEqual([]);
-    // Every control outside running text is at least 44 × 44 px (02 layout.phone.touch_targets).
-    const small = await page.evaluate(() => {
-      const found: string[] = [];
-      const controls = document.querySelectorAll(
-        'button, a[href], summary, select, input, [role="tab"], [tabindex="0"]',
-      );
-      for (const c of controls) {
-        // Inline controls in a sentence or in code are exempt (WCAG 2.5.8).
-        if (c.matches('.link, .citation, .balance') || c.closest('.json, .visually-hidden'))
-          continue;
-        if (c.matches('.diagram-scroller, .tab-panel, [role="region"], h2, h3')) continue;
-        const box = c.getBoundingClientRect();
-        if (!box.width && !box.height) continue;
-        if (box.width < 44 || box.height < 43.5)
-          found.push(
-            `${c.tagName} "${(c.textContent ?? '').trim().slice(0, 30)}" ${Math.round(box.width)}×${Math.round(box.height)}`,
-          );
-      }
-      return found;
-    });
-    expect(small).toEqual([]);
-    // The view switch works from the menu and keeps the step.
+    // Each scenario link exists once: the picker's list moved, it was not copied.
+    await expect(
+      page.getByRole('link', { name: 'Ingest and index documents', includeHidden: true }),
+    ).toHaveCount(1);
+    // A change of view closes the menu, keeps the step and returns focus to the menu.
     await body.getByRole('button', { name: 'Protocol' }).click();
+    await expect(menu).toHaveAttribute('aria-expanded', 'false');
+    await expect(menu).toBeFocused();
     await expect(list(page).locator('.row[data-current]')).toHaveCount(1);
     await expect(page).toHaveURL(/#\/rag\/rag-query\/10\/protocol$/);
-    // Escape closes the menu and returns focus to it.
-    await body.getByRole('button', { name: 'Architecture' }).focus();
+    // Escape anywhere on the page closes the open menu and returns focus to it.
+    await menu.click();
+    await page.locator('.lesson h2').focus();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveAttribute('aria-expanded', 'false');
     await expect(menu).toBeFocused();
@@ -317,6 +394,25 @@ test.describe('at 390 × 844', () => {
       await projection.locator('.projection-plot .point:not(.query)').count(),
     );
     await expect(projection.locator('.projection')).not.toHaveAttribute('role', 'region');
+    // The list carries the points for assistive technology; the plot is hidden from it.
+    await expect(projection.locator('.projection-plot')).toHaveAttribute('aria-hidden', 'true');
+    await expect(projection.getByRole('img')).toHaveCount(0);
+    // A line marks its point on the plot; tapping a point presses its line.
+    const second = items.nth(1).getByRole('button');
+    await second.click();
+    await expect(second).toHaveAttribute('aria-pressed', 'true');
+    await expect(second).toBeFocused();
+    const chunk = (await items.nth(1).getAttribute('data-chunk')) ?? '';
+    await expect(projection.locator(`.point[data-chunk="${chunk}"] .point-ring`)).toHaveCount(1);
+    await expect(projection.locator('.point-ring')).toHaveCount(1);
+    const last = projection.locator('.projection-plot .point:not(.query)').last();
+    const lastChunk = (await last.getAttribute('data-chunk')) ?? '';
+    await last.locator('.mark').dispatchEvent('click');
+    await expect(
+      projection.locator(`.projection-list li[data-chunk="${lastChunk}"] button`),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(second).toHaveAttribute('aria-pressed', 'false');
+    await expect(projection.locator('.point-ring')).toHaveCount(1);
   });
 });
 
