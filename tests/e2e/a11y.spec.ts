@@ -16,7 +16,7 @@ const ROUTES = [
   '#/mcp/mcp-balance/0',
   '#/mcp/mcp-balance/12',
   '#/mcp/mcp-not-found/23',
-  '#/mcp/mcp-jsonrpc-error/28',
+  '#/mcp/mcp-jsonrpc-error/18',
   '#/mcp/mcp-resources/12',
   '#/rag/rag-index/6',
   '#/rag/rag-query/10',
