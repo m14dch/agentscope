@@ -408,7 +408,7 @@ controls:
     time Play runs. There are no separate speed buttons.'
   row: 'One row below the learning question, in this order: Reset, Previous step, Play or Pause,
     Next step, the play speed (speed_control), then the timeline (layout.timeline): the step slider,
-    taking the remaining width but at least 16rem, and the position line. The four buttons show the standard media
+    taking the remaining width but at least 12rem, and the position line. The four buttons show the standard media
     icons, inline SVG in ink at 24 px: a circular arrow (Reset), a bar and a triangle pointing left
     (Previous step), a triangle pointing right (Play) or two bars (Pause), and a triangle pointing
     right and a bar (Next step). Each button is named in text (Reset, Previous step, Play or Pause,
