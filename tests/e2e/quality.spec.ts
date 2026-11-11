@@ -106,9 +106,41 @@ const TABS = [
   ['Combined', 'combined/combined-balance-explanation/35'],
 ] as const;
 
-type Stop = { what: string; visible: boolean; onScreen: boolean };
+type Stop = { what: string; index: number; visible: boolean; onScreen: boolean };
 
-/** Where Tab moves focus, in order, from the top of the page until it cycles. */
+/**
+ * Marks every control a keyboard user must be able to reach: visible, enabled, interactive and
+ * in the tab order. A roving group (the inspector's tabs) has one stop, its tabindex 0 member;
+ * the content of a closed <details> is not rendered, so only its summary counts.
+ */
+async function markControls(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const selector = [
+      'a[href]',
+      'button',
+      'input',
+      'select',
+      'textarea',
+      'summary',
+      '[tabindex]',
+    ].join(',');
+    const controls = [...document.querySelectorAll<HTMLElement | SVGElement>(selector)].filter(
+      (el) => {
+        if (el.getAttribute('tabindex') === '-1' || el.matches(':disabled')) return false;
+        if (!el.checkVisibility({ visibilityProperty: true })) return false;
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      },
+    );
+    (window as unknown as { controls: Element[] }).controls = controls;
+    return controls.map((el) => {
+      const label = el.getAttribute('aria-label') ?? (el.textContent ?? '').trim();
+      return `${el.tagName.toLowerCase()} "${label.replace(/\s+/g, ' ').slice(0, 40)}"`;
+    });
+  });
+}
+
+/** Where Tab moves focus, in order, from where focus is until it cycles. */
 async function tabOrder(page: Page): Promise<Stop[]> {
   const stops: Stop[] = [];
   const seen = new Set<string>();
@@ -140,14 +172,38 @@ async function tabOrder(page: Page): Promise<Stop[]> {
         box.right > 0 &&
         box.top < innerHeight &&
         box.left < innerWidth;
-      return { id: path.join('/'), what, visible, onScreen };
+      const index = (window as unknown as { controls: Element[] }).controls.indexOf(el);
+      return { id: path.join('/'), what, index, visible, onScreen };
     });
     if (!stop || seen.has(stop.id)) break;
     seen.add(stop.id);
-    stops.push({ what: stop.what, visible: stop.visible, onScreen: stop.onScreen });
+    stops.push({
+      what: stop.what,
+      index: stop.index,
+      visible: stop.visible,
+      onScreen: stop.onScreen,
+    });
   }
   return stops;
 }
+
+/** Presses Tab until the focused element matches `selector` (and has `text`, if given). */
+async function tabTo(page: Page, selector: string, text?: string): Promise<void> {
+  for (let i = 0; i < 200; i += 1) {
+    await page.keyboard.press('Tab');
+    const found = await page.evaluate(
+      ([s, t]) => {
+        const el = document.activeElement;
+        return !!el?.matches(s) && (t === undefined || (el.textContent ?? '').trim() === t);
+      },
+      [selector, text] as const,
+    );
+    if (found) return;
+  }
+  throw new Error(`Tab never reached ${selector}${text ? ` "${text}"` : ''}`);
+}
+
+const focused = (page: Page) => page.locator(':focus');
 
 const scrollPositions = (page: Page) =>
   page.evaluate(() =>
@@ -163,41 +219,95 @@ for (const [width, height] of [
 
     for (const [tab, route] of TABS) {
       for (const mode of ['', '/protocol']) {
-        test(`${tab}${mode}: Tab reaches every control with a visible focus and the keys step`, async ({
+        test(`${tab}${mode}: Tab reaches every control with a visible focus, and keys operate them`, async ({
           page,
         }) => {
+          // Keyboard only from the moment the page loads: no pointer input at all.
           await page.goto(`./#/${route}${mode}`);
           await ready(page);
+          const compare = tab === 'Compare';
+          const line = status(page, compare);
+
+          // The arrow keys step and Space plays and pauses while nothing has focus.
+          const before = (await line.textContent()) ?? '';
+          await page.keyboard.press('ArrowLeft');
+          await expect(line).not.toHaveText(before);
+          await page.keyboard.press('ArrowRight');
+          if (await page.locator('.prediction').count()) await page.keyboard.press('ArrowRight');
+          await expect(line).toHaveText(before);
+          await page.keyboard.press('ArrowLeft');
+          await page.keyboard.press(' ');
+          await expect(
+            page.getByRole('button', { name: 'Pause', exact: true }).first(),
+          ).toBeVisible();
+          await page.keyboard.press(' ');
+          await expect(
+            page.getByRole('button', { name: 'Play', exact: true }).first(),
+          ).toBeVisible();
+
+          // Tab reaches every control, each on screen with a visible focus indicator.
+          await page.goto(`./#/${route}${mode}`);
+          await page.reload();
+          await ready(page);
+          const controls = await markControls(page);
           const stops = await tabOrder(page);
-          const names = stops.map((s) => s.what);
-          // The controls a learner needs are all reachable.
-          for (const label of ['MCP', 'RAG', 'Compare', 'Combined', 'Next', 'Previous', 'Play'])
-            expect(
-              names.some((n) => n.includes(`"${label}`)),
-              label,
-            ).toBe(true);
-          expect(
-            names.some((n) => n.startsWith('input')),
-            'step slider',
-          ).toBe(true);
-          if (tab !== 'Compare')
-            expect(
-              names.some((n) => n.includes('"Payload')),
-              'inspector tab',
-            ).toBe(true);
+          const reached = new Set(stops.map((s) => s.index));
+          expect(controls.filter((_, i) => !reached.has(i))).toEqual([]);
+          expect(stops.filter((s) => s.index < 0).map((s) => s.what)).toEqual([]);
           expect(stops.filter((s) => !s.visible).map((s) => s.what)).toEqual([]);
           expect(stops.filter((s) => !s.onScreen).map((s) => s.what)).toEqual([]);
 
-          // The keys step wherever focus does not need them itself.
-          const line = status(page, tab === 'Compare');
-          const before = (await line.textContent()) ?? '';
-          await page.locator('body').click({ position: { x: 1, y: 1 } });
-          await page.keyboard.press('ArrowLeft');
-          await expect(line).not.toHaveText(before);
-          // Enter on the focused Next button steps forward again.
-          await page.getByRole('button', { name: 'Next', exact: true }).first().focus();
+          // Enter on Next steps; arrows move between the inspector's tabs.
+          await page.reload();
+          await ready(page);
+          const now = (await line.textContent()) ?? '';
+          await tabTo(page, 'button', 'Previous');
           await page.keyboard.press('Enter');
-          await expect(line).toHaveText(before);
+          await expect(line).not.toHaveText(now);
+          if (!compare) {
+            await tabTo(page, '[role="tab"][aria-selected="true"]');
+            const first = (await focused(page).textContent()) ?? '';
+            await page.keyboard.press('ArrowRight');
+            await expect(focused(page)).toHaveAttribute('aria-selected', 'true');
+            await expect(focused(page)).not.toHaveText(first);
+          }
+
+          // Enter expands a diagram group (architecture mode).
+          if (mode === '') {
+            await page.reload();
+            await ready(page);
+            await tabTo(page, '[data-group][aria-expanded="false"]');
+            const key = await focused(page).getAttribute('data-group');
+            await page.keyboard.press('Enter');
+            await expect(page.locator(`[data-group="${key}"]`).first()).toHaveAttribute(
+              'aria-expanded',
+              'true',
+            );
+          }
+
+          // The scenario picker opens with Enter and a scenario is chosen with Enter.
+          if (!compare) {
+            await page.reload();
+            await ready(page);
+            const url = page.url();
+            await tabTo(page, '.picker summary');
+            await page.keyboard.press('Enter');
+            await expect(page.locator('.picker')).toHaveAttribute('open', '');
+            await tabTo(page, '.picker a:not([aria-current="true"])');
+            await page.keyboard.press('Enter');
+            await expect.poll(() => page.url()).not.toBe(url);
+          }
+
+          // The mode switch: Enter on the other mode's button switches the view.
+          await page.reload();
+          await ready(page);
+          const other = mode === '' ? 'Protocol' : 'Architecture';
+          await tabTo(page, 'button', other);
+          await page.keyboard.press('Enter');
+          await expect(page.getByRole('button', { name: other, exact: true })).toHaveAttribute(
+            'aria-pressed',
+            'true',
+          );
         });
       }
     }
@@ -213,7 +323,6 @@ test.describe('reduced motion', () => {
       await page.setViewportSize({ width: 1280, height: 700 });
       await page.goto(`./#/${route}/protocol`);
       await ready(page);
-      await page.locator('body').click({ position: { x: 1, y: 1 } });
       for (let i = 0; i < 6; i += 1) {
         await page.keyboard.press(i < 3 ? 'ArrowLeft' : 'ArrowRight');
         const now = await scrollPositions(page);

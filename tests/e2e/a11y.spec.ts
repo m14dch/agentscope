@@ -6,7 +6,7 @@ import { expect, test } from './fixtures';
 /**
  * Automated accessibility scan (issue 19): axe-core runs inside the page, so it sends no
  * request and the guard of fixtures.ts stays strict. Every tab and representative scenarios
- * and steps are scanned in both modes, at desktop and phone width, with the panels and the
+ * and steps are scanned in both modes, at desktop, tablet and phone width, with the panels and the
  * menu open. Serious and critical findings fail the test; minor and moderate ones are left to
  * review (axe marks some of them as best practice, not WCAG).
  */
@@ -30,6 +30,7 @@ const ROUTES = [
 
 const WIDTHS = [
   { name: 'desktop', width: 1440, height: 900 },
+  { name: 'tablet', width: 820, height: 1180 },
   { name: 'phone', width: 390, height: 844 },
 ] as const;
 
