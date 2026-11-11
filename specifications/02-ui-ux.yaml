@@ -44,6 +44,11 @@ design:
     control''s face, as on any media player, and replaces a row of text labels. Each keeps a text
     name for assistive technology and shows its name and key in words while it has focus, so
     nothing depends on recognising the icon or on hover (controls.row).'
+  - 'Three zoom levels replace the architecture/protocol switch (issue 51): the first screen showed
+    up to seven lifelines and phase groups, and the very basic idea was missing. The Overview merges
+    participants into a few parties and tells the scenario in 3 to 5 plain sentences; Architecture and
+    Protocol are the former modes. The Overview names no protocol, so a first-time visitor meets the
+    idea before the machinery (zoom_levels).'
   governing_rule: Maximise the signal-to-noise ratio. Viewers already process protocols,
     payloads, context and trust boundaries; anything that carries no information is
     noise and is removed.
@@ -151,14 +156,21 @@ navigation:
     RAG: 05-rag-scenarios.yaml rag-query, then rag-index
     Compare: 06-comparison-scenarios.yaml compare
     Combined: 06-comparison-scenarios.yaml combined
-  routes: '#/<tab>/<scenario>/<step>, with /protocol appended in protocol mode (for example
-    #/mcp/mcp-balance/14/protocol). Missing parts take defaults: the tab''s first scenario,
-    step 0, architecture mode. A step beyond the scenario is clamped. An unknown tab or
+  routes: '#/<tab>/<scenario>/<step>, with /architecture or /protocol appended at those zoom
+    levels (zoom_levels; for example #/mcp/mcp-balance/14/protocol); an address without a level
+    is the Overview. Missing parts take defaults: the tab''s first scenario, step 0, the Overview.
+    The step always numbers events, at every level; at the Overview the cursor rests at the end of
+    a stage, so a step inside a stage opens the Overview at the end of that stage and the address
+    is replaced with it (zoom_levels.cursor_mapping). A step beyond the scenario is clamped. An unknown tab or
     scenario shows an error naming it, with a link to the tab. Stepping replaces the
     history entry; changing tab or scenario adds one. Parameters are not part of the route,
     so a step number refers to the events played at the scenario''s default parameters.'
+  earlier_routes: 'Before issue 51 an address without a level meant architecture mode. It now
+    means the Overview, the level new learners start at: such an old link opens the stage holding
+    its step, from which zooming in returns to the stage''s events. Old /protocol addresses keep
+    their meaning; /architecture is new.'
   removed_scenarios: 'Addresses of the variants removed in issue 46 still open: a removed scenario
-    shows its base scenario at step 0 in the same mode, and the address is replaced with the
+    shows its base scenario at step 0 at the same zoom level, and the address is replaced with the
     base scenario''s (step 0, because a variant''s step numbers named other events). On MCP,
     mcp-resources, mcp-not-found, mcp-unauthorized, mcp-jsonrpc-error and mcp-multiple-tools
     open mcp-balance; on RAG, rag-stale, rag-no-match, rag-conflict, rag-hybrid and
@@ -175,7 +187,7 @@ navigation:
     have one scenario each and no picker; the learning question names what they show.'
 layout:
   desktop:
-  - 'Top bar: navigation, scenario, architecture/protocol toggle'
+  - 'Top bar: navigation and scenario'
   - 'Main: resizable sequence diagram + payload inspector'
   - 'Below the learning question: the control row (controls.row), the playback buttons, the
     play speed and the timeline side by side'
@@ -205,11 +217,11 @@ layout:
     breakpoint: Below 48rem (768 px), which includes a desktop browser zoomed to 200%; from
       48rem the tablet and desktop layouts apply unchanged.
     principle: One column that reads top to bottom. Nothing scrolls horizontally, on the
-      page or inside any region, in any tab, scenario, mode or panel, from 360 px wide.
+      page or inside any region, in any tab, scenario, zoom level or panel, from 360 px wide.
     header: 'The wordmark (32 px high), then on its row a disclosure "Menu" (dotted underline
       like every fold); below them the tabs and the simulated statement, always visible.
       The menu holds the scenario picker''s list of scenarios on RAG (shown in place, without the
-      picker''s own fold), the architecture/protocol switch and the play speed, each
+      picker''s own fold), the zoom control (zoom_levels.control) and the play speed, each
       group labelled in small ink-muted text. These controls move into the menu; none is
       duplicated. It opens below the wordmark row and pushes the page down; it closes on
       Escape anywhere on the page while it is open (focus returns to it), a pointer press
@@ -252,7 +264,7 @@ layout:
       lower changed pane''s message and current row, its message starting 8 px below the top
       of the screen when it is above it, else its current row ending 8 px above the bar. A pane
       that waits through a phase or is done with it did not change. This is the only case in
-      which the page scrolls by itself (modes.scrolling).'
+      which the page scrolls by itself (zoom_levels.scrolling).'
     inspector: 'Below the diagram region, in this order: the prediction prompt when shown
       (learning.prediction) and the message line, always visible; then a
       toggle "Step details" (aria-expanded, dotted underline) over the tabs, collapsed at
@@ -303,24 +315,27 @@ diagram:
   visibility:
     past: line keeps its kind's style; label in ink-muted
     current: emphasized
-    future: hidden in protocol mode; rows keep their space so the layout does not move
+    future: hidden at the Protocol level; rows keep their space so the layout does not move
       as the cursor advances
   phone_list: 'Below 48rem (layout.phone) the diagram is a one-dimensional list in the same
     region, from the same events, visibility, marks and expanded groups as the diagram.
-    Protocol mode lists each reached event in order (future steps are not listed, so the
+    Protocol lists each reached event in order (future steps are not listed, so the
     current step is the last row): its step number in small ink-muted text, its arrow label
     (labels), and below it the sender and the receiver by registry label,
     joined by a short arrow 32 px long drawn with the event''s encoding (line kind, filled or
     open head, the accent for the current step and its pair).
     A self-call names its participant once, followed by a short loop. Each row names its two
-    participants, so there are no lifelines and no participant header. Architecture mode
-    stacks the groups of modes.architecture_groups as flat sections in order, separated by a
+    participants, so there are no lifelines and no participant header. Architecture
+    stacks the groups of zoom_levels.architecture_groups as flat sections in order, separated by a
     hairline rule, with no frame: each section is one full-width button with the takeaway,
     then the caption below it; the current group has a 3 px accent bar along its left edge
     and its takeaway in weight 600; an expanded group lists its reached events below its
-    button, as protocol mode does. A selected lineage value marks a row''s label, or a
+    button, as Protocol does. The Overview stacks the stages the same way, each a section (not a
+    button) with its sentence and below it the parties its events involve in small ink-muted text
+    (for example "Assistant · Bank systems"), the current stage with the accent bar and its sentence
+    in weight 600. A selected lineage value marks a row''s label, or a
     collapsed group''s caption, as in the diagram. The region scrolls vertically only and
-    keeps the current row or group in view (auto_scroll_to_current, modes.scrolling).'
+    keeps the current row, group or stage in view (auto_scroll_to_current, zoom_levels.scrolling).'
   pair_highlighting: true
   auto_scroll_to_current: Keep the current step (or current group) in view; scroll
     smoothly, or instantly with reduced motion and in the step list of phones
@@ -330,38 +345,79 @@ diagram:
     header states once that everything is simulated; arrows carry no per-arrow simulation
     label.
 
-modes:
+zoom_levels:
+  principle: 'Like a change of altitude (issue 51): the learner starts from the very basics and zooms
+    in to the architecture, then to the protocol. Every level shows the same scenario at the same
+    place; only the detail changes. Overview, Architecture and Protocol replace the former
+    architecture and protocol modes.'
+  levels:
+  - overview
+  - architecture
+  - protocol
+  default_level: overview
+  overview: 'The very basics, before any protocol name: the scenario''s parties (03
+    overview_fields.parties) as merged lifelines labelled by party, and its 3 to 5 stages (03
+    overview_fields.stages) as blocks in order, each holding its sentence. A stage block spans the
+    lifelines of the parties its events touch, as a group does, and widens only to fit its sentence;
+    lifelines pass under its text. The current stage, the one holding the cursor''s event, is marked
+    like the current group: a 3 px accent bar along its left edge and its sentence in weight 600. All
+    stages are shown from step 0, so the whole story reads at once; there are no arrows, protocol
+    names, step numbers or payloads. The inspector shows the current stage''s sentence as its message
+    line (before the first stage, the scenario''s question) and no step details; the parameters, the
+    prediction prompts and the panels below the workspace (model context, ingestion, retrieval, the
+    Combined answer) appear from Architecture on. The learning question heads the page at every level;
+    the headline, which states the message the stages tell, is shown at the Overview only.'
   architecture: 'Conceptual level: collapse each scenario phase into one expandable group
-    headed by its takeaway (the phase label is secondary). Shows the learning question,
-    the headline and plain explanations.'
+    headed by its takeaway (the phase label is secondary). Shows the learning question and
+    plain explanations.'
   architecture_groups: 'Groups follow the events in order: one group per consecutive run
     of a phase''s events, so a phase that resumes after another (the MCP tool call around
     its backend call) appears again, captioned as continued and without repeating its
     takeaway. A phase without events has no group. A group spans at least the lifelines
     its events touch and widens only to fit its takeaway. The group holding the current
     step is the current group: an accent bar and its takeaway in weight 600. A group expands or collapses on click, Enter or Space; expanded, it shows its
-    events up to the cursor with protocol-mode styling. The current step is visible without
+    events up to the cursor with the Protocol styling. The current step is visible without
     a click: when the cursor enters a group (stepping forward or back, a jump, a link to a
     step), that group expands, so the current group is always expanded unless the learner
     collapsed it while it was current. A group the cursor expanded collapses again when the
-    cursor leaves it, so the overview stays one takeaway per phase; a group the learner
+    cursor leaves it, so the level stays one takeaway per phase; a group the learner
     collapsed reopens only when the cursor enters it again; a group the learner expanded keeps
     its state while the learner steps. At step 0 (and after Reset) no group is current and only
     the groups the learner expanded are open. The same holds in the phone step list
     (diagram.phone_list) and in each Compare pane, where a waiting pane (compare_view.timeline)
     has no current group. Lifelines pass under a group''s takeaway and caption, not
     through them.'
-  scrolling: Only a cursor change or a mode switch scrolls, and only the diagram's own
+  protocol: 'Technical level: show all individual events with exact logical messages;
+    the inspector holds payloads and boundaries.'
+  stepping: 'The Overview steps stage by stage: the cursor rests at the last event of a stage (the
+    state once the stage has happened), Next and Play move to the last event of the next stage,
+    Previous to the last event of the previous stage or to step 0, and a stage without played
+    events is passed over. The slider runs over the stages, from 0 to their number, and the
+    position line reads "Stage <s> of <m>". Architecture and Protocol step event by event: at
+    Architecture the current group is expanded (architecture_groups), so its events are what Next
+    walks through, and the position line reads "Step <k> of <n> · <phase label>" as before.'
+  cursor_mapping: 'One cursor for every level: a stage covers the events of its phases, a group a run
+    of one phase''s events. Zooming keeps the learner''s place. Zooming in from the Overview moves the
+    cursor to the first event of the current stage, so the learner watches that stage happen; zooming
+    out to the Overview moves it to the last event of the stage holding the current event; between
+    Architecture and Protocol the cursor stays on its event. Step 0 stays step 0. A pure function
+    maps the cursor both ways, and a unit test checks it for every scenario.'
+  control: 'One zoom control replaces the architecture/protocol switch: a group "Zoom" of three
+    buttons, Overview, Architecture and Protocol, the current one pressed (aria-pressed), at the start
+    of the control row (controls.row); below 48rem it moves into the menu (layout.phone.header). The
+    keys + (or =) zoom in and - zooms out (controls.keyboard). A change of level keeps focus on the
+    control that made it, and a polite live region announces the level and the position, for example
+    "Architecture. Step 9 of 28 · Model chooses a tool; agent validates." or "Overview. Stage 2 of
+    4."; stepping announces nothing there.'
+  scrolling: Only a cursor change or a change of level scrolls, and only the diagram's own
     scroll region, never the page (on phones the page also scrolls to keep the stepping area
     in view, layout.phone.stepping_area); toggling a group or laying out again keeps the scroll
     position. It scrolls only as far as needed to bring the current step into view, or the current
-    group when it is collapsed (in an expanded current group, the step inside it),
-    horizontally never past its left edge, so an arrow that fits keeps both its sender and
-    its receiver in view. Keyboard focus stays on the same group or region across steps. Arrow
-    keys scroll the diagram region while it has focus.
-  protocol: 'Technical level: show all individual events with exact logical messages;
-    the inspector holds payloads and boundaries.'
-  default_mode: architecture
+    group when it is collapsed (in an expanded current group, the step inside it, together with the
+    group's start when both fit in the region), or the current stage, horizontally never past its
+    left edge, so an arrow that fits keeps both its sender and its receiver in view. Keyboard focus
+    stays on the same group or region across steps. Arrow keys scroll the diagram region while it
+    has focus.
   switch_preserves_position: true
 learning:
   interaction: 'Each scenario follows the handover''s pattern (6.1): show the learning
@@ -406,8 +462,8 @@ controls:
   speed_control: 'One menu (a select) labelled "Play speed" offers the speeds as 0.5×, 1×, 2× and
     4×, 1× chosen at first. It sets the interval of Play: at once while playing, else the next
     time Play runs. There are no separate speed buttons.'
-  row: 'One row below the learning question, in this order: Reset, Previous step, Play or Pause,
-    Next step, the play speed (speed_control), then the timeline (layout.timeline): the step slider,
+  row: 'One row below the learning question, in this order: the zoom control (zoom_levels.control),
+    Reset, Previous step, Play or Pause, Next step, the play speed (speed_control), then the timeline (layout.timeline): the step slider,
     taking the remaining width but at least 12rem, and the position line. The four buttons show the standard media
     icons, inline SVG in ink at 24 px: a circular arrow (Reset), a bar and a triangle pointing left
     (Previous step), a triangle pointing right (Play) or two bars (Pause), and a triangle pointing
@@ -418,15 +474,18 @@ controls:
     position line nor the slider; nothing depends on hover.
     While playing, Play shows the Pause icon and is named Pause. When the row is too narrow, the
     timeline wraps onto its own line directly below the buttons. Below 48rem the position line,
-    the slider and the buttons form the bottom bar and the speed moves into the menu
-    (layout.phone).'
+    the slider and the buttons form the bottom bar and the zoom control and the speed move into the
+    menu (layout.phone).'
   keyboard:
     ArrowRight: next
     ArrowLeft: previous
     Space: toggle play/pause
+    +: zoom in (= also, the same key without Shift on many keyboards)
+    '-': zoom out
   keyboard_scope: The keys act anywhere on the page except where focus needs them itself
     (Space on buttons, links and menus; the arrow keys on text fields, the play speed, the step slider,
-    the splitter, the inspector tabs and the diagram's scroll region)
+    the splitter, the inspector tabs and the diagram's scroll region; + and - on text fields and
+    menus). With Ctrl or Cmd, + and - stay the browser's page zoom.
   reduced_motion: true
 inspector:
   message_line: Always visible above the tabs. The event's explanation, then sender →
@@ -518,7 +577,7 @@ lineage_selection:
     value at a time. Escape or selecting it again clears the selection. It stays while
     stepping through the scenario and is cleared when the scenario changes.'
   diagram: Every reached step whose tracked_values include the selected value gets the
-    selection background behind its label and an ink underline, in both modes; a
+    selection background behind its label and an ink underline, at Architecture and Protocol; a
     collapsed group containing such a step shows the mark on its caption.
   payload: With a selection, only fields equal to the selected value are highlighted;
     without one, all of the step's tracked values are.
@@ -535,12 +594,13 @@ compare_view:
     ink-muted text beside its sentence, the label above the sentence below 48rem. Nothing makes the
     page scroll horizontally at any width; each diagram scrolls inside its own region, and below
     48rem each pane''s diagram is the step list (diagram.phone_list), the shared Previous, Play or
-    Pause and Next sit with Reset in the bottom bar and the play speed and the mode switch in the
+    Pause and Next sit with Reset in the bottom bar and the play speed and the zoom control in the
     menu (layout.phone).'
   pane: 'Each pane shows its scenario''s question, its position ("Step <k> of <n> · <scenario phase
-    label>") with its own step slider, the current event''s explanation with sender → receiver and
-    operation (inspector.message_line), its sequence diagram, and a link "Inspect step <k> in <tab>"
-    to the scenario''s own route at that step and mode, where the inspector, the context panel and the
+    label>", at the Overview "Stage <s> of <m>") with its own step slider, the current event''s
+    explanation with sender → receiver and operation (inspector.message_line; at the Overview the
+    current stage''s sentence), its sequence diagram, and a link "Inspect step <k> in <tab>"
+    to the scenario''s own route at that step and zoom level, where the inspector, the context panel and the
     RAG panels are. Compare has no inspector, panels or splitter of its own.'
   timeline: 'The shared timeline follows 06 semantic_phases in order. Compare step 0 is before any
     event, both panes at step 0. Each semantic phase then lasts as many compare steps as the pane with
@@ -552,7 +612,10 @@ compare_view:
     no current step or group, and its placeholder (06 compare.placeholders, which the validators require
     for exactly these phases) replaces the message. Both panes therefore always show the same semantic
     phase. This needs each scenario''s events to visit the semantic phases in their order, which a unit
-    test checks.'
+    test checks. At the Overview the panes step by stage: each stage counts as one event of the
+    semantic phase of its first phase, and a pane rests at the last event of its stage, so the two
+    stories run side by side stage by stage under the same rules and placeholders (for example MCP
+    learns the bank''s actions while RAG shows "Index built earlier by rag-index.").'
   controls: 'One set of shared controls drives the timeline, in the order and form of controls.row:
     Reset, Previous step, Play or Pause, Next step, the play speed, the shared slider and the compare
     step, with the keys of controls.keyboard, under controls.action_rules (Play advances one compare
@@ -565,9 +628,13 @@ compare_view:
     technology; the others in ink-muted. Before step 1 no phase is current.'
   defaults: 'Both scenarios play at their default parameters; Compare offers no parameter controls.
     Prediction prompts are not shown in Compare, since a shared step would answer a question asked in
-    one pane only; each scenario''s own tab shows them. The mode switch in the top bar sets both
-    diagrams; architecture mode is the default, so each narrower pane starts from the phase groups.'
-  route: '#/compare/<compare id>/<compare step>[/protocol], for example #/compare/compare-rag-mcp/12.
+    one pane only; each scenario''s own tab shows them. The zoom control in the control row sets both
+    diagrams; the Overview is the default, so Compare starts with the two stories side by side.
+    Zooming keeps the place of the first pane that has a step in the current semantic phase (the
+    left unless it waits), mapped as in zoom_levels.cursor_mapping; the other pane follows to the
+    same semantic phase, as with a pane''s own slider.'
+  route: '#/compare/<compare id>/<compare step>[/architecture|/protocol], for example
+    #/compare/compare-rag-mcp/12/architecture; the compare step counts the timeline of the zoom level.
     Missing parts take defaults and a step beyond the timeline is clamped (navigation.routes); stepping
     replaces the history entry.'
   accessibility: 'Each pane is a region named by its tab label (RAG, MCP); each pane''s slider is

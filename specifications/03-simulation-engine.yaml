@@ -49,7 +49,7 @@ event_schema:
 phase_schema:
   fields:
     id: Unique within the scenario
-    label: Shown in architecture mode
+    label: Shown at the Architecture zoom level
     semantic_phase: One of 06-comparison-scenarios.yaml semantic_phases; drives Compare
       synchronization
     takeaway: Required. One sentence stating what the learner should understand from
