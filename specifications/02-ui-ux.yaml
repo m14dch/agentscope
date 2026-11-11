@@ -423,7 +423,7 @@ controls:
     ArrowLeft: previous
     Space: toggle play/pause
   keyboard_scope: The keys act anywhere on the page except where focus needs them itself
-    (Space on buttons, links and menus; the arrow keys on text fields, the step slider,
+    (Space on buttons, links and menus; the arrow keys on text fields, the play speed, the step slider,
     the splitter, the inspector tabs and the diagram's scroll region)
   reduced_motion: true
 inspector:
