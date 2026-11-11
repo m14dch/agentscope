@@ -2,9 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { answerCompositionProblem } from '../../../src/rag/derive.ts';
-import { specSources } from '../../../src/scenarios/registry.ts';
+import { readSpecSources } from '../../../scripts/spec-sources.ts';
 
-const TOOLS = join(import.meta.dirname, '../../../specifications/tools');
+const SPECS = join(import.meta.dirname, '../../../specifications');
+const TOOLS = join(SPECS, 'tools');
 
 /** answer_composition_problem of validate_specs.py for each input, in order. */
 function pythonProblems(inputs: unknown[]): (string | null)[] {
@@ -23,7 +24,7 @@ function pythonProblems(inputs: unknown[]): (string | null)[] {
 describe('answer_composition checks', () => {
   it('validate_specs.py reports the same problem as the app for every malformed composition', () => {
     const composition = (
-      specSources().comparison.combined as unknown as {
+      readSpecSources(SPECS).comparison.combined as unknown as {
         answer_composition: Record<string, unknown>;
       }
     ).answer_composition;
