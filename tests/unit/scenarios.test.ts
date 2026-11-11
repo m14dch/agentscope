@@ -7,6 +7,7 @@ import {
   setPath,
 } from '../../src/scenarios/expand.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
+import { createPlayback } from '../../src/rag/bundled.ts';
 import type {
   Composition,
   ContextChange,
@@ -503,19 +504,24 @@ describe('bundled registry', () => {
     );
   });
 
-  it('labels every final model answer as simulated (02 learning.simulated_behaviour)', () => {
-    // 08 definition_of_done: no fictional model output represented as real inference.
-    const answers = Object.values(loadRegistry()).flatMap((s) =>
-      s.events.filter(
-        (e) =>
-          e.protocol === 'LLM_API' &&
-          e.message_type === 'RESPONSE' &&
-          /answer$/i.test(e.operation) &&
-          e.sender !== 'agent',
-      ),
-    );
-    expect(answers.length).toBeGreaterThanOrEqual(13);
-    for (const e of answers) expect(e.explanation, e.id).toMatch(/^Simulated model output/);
+  it('labels every response the model sends as simulated (02 learning.simulated_behaviour)', () => {
+    // 08 definition_of_done: no fictional model output represented as real inference. Every
+    // scenario, variants and Combined included, as written and as played (derived events too).
+    const fromModel = (e: { protocol: string; message_type: string; sender: string }) =>
+      e.protocol === 'LLM_API' && e.message_type === 'RESPONSE' && e.sender === 'llm';
+    const scenarios = Object.values(loadRegistry());
+    const responses = scenarios.flatMap((s) => [
+      ...s.events.filter(fromModel),
+      ...createPlayback(s).events.filter(fromModel),
+    ]);
+    // Each scenario but rag-index (no model) has at least its answer; MCP ones a tool call too.
+    for (const s of scenarios.filter((s) => s.id !== 'rag-index'))
+      expect(
+        responses.some((e) => e.scenario_id === s.id),
+        s.id,
+      ).toBe(true);
+    expect(responses.filter((e) => /tool call/.test(e.operation)).length).toBeGreaterThanOrEqual(8);
+    for (const e of responses) expect(e.explanation, e.id).toMatch(/^Simulated model output/);
   });
 
   it('expands the Combined variant from the composed events (03 composition_format.variants)', () => {
