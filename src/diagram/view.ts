@@ -225,14 +225,12 @@ export class DiagramView {
    * every lifeline stays named (issue 19). They scroll horizontally with their lifelines.
    */
   private readonly pinHeader = (): void => {
-    const header = this.root.querySelector<SVGGElement>('.participants');
-    if (!header) {
-      this.root.style.scrollPaddingTop = '';
-      return;
-    }
-    header.setAttribute('transform', `translate(0 ${this.root.scrollTop})`);
+    // A property of the region, not an attribute of the drawing: the diagram's markup stays a
+    // function of the step alone (navigation e2e compares it).
+    this.root.style.setProperty('--diagram-scroll-top', `${this.root.scrollTop}px`);
     // Focus moved by the keyboard scrolls clear of the names too.
-    this.root.style.scrollPaddingTop = `${this.headerHeight()}px`;
+    const header = this.headerHeight();
+    this.root.style.scrollPaddingTop = header ? `${header}px` : '';
   };
 
   private readonly onClick = (event: Event): void => {

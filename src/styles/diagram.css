@@ -5,8 +5,12 @@
   stroke-width: var(--line-hair);
 }
 
-/* The names stay at the top of the region while it scrolls; their band hides what passes
-   beneath them. */
+/* The names stay at the top of the region while it scrolls (DiagramView sets the offset);
+   their band hides what passes beneath them. */
+.participants {
+  transform: translateY(var(--diagram-scroll-top, 0px));
+}
+
 .participants-band {
   fill: var(--color-paper);
 }
