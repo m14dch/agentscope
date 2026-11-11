@@ -24,7 +24,10 @@ export function tabScenarios(sources: SpecSources): Record<Tab, string[]> {
     mcp: [...sources.mcp.scenarios.map((s) => s.id), ...sources.mcp.variants.map((v) => v.id)],
     rag: [...ragBase, ...sources.rag.variants.map((v) => v.id)],
     compare: [sources.comparison.compare.id],
-    combined: [sources.comparison.combined.id],
+    combined: [
+      sources.comparison.combined.id,
+      ...(sources.comparison.combined.variants ?? []).map((v) => v.id),
+    ],
   };
 }
 

@@ -415,6 +415,9 @@ fixtures:
     after its group that cites each version and names the newest. In a conflict sentence each predicate
     stands alone, so its last comma becomes ' and '.
   - 'End with one sentence naming every unsupported aspect: ''The retrieved evidence does not cover <aspects>.'''
+  - 'The answer is composed of parts, joined by single spaces: each group''s sentence, each conflict sentence,
+    the sentence naming unsupported aspects and the injection note, each with its kind (group, conflict, gap,
+    note), or the single no-evidence answer. Views label the parts by kind; they never parse the text.'
   - 'With no retained chunks, answer exactly: ''I could not find sufficiently relevant information in
     the indexed documents to answer this question.'''
   - Untrusted documents never supply facts. If a retained chunk contains the injected instruction, add

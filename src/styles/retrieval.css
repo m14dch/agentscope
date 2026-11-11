@@ -1,5 +1,6 @@
 /* RAG retrieval panel (02 rag_retrieval) and version panel (02 rag_controls.version_panel). */
 .retrieval,
+.combined,
 .versions {
   margin-top: var(--space-3);
   padding-top: var(--space-2);
@@ -7,11 +8,13 @@
 }
 
 .retrieval h3,
+.combined h3,
 .versions h3 {
   margin-bottom: var(--space-1);
 }
 
-.retrieval h4 {
+.retrieval h4,
+.combined h4 {
   margin: 0 0 var(--space-1);
   font-size: var(--size-text);
   line-height: var(--leading-text);
@@ -19,6 +22,7 @@
 }
 
 .retrieval h5,
+.combined h5,
 .versions h4 {
   margin: 0 0 var(--space-1);
   font-weight: var(--weight-regular);

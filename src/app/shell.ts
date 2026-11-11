@@ -6,6 +6,7 @@
 import { Player, SPEEDS, type Speed } from '../engine/player.ts';
 import type { Mode } from '../diagram/model.ts';
 import { contextModel, hasContext, renderContext } from '../inspector/context.ts';
+import { combinedPanel } from './combined.ts';
 import {
   IngestionPanel,
   ingestionModel,
@@ -162,7 +163,11 @@ export class Shell {
   private readonly labels = participantLabels();
   private readonly tabs = tabScenarios(this.sources);
   private readonly lessons = new Map<string, string>(
-    [...this.sources.mcp.variants, ...this.sources.rag.variants].map((v) => [v.id, v.lesson]),
+    [
+      ...this.sources.mcp.variants,
+      ...this.sources.rag.variants,
+      ...(this.sources.comparison.combined.variants ?? []),
+    ].map((v) => [v.id, v.lesson]),
   );
   private readonly root: HTMLElement;
   private readonly header: HTMLElement;
@@ -552,6 +557,11 @@ export class Shell {
           () => slider.focus({ preventScroll: true }),
         )
       : undefined;
+    // The Combined answer's provenance (02 combined_answer).
+    const combined = combinedPanel(scenario, player, {
+      jump: (k) => this.go(() => player.jump(k)),
+      leave: () => slider.focus({ preventScroll: true }),
+    });
 
     const view = new DiagramView(diagram, player, { labels: this.labels, mode: route.mode });
     const state: ScenarioView = {
@@ -597,6 +607,7 @@ export class Shell {
         retrievalModel(player.playback.events, k, retrieval.index()),
         state.selection,
       );
+      combined?.update();
       for (const b of this.header.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
         b.setAttribute('aria-pressed', String(b.dataset['mode'] === view.mode));
       }
@@ -646,6 +657,7 @@ export class Shell {
       ...(ingestion ? [ingestion.panel.root] : []),
       ...(versions ? [versions] : []),
       ...(retrieval ? [retrieval.panel.root] : []),
+      ...(combined ? [combined.root] : []),
     );
     state.render();
     return state;

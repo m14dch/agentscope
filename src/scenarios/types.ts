@@ -221,5 +221,5 @@ export type Compare = {
   aspects?: { label: string; sentence: string }[];
 } & JsonObject;
 
-/** Base scenarios, expanded variants and the composed scenario, in that order. */
+/** Base scenarios, expanded variants, the composed scenario and its variants, in that order. */
 export type Registry = Record<string, Scenario>;

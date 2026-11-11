@@ -10,7 +10,7 @@ describe('tab contents', () => {
     expect(tabs.mcp).toContain('mcp-jsonrpc-error');
     expect(tabs.rag.slice(0, 2)).toEqual(['rag-query', 'rag-index']);
     expect(tabs.rag).toContain('rag-prompt-injection');
-    expect(tabs.combined).toEqual(['combined-balance-explanation']);
+    expect(tabs.combined).toEqual(['combined-balance-explanation', 'combined-missing-terms']);
     expect(tabs.compare).toEqual(['compare-rag-mcp']);
   });
 });

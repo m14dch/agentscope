@@ -533,12 +533,17 @@ combined:
   - c-07
   - c-08
   answer_composition:
-    rule: 'The answer is the intro, then the RAG answer of 05-rag-scenarios.yaml answer_rules for the retained
-      chunks, then the sentence of the first comparison whose required facts are all supported and whose
-      lacking facts are all unsupported. Without one, no sentence is added. The explanation of the model''s
+    rule: 'The answer is the intro''s sentences, then the parts of the RAG answer of 05-rag-scenarios.yaml
+      answer_rules for the retained chunks, then the sentence of the first comparison whose required facts
+      are all supported and whose lacking facts are all unsupported. Without one, no sentence is added.
+      The parts are joined by single spaces. Each intro sentence names its source: tool for data an MCP
+      tool returned, session for what the agent read from its session (c-02). The explanation of the model''s
       answer (c-07) is that comparison''s explanation, or the default explanation.'
-    intro: 'Your current balance is CHF 12,500.75 (source: get_customer_balance tool). You have an Everyday
-      account.'
+    intro:
+    - source: tool
+      text: 'Your current balance is CHF 12,500.75 (source: get_customer_balance tool).'
+    - source: session
+      text: You have an Everyday account.
     comparisons:
     - requires:
       - everyday-fee
@@ -592,6 +597,10 @@ combined:
     lesson: With the Savings document missing from the index, the answer still gives the balance and the
       Savings deposit from the opening guide but states that the Savings terms are not covered instead
       of comparing the accounts.
+    phase_overrides:
+      answer:
+        takeaway: The answer states the live balance and the cited conditions, and says which terms
+          the evidence does not cover instead of comparing the accounts.
     expected_selected:
     - account-opening@1.2-c50o10-001
     - everyday-account@1.2-c50o10-002

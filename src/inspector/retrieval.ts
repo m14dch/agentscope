@@ -77,7 +77,8 @@ export interface ScoreRow {
   rerank?: number;
   /** From retrieve-06, once reached. */
   outcome?: Outcome;
-  /** The chunk's projected vector. */
+  /** The chunk's vector, and its projection. */
+  vector: number[];
   point: Point;
 }
 
@@ -153,9 +154,10 @@ function assembledPrompt(
     return `<document id="${documentId}" version="${version}"${attr} trust="${String(b['trust'])}">\n${texts[i] ?? ''}\n</document>`;
   });
   const question = before.find((m) => m.role === 'user')?.content ?? '';
+  // Function replacements, so a '$' in the question or a document is never a pattern.
   const user = String(after['user_template'] ?? '')
-    .replace('<question>', question)
-    .replace('<document blocks>', blocks.length ? blocks.join('\n') : '(none)');
+    .replace('<question>', () => question)
+    .replace('<document blocks>', () => (blocks.length ? blocks.join('\n') : '(none)'));
   return [
     { role: 'system', content: String(after['system'] ?? '') },
     { role: 'user', content: user },
@@ -217,6 +219,7 @@ export function retrievalModel(
       version: String(m['version']),
       score: Number(m['score']),
       untrusted: index.trustOf(documentId) === 'untrusted',
+      vector,
       point: index.project(vector),
     };
     const k = keyword.get(chunkId);
@@ -255,29 +258,33 @@ export function retrievalModel(
     };
   }
   const shownAt = find(events, 'retrieve-12');
-  if (reached(shownAt, cursor)) {
-    const raw = list(payload(shownAt)['sources']).map((s) => obj(s));
-    const lines = sourceLines(
-      raw.map((s) => ({
-        id: String(s['chunkId'] ?? ''),
-        documentId: String(s['documentId']),
-        version: String(s['version']),
-        text: '',
-        document: s['chunkId'] === undefined,
-      })),
-    );
-    model.answer = {
-      text: String(payload(shownAt)['answer']),
-      sources: raw.map((s, i) => ({
-        citation: Number(s['citation']),
-        ...(s['chunkId'] !== undefined ? { chunkId: String(s['chunkId']) } : {}),
-        documentId: String(s['documentId']),
-        version: String(s['version']),
-        line: lines[i] ?? '',
-      })),
-    };
-  }
+  if (reached(shownAt, cursor)) model.answer = shownAnswer(events[shownAt]);
   return model;
+}
+
+/** The answer an event shows the user (retrieve-12, c-08): its text and its sources. */
+export function shownAnswer(event: ScenarioEvent | undefined): { text: string; sources: Source[] } {
+  const payload = obj(event?.payload as Json | undefined);
+  const raw = list(payload['sources']).map((s) => obj(s));
+  const lines = sourceLines(
+    raw.map((s) => ({
+      id: String(s['chunkId'] ?? ''),
+      documentId: String(s['documentId']),
+      version: String(s['version']),
+      text: '',
+      document: s['chunkId'] === undefined,
+    })),
+  );
+  return {
+    text: String(payload['answer']),
+    sources: raw.map((s, i) => ({
+      citation: Number(s['citation']),
+      ...(s['chunkId'] !== undefined ? { chunkId: String(s['chunkId']) } : {}),
+      documentId: String(s['documentId']),
+      version: String(s['version']),
+      line: lines[i] ?? '',
+    })),
+  };
 }
 
 /** The answer split into text and citation numbers, in order. */
@@ -340,6 +347,24 @@ export function pointLabel(chunkId: string): string {
   return m ? `${m[1] ?? ''} · ${m[2] ?? ''}` : chunkId;
 }
 
+/**
+ * One label for chunks that share a point: the versions of one chunk as
+ * '<stem>@<v1>/<v2> · <nnn>', other chunks' labels joined by commas.
+ */
+export function sharedLabel(chunkIds: readonly string[]): string {
+  const parts = chunkIds.map((id) => /^(.*)@([^@]+)-(c\d+o\d+-\d+)$/.exec(id));
+  const [first] = parts;
+  if (
+    first &&
+    parts.every((m) => m && m[1] === first[1] && m[3] === first[3]) &&
+    chunkIds.length > 1
+  ) {
+    const seq = pointLabel(chunkIds[0] as string).split(' · ')[1] ?? '';
+    return `${first[1] ?? ''}@${parts.map((m) => m?.[2] ?? '').join('/')} · ${seq}`;
+  }
+  return chunkIds.map(pointLabel).join(', ');
+}
+
 /** An axis-aligned box in pixels. */
 export interface Box {
   left: number;
@@ -355,6 +380,8 @@ export interface ProjectedPoint {
   label: string;
   /** The chunk ID; empty for the question. */
   id: string;
+  /** Further chunks with the identical vector and outcome, sharing this point and label. */
+  also?: string[];
   retained: boolean;
 }
 
@@ -515,8 +542,8 @@ function placeInOrder(
   return { labels, cost };
 }
 
-/** One layout of the plot with a given side, left edge and total width. */
-function layoutAt(
+/** One layout of the plot with a given side, left edge and total width, and its leader cost. */
+export function layoutAt(
   points: readonly ProjectedPoint[],
   side: number,
   margin: number,
@@ -602,14 +629,19 @@ function layoutAt(
 /** The plot's smallest side (02 rag_retrieval.projection). */
 const MIN_SIDE = 260;
 
+/** Horizontal positions of the plot within the free width, as shares, tried in this order. */
+const SHARES = [0.7, 0.5, 0.85, 0.3, 0.6, 0.4, 1, 0];
+
 /**
  * Lays out the projection (02 rag_retrieval.projection) for an available width: a square
  * plot from −1 to 1, axes named at their ends, and a label beside every point. A label goes
  * right or left of its point; where it would overlap another label, a point mark, an axis,
  * an axis name or a leader line, it moves up or down by a line, nearest first, beside a
  * leader line that crosses nothing. The plot takes the largest side (at most 560 px, at
- * least 260 px) and the position within the width at which every label fits; only when
- * none fits is the layout wider than `available`, with room for labels on both sides.
+ * least 260 px) at which every label fits somewhere within the width; of the positions at
+ * that side, the one with the shortest leaders (by squared length) is drawn, the earlier in
+ * SHARES on a tie. Only when none fits is the layout wider than `available`, with room for
+ * labels on both sides.
  */
 export function projectionLayout(
   points: readonly ProjectedPoint[],
@@ -617,17 +649,13 @@ export function projectionLayout(
 ): ProjectionLayout {
   for (let side = Math.min(560, Math.floor(available) - 16); side >= MIN_SIDE; side -= 20) {
     const free = Math.floor(available) - side;
-    // Labels run mostly left of the cluster of account chunks, so try the plot right of
-    // centre first, then centred, then left of centre.
-    for (const share of [0.7, 0.5, 0.85, 0.3]) {
-      const { layout, cost } = layoutAt(
-        points,
-        side,
-        Math.round(free * share),
-        Math.floor(available),
-      );
-      if (cost < 1e6) return layout;
+    let best: { layout: ProjectionLayout; cost: number } | undefined;
+    for (const share of SHARES) {
+      const candidate = layoutAt(points, side, Math.round(free * share), Math.floor(available));
+      if (candidate.cost < (best?.cost ?? 1e6)) best = candidate;
+      if (best?.cost === 0) break;
     }
+    if (best) return best.layout;
   }
   const longest = Math.max(8, ...points.map((p) => p.label.length)) * CODE_CHAR;
   const margin = Math.ceil(longest + GAP + 8);
@@ -739,16 +767,40 @@ export const thresholdLabel = (x: number): string => Number(thresholdText(x)).to
 
 const score4 = (x: number): string => x.toFixed(4);
 
-/** The projected points to draw: the question (if reached), then every chunk. */
+/**
+ * The projected points to draw: the question (if reached), then every chunk. Chunks with
+ * identical vectors and the same outcome share one point and one label
+ * (02 rag_retrieval.projection), at the place of the first in score order.
+ */
 export function projectedPoints(model: RetrievalModel): ProjectedPoint[] {
+  const groups: { row: ScoreRow; ids: string[] }[] = [];
+  const retained = (r: ScoreRow): boolean => r.outcome?.retained === true;
+  // Both retained, or both dropped for the same reason (or both not yet decided).
+  const outcome = (r: ScoreRow): string =>
+    !r.outcome ? '' : r.outcome.retained ? 'retained' : `dropped: ${r.outcome.reason}`;
+  for (const r of model.rows) {
+    const same = groups.find(
+      (g) =>
+        r.vector.length > 0 &&
+        g.row.vector.length === r.vector.length &&
+        g.row.vector.every((x, i) => x === r.vector[i]) &&
+        outcome(g.row) === outcome(r),
+    );
+    if (same) same.ids.push(r.chunkId);
+    else groups.push({ row: r, ids: [r.chunkId] });
+  }
   return [
     ...(model.query ? [{ ...model.query, label: 'question', id: '', retained: false }] : []),
-    ...model.rows.map((r) => ({
-      ...r.point,
-      label: pointLabel(r.chunkId),
-      id: r.chunkId,
-      retained: r.outcome?.retained === true,
-    })),
+    ...groups.map(({ row, ids }) => {
+      const sorted = [...ids].sort();
+      return {
+        ...row.point,
+        label: ids.length > 1 ? sharedLabel(sorted) : pointLabel(row.chunkId),
+        id: row.chunkId,
+        ...(ids.length > 1 ? { also: ids.slice(1) } : {}),
+        retained: retained(row),
+      };
+    }),
   ];
 }
 
@@ -983,17 +1035,21 @@ export class RetrievalPanel {
       points.forEach((p, i) => {
         const at = layout.pixels[i] as { x: number; y: number };
         const l = layout.labels[i] as PlacedLabel;
+        const name = (id: string): string =>
+          `${id || 'The question'}: x ${p.x.toFixed(4)}, y ${p.y.toFixed(4)}${p.retained ? ', retained' : ''}`;
         const g = svg('g', {
           class: p.id ? (p.retained ? 'point retained' : 'point') : 'point query',
           role: 'img',
-          'aria-label': `${p.id || 'The question'}: x ${p.x.toFixed(4)}, y ${p.y.toFixed(4)}${p.retained ? ', retained' : ''}`,
+          'aria-label': p.also?.length
+            ? `${name(p.id)}; label shared with ${p.also.join(', ')}`
+            : name(p.id),
         });
         if (p.id) g.dataset['chunk'] = p.id;
         if (l.leader) {
           const [x1, y1, x2, y2] = l.leader;
           g.append(svg('line', { class: 'leader', x1, y1, x2, y2 }));
         }
-        if (p.id && p.id === marked) {
+        if (p.id && (p.id === marked || (typeof marked === 'string' && p.also?.includes(marked)))) {
           // Selection background plus an ink underline (02 design.colour.use).
           const { left, right, top, bottom } = l.box;
           g.append(
@@ -1025,6 +1081,18 @@ export class RetrievalPanel {
           svg('text', { class: 'point-label', x: l.x, y: l.y, 'text-anchor': l.anchor }, p.label),
         );
         root.append(g);
+        // Each chunk sharing the point stays its own point for assistive technology; its mark
+        // lies exactly on the first one's.
+        for (const id of p.also ?? []) {
+          const twin = svg('g', {
+            class: g.getAttribute('class') ?? 'point',
+            role: 'img',
+            'aria-label': `${name(id)}; label shared with ${p.id}`,
+          });
+          twin.dataset['chunk'] = id;
+          twin.append(svg('circle', { class: 'mark', cx: at.x, cy: at.y, r: 4 }));
+          root.append(twin);
+        }
       });
       node.replaceChildren(root);
     };
@@ -1108,36 +1176,12 @@ export class RetrievalPanel {
   private answer(answer: NonNullable<RetrievalModel['answer']>, index: SearchedIndex): HTMLElement {
     const sources = new Map(answer.sources.map((s) => [s.citation, s]));
     const text = el('p', 'answer-text');
-    // A citation number can occur several times; focus returns to the same occurrence.
-    const seen = new Map<number, number>();
-    // A citation and the punctuation right after it never break apart.
-    let group: HTMLElement | undefined;
-    for (const part of answerParts(answer.text)) {
-      if (typeof part === 'string') {
-        const punctuation = group ? (/^[.,;:)]+/.exec(part)?.[0] ?? '') : '';
-        if (group && punctuation) group.append(punctuation);
-        if (part.length > punctuation.length) text.append(part.slice(punctuation.length));
-        group = undefined;
-        continue;
-      }
-      const source = sources.get(part);
-      const nth = (seen.get(part) ?? 0) + 1;
-      seen.set(part, nth);
-      const b = focusKey(el('button', 'citation', `[${part}]`), `citation:${part}:${nth}`);
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(this.open === part));
-      b.setAttribute(
-        'aria-label',
-        `Citation ${part}: ${source?.line.replace(/^\[\d+\] /, '') ?? ''}`,
-      );
-      b.setAttribute('aria-controls', 'retrieval-evidence');
-      b.addEventListener('click', () => {
-        this.open = this.open === part ? undefined : part;
+    appendCited(text, answer.text, new Map(), (n, nth) =>
+      citationButton(n, nth, sources.get(n), this.open === n, 'retrieval-evidence', () => {
+        this.open = this.open === n ? undefined : n;
         this.update(this.model, this.selection);
-      });
-      group = el('span', 'citation-group', b);
-      text.append(group);
-    }
+      }),
+    );
     const lines = answer.sources.length
       ? el('ol', 'sources small', ...answer.sources.map((s) => el('li', 'source-line', s.line)))
       : el('p', 'small muted', 'No sources: the answer cites nothing.');
@@ -1145,7 +1189,7 @@ export class RetrievalPanel {
     const view = open ? evidence(open, index) : undefined;
     const holder = el('div', 'evidence');
     holder.id = 'retrieval-evidence';
-    if (view) holder.append(this.evidence(view));
+    if (view) holder.append(renderEvidence(view));
     return el(
       'div',
       'retrieval-answer',
@@ -1156,51 +1200,97 @@ export class RetrievalPanel {
       holder,
     );
   }
+}
 
-  private evidence(view: EvidenceView): HTMLElement {
-    const { source, chunk } = view;
-    const end = chunk ? chunk.startWord + chunk.words.length : 0;
-    const docText = el('p', 'evidence-text');
-    if (chunk) {
-      const before = view.documentWords.slice(0, chunk.startWord).join(' ');
-      const inside = view.documentWords.slice(chunk.startWord, end).join(' ');
-      const after = view.documentWords.slice(end).join(' ');
-      docText.append(
-        before ? `${before} ` : '',
-        el('span', 'chunk-mark', inside),
-        after ? ` ${after}` : '',
-      );
-    } else docText.append(view.documentWords.join(' '));
-    const documentColumn = el(
-      'div',
-      'retrieval-column',
-      el('h5', 'small muted', `Source document ${source.documentId} v${source.version}`),
-      docText,
-    );
-    const title = chunk
-      ? `[${source.citation}] chunk ${source.chunkId ?? ''}`
-      : `[${source.citation}] ${source.documentId} v${source.version}, full document`;
-    const columns: HTMLElement[] = [documentColumn];
-    if (chunk)
-      columns.unshift(
-        el(
-          'div',
-          'retrieval-column',
-          el(
-            'h5',
-            'small muted',
-            `Chunk, words ${chunk.startWord}–${Math.max(end - 1, chunk.startWord)}`,
-          ),
-          el('p', 'evidence-text evidence-chunk', chunk.words.join(' ')),
-        ),
-      );
-    return el(
-      'div',
-      undefined,
-      el('h5', 'evidence-title', title),
-      el('div', 'retrieval-columns', ...columns),
-    );
+/**
+ * Appends text whose '[n]' citations become the given controls; a citation and the
+ * punctuation right after it never break apart. `seen` counts each number's occurrences
+ * (shared across calls for one answer), so focus can return to the same occurrence.
+ */
+export function appendCited(
+  parent: HTMLElement,
+  text: string,
+  seen: Map<number, number>,
+  control: (n: number, nth: number) => HTMLElement,
+): void {
+  let group: HTMLElement | undefined;
+  for (const part of answerParts(text)) {
+    if (typeof part === 'string') {
+      const punctuation = group ? (/^[.,;:)]+/.exec(part)?.[0] ?? '') : '';
+      if (group && punctuation) group.append(punctuation);
+      if (part.length > punctuation.length) parent.append(part.slice(punctuation.length));
+      group = undefined;
+      continue;
+    }
+    const nth = (seen.get(part) ?? 0) + 1;
+    seen.set(part, nth);
+    group = el('span', 'citation-group', control(part, nth));
+    parent.append(group);
   }
+}
+
+/** A citation button: pressed while open; it controls the element that shows its evidence. */
+export function citationButton(
+  n: number,
+  nth: number,
+  source: Source | undefined,
+  open: boolean,
+  controls: string,
+  toggle: () => void,
+): HTMLButtonElement {
+  const b = focusKey(el('button', 'citation', `[${n}]`), `citation:${n}:${nth}`);
+  b.type = 'button';
+  b.setAttribute('aria-pressed', String(open));
+  b.setAttribute('aria-label', `Citation ${n}: ${source?.line.replace(/^\[\d+\] /, '') ?? ''}`);
+  b.setAttribute('aria-controls', controls);
+  b.addEventListener('click', toggle);
+  return b;
+}
+
+/** What a citation opens: the chunk beside its source document, with the chunk marked. */
+export function renderEvidence(view: EvidenceView): HTMLElement {
+  const { source, chunk } = view;
+  const end = chunk ? chunk.startWord + chunk.words.length : 0;
+  const docText = el('p', 'evidence-text');
+  if (chunk) {
+    const before = view.documentWords.slice(0, chunk.startWord).join(' ');
+    const inside = view.documentWords.slice(chunk.startWord, end).join(' ');
+    const after = view.documentWords.slice(end).join(' ');
+    docText.append(
+      before ? `${before} ` : '',
+      el('span', 'chunk-mark', inside),
+      after ? ` ${after}` : '',
+    );
+  } else docText.append(view.documentWords.join(' '));
+  const documentColumn = el(
+    'div',
+    'retrieval-column',
+    el('h5', 'small muted', `Source document ${source.documentId} v${source.version}`),
+    docText,
+  );
+  const title = chunk
+    ? `[${source.citation}] chunk ${source.chunkId ?? ''}`
+    : `[${source.citation}] ${source.documentId} v${source.version}, full document`;
+  const columns: HTMLElement[] = [documentColumn];
+  if (chunk)
+    columns.unshift(
+      el(
+        'div',
+        'retrieval-column',
+        el(
+          'h5',
+          'small muted',
+          `Chunk, words ${chunk.startWord}–${Math.max(end - 1, chunk.startWord)}`,
+        ),
+        el('p', 'evidence-text evidence-chunk', chunk.words.join(' ')),
+      ),
+    );
+  return el(
+    'div',
+    undefined,
+    el('h5', 'evidence-title', title),
+    el('div', 'retrieval-columns', ...columns),
+  );
 }
 
 /** The version panel: source and indexed versions side by side. */

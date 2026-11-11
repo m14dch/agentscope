@@ -137,7 +137,9 @@ def expand_variant(base, var):
     return finalize(scn, var["id"], True)
 
 
-def compose(comp, registry):
+def compose(comp, registry, prefix=True):
+    """The composed scenario; with prefix False its event IDs stay local, as the base of its
+    variants (03 composition_format.variants)."""
     events = []
     for step in comp["compose"]:
         if "copy" in step:
@@ -155,7 +157,7 @@ def compose(comp, registry):
     scn = {k: copy.deepcopy(comp[k]) for k in ("title", "question", "learning_question", "headline", "participants",
                                                 "phases", "initial_state", "derived_events") if k in comp}
     scn["events"] = events
-    return finalize(scn, comp["id"], True)
+    return finalize(scn, comp["id"], prefix)
 
 
 # ---------------------------------------------------------------- checks
@@ -437,8 +439,15 @@ def rag_engine(rag):
 
     def answer(sel, intro=None):
         """Returns (answer text, cited chunks in citation order, supported fact ids)."""
+        parts, cites, supported = answer_parts(sel, intro)
+        return " ".join(p["text"] for p in parts), cites, supported
+
+    def answer_parts(sel, intro=None):
+        """answer_rules' parts in order, each {kind, text} (intro parts also carry their source);
+        the answer is their texts joined by single spaces. Returns (parts, cites, supported)."""
         if not sel:
-            return "I could not find sufficiently relevant information in the indexed documents to answer this question.", [], set()
+            return [{"kind": "no-evidence", "text": "I could not find sufficiently relevant information in the "
+                     "indexed documents to answer this question."}], [], set()
         marked = {}
 
         def cite(c):  # placeholder; numbered by first appearance in the final text
@@ -446,7 +455,8 @@ def rag_engine(rag):
             return f"\x00{c['id']}\x00"
 
         official = [c for c in sel if c["documentId"] in docs12]
-        parts, supported, missing = ([intro] if intro else []), set(), []
+        parts = [{"kind": "intro", "source": p["source"], "text": p["text"]} for p in intro or []]
+        supported, missing = set(), []
         for group in groups:
             runs, conflicts = [], []
             for f in [f for f in facts if f["group"] == group["id"]]:
@@ -479,12 +489,13 @@ def rag_engine(rag):
                     items.append(f"{pred} [{cite(c)}]" if last else pred)
                 phrases.append(f"{subject} {join(items)}")
             if phrases:
-                parts.append(f"{group['label']}: {'; '.join(phrases)}.")
-            parts += conflicts
+                parts.append({"kind": "group", "text": f"{group['label']}: {'; '.join(phrases)}."})
+            parts += [{"kind": "conflict", "text": t} for t in conflicts]
         if missing:
-            parts.append(f"The retrieved evidence does not cover {join(missing)}.")
+            parts.append({"kind": "gap", "text": f"The retrieved evidence does not cover {join(missing)}."})
         if any(i in c["text"] for c in sel for i in injected):
-            parts.append("Note: a retrieved document contained instructions addressed to the assistant; they were treated as data and ignored.")
+            parts.append({"kind": "note", "text": "Note: a retrieved document contained instructions addressed to the "
+                          "assistant; they were treated as data and ignored."})
         cites = []
 
         def number(m):
@@ -492,7 +503,10 @@ def rag_engine(rag):
             if c not in cites:
                 cites.append(c)
             return str(cites.index(c) + 1)
-        return re.sub("\x00([^\x00]+)\x00", number, " ".join(parts)), cites, supported
+        # Numbered part by part in order, which numbers them as the joined text would.
+        for p in parts:
+            p["text"] = re.sub("\x00([^\x00]+)\x00", number, p["text"])
+        return parts, cites, supported
 
     def parents(sel, docs):
         """The parent documents of the retained chunks (derived_event_rules.evidence)."""
@@ -514,7 +528,7 @@ def rag_engine(rag):
         return [{"citation": i + 1, **({} if c.get("document") else {"chunkId": c["id"]}),
                  "documentId": c["documentId"], "version": c["version"]} for i, c in enumerate(cites)]
 
-    return {"corpus": corpus, "retrieve": retrieve, "answer": answer, "chunks": chunks, "parents": parents,
+    return {"corpus": corpus, "retrieve": retrieve, "answer": answer, "answer_parts": answer_parts, "chunks": chunks, "parents": parents,
             "norm": norm, "toks": toks, "source_lines": source_lines, "source_objects": source_objects,
             "default_k": default_k, "default_thr": default_thr, "params": params}
 
@@ -800,16 +814,20 @@ def check_rag(rag, comp, registry, ui):
     # Combined: answer, sources and every derived payload.
     composition = comp["answer_composition"]
     intro = composition["intro"]
+    if not intro or any(p.get("source") not in ("tool", "session") or not str(p.get("text", "")).strip()
+                        for p in intro):
+        err("combined.answer_composition", "intro must list sentences, each with source tool or session")
     cases = [("combined", comp, comp)] + [(v["id"], v, comp) for v in comp.get("variants", [])]
     for label, case, base in cases:
         if not str(case.get("lesson" if case is not base else "headline", "")).strip():
             err(label, "missing lesson" if case is not base else "missing headline")
         _, ranked, sel = R["retrieve"](R["corpus"](**corpus_kwargs(case if case is not base else None)))
-        a, cites, sup = R["answer"](sel, intro=intro)
+        parts, cites, sup = R["answer_parts"](sel, intro=intro)
         applies = next((c for c in composition["comparisons"]
                         if set(c.get("requires", [])) <= sup and not set(c.get("lacks", [])) & sup), None)
         if applies:
-            a += " " + applies["sentence"]
+            parts.append({"kind": "comparison", "text": applies["sentence"]})
+        a = " ".join(p["text"] for p in parts)
         if a != case["expected_answer"] or R["source_lines"](cites) != case["expected_sources"]:
             err(label, "combined answer or sources differ from recomputation")
         if case is not base and case.get("expected_selected") != [c["id"] for c in sel]:
@@ -860,11 +878,13 @@ def dump_rag(rag, comp):
                                 out.append({"case": name, "size": size, "overlap": ov, "ranking": ranking})
                             for fetch in (False, True):
                                 evidence = R["parents"](sel, docs) if fetch else sel
-                                a, cites, _ = R["answer"](evidence)
+                                parts, cites, _ = R["answer_parts"](evidence)
+                                a = " ".join(p["text"] for p in parts)
                                 out.append({"case": name, "size": size, "overlap": ov, "top_k": top_k,
                                             "threshold": thr, "rerank": rerank, "fetch": fetch,
                                             "selected": [c["id"] for c in sel],
                                             "evidence": [c["id"] for c in evidence], "answer": a,
+                                            "parts": [[p["kind"], p["text"]] for p in parts],
                                             "sources": R["source_lines"](cites)})
     return out
 
@@ -903,7 +923,14 @@ def main():
     for var in mcp["variants"] + rag["variants"]:
         registry[var["id"]] = expand_variant(registry[var["extends"]], var)
     comb = cmp_["combined"]
-    registry[comb["id"]] = compose(comb, registry)
+    # Composed once with local IDs, so copy-step problems surface once; its variants expand from it.
+    local = compose(comb, registry, False)
+    registry[comb["id"]] = finalize(copy.deepcopy(local), comb["id"], True)
+    for var in comb.get("variants", []):
+        if var.get("extends") != comb["id"]:
+            err(var["id"], f"extends {var.get('extends')}, not the composed scenario {comb['id']}")
+            continue
+        registry[var["id"]] = expand_variant(local, var)
     if len(registry[comb["id"]]["events"]) != comb["expanded_event_count"]:
         err(comb["id"], "expanded_event_count differs")
     for scn in registry.values():

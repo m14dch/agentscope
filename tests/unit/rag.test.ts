@@ -294,10 +294,16 @@ describe('Combined answers (06-comparison-scenarios.yaml)', () => {
     );
   });
 
-  it.each(combined.variants)('reproduces $id', (variant) => {
-    const events = rag.derive(scenario(combined.id), {}, variant.fixture_overrides);
-    const byId = (id: string) =>
-      events.find((e) => e.id === `${combined.id}:${id}`) as ScenarioEvent;
+  it.each(combined.variants)('reproduces $id in its played events', (variant) => {
+    // The variant is a registry scenario of its own (03 composition_format.variants).
+    const p = createPlayback(scenario(variant.id));
+    expect(p.events).toHaveLength(35);
+    const byId = (id: string) => played(p, id);
+    // The same as deriving the composed scenario with the variant's fixture overrides.
+    const direct = rag.derive(scenario(combined.id), {}, variant.fixture_overrides);
+    expect(p.events.map((e) => ({ ...e, id: '', scenario_id: '', pair_id: '' }))).toEqual(
+      direct.map((e) => ({ ...e, id: '', scenario_id: '', pair_id: '' })),
+    );
     expect(field(byId('retrieve-06').payload, 'retained')).toEqual(variant.expected_selected);
     expect(field(byId('c-03').payload, 'document_blocks')).toEqual(variant.expected_selected);
     expect(field(byId('c-08').payload, 'answer')).toBe(variant.expected_answer);

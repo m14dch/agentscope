@@ -62,11 +62,15 @@ export function setPath(obj: Node, path: string, value: Json): boolean {
   return false;
 }
 
-/** Sets scenario_id and sequence, and prefixes event and pair IDs with the scenario ID. */
-function finalize(scn: Scenario, id: string): Scenario {
+/**
+ * Sets scenario_id and sequence, and (unless `prefix` is false) prefixes event and pair IDs
+ * with the scenario ID.
+ */
+function finalize(scn: Scenario, id: string, prefix = true): Scenario {
   scn.events.forEach((e, i) => {
     e.scenario_id = id;
     e.sequence = i + 1;
+    if (!prefix) return;
     // A missing or non-string ID stays as it is, so validation reports it.
     if (typeof e.id === 'string') e.id = `${id}:${e.id}`;
     if (typeof e.pair_id === 'string') e.pair_id = `${id}:${e.pair_id}`;
@@ -151,7 +155,16 @@ const COMPOSED_FIELDS = [
   'derived_events',
 ] as const;
 
-export function compose(comp: Composition, registry: Registry, problems: string[]): Scenario {
+/**
+ * The composed scenario. With `prefix` false its event IDs stay local, as the base of its
+ * variants (03 composition_format.variants).
+ */
+export function compose(
+  comp: Composition,
+  registry: Registry,
+  problems: string[],
+  prefix = true,
+): Scenario {
   const events: ScenarioEvent[] = [];
   for (const step of comp.compose) {
     if ('copy' in step) {
@@ -187,10 +200,13 @@ export function compose(comp: Composition, registry: Registry, problems: string[
     if (Object.hasOwn(comp, k)) scn[k] = structuredClone(comp[k]);
   }
   scn['events'] = events;
-  return finalize(scn as unknown as Scenario, comp.id);
+  return finalize(scn as unknown as Scenario, comp.id, prefix);
 }
 
-/** Builds the registry: base scenarios, expanded variants, then the Combined composition. */
+/**
+ * Builds the registry: base scenarios, expanded variants, then the Combined composition and
+ * its variants.
+ */
 export function buildRegistry(sources: SpecSources): { registry: Registry; problems: string[] } {
   const problems: string[] = [];
   const registry: Registry = {};
@@ -214,6 +230,18 @@ export function buildRegistry(sources: SpecSources): { registry: Registry; probl
     registry[variant.id] = expandVariant(base, variant, problems);
   }
   const comb = sources.comparison.combined;
-  registry[comb.id] = compose(comb, registry, problems);
+  // Composed once with local IDs, so copy-step problems are reported once; its variants
+  // expand from it.
+  const local = compose(comb, registry, problems, false);
+  registry[comb.id] = finalize(structuredClone(local), comb.id);
+  for (const variant of comb.variants ?? []) {
+    if (variant['extends'] !== comb.id) {
+      problems.push(
+        `${variant.id}: extends ${String(variant['extends'])}, not the composed scenario ${comb.id}`,
+      );
+      continue;
+    }
+    registry[variant.id] = expandVariant(local, variant as unknown as Variant, problems);
+  }
   return { registry, problems };
 }

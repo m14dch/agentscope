@@ -12,8 +12,9 @@ design:
   - Diagrams sit on the light reading surface; the dark olive surface is not used (owner
     decision), so one set of colour rules applies everywhere.
   - Peach Red marks the current step (one exception, retained chunks in the retrieval
-    charts, is recorded in the last decision below); Naples Yellow marks what the learner selected or
-    tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
+    charts, is recorded in the decision "Retained chunks keep the accent in the score plot and the
+    projection (issue 15)" below);
+    Naples Yellow marks what the learner selected or tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
     label naming the kind.
   - The RAG question changes to the handover's question and the communication layer
     (learning questions, takeaways, prediction prompts) was added to the scenario data
@@ -141,7 +142,7 @@ navigation:
     MCP: 04-mcp-scenarios.yaml scenarios, then its variants
     RAG: 05-rag-scenarios.yaml rag-query, rag-index, then its variants
     Compare: 06-comparison-scenarios.yaml compare
-    Combined: 06-comparison-scenarios.yaml combined
+    Combined: 06-comparison-scenarios.yaml combined, then its variants
   routes: '#/<tab>/<scenario>/<step>, with /protocol appended in protocol mode (for example
     #/mcp/mcp-balance/14/protocol). Missing parts take defaults: the tab''s first scenario,
     step 0, architecture mode. A step beyond the scenario is clamped. An unknown tab or
@@ -161,8 +162,9 @@ layout:
   - 'Main: resizable sequence diagram + payload inspector'
   - 'Bottom: execution timeline + a collapsible model-context panel, collapsed at start,
     in rag-index the ingestion panel (rag_ingestion), in rag-query and its variants the
-    retrieval panel (rag_retrieval) and, in rag-stale and rag-conflict, the version panel
-    (rag_controls.version_panel). Lineage lives in the inspector''s
+    retrieval panel (rag_retrieval), in rag-stale and rag-conflict, the version panel
+    (rag_controls.version_panel) and, in the Combined scenario and its variants, the answer''s
+    provenance (combined_answer). Lineage lives in the inspector''s
     Lineage tab and in the diagram (lineage_selection), not in a panel of its own'
   - 'Header: one persistent statement that everything is simulated and nothing leaves
     the browser'
@@ -388,6 +390,21 @@ context_panel:
     background; nothing else is marked.
   shown_when: The panel exists only for scenarios whose initial state has agent_state
     or model_visible_messages.
+  provenance: 'Tool data and document evidence are told apart by a label at the start of
+    their item, in weight 600, and by their place, never by colour alone; the label and the
+    separator after it never break apart. In agent state an entry stored from a tool result or
+    a tool message says "Tool data", and a non-empty list of retained chunks says "Document
+    evidence". In the model-visible context a tool message says "Tool data · <tool> result",
+    naming the tool of its tool call. The outcome of the MCP tools/call that produced it
+    qualifies both: a result with isError true is "Tool data · error result" in agent state
+    and "Tool data · <tool> error result" in the context, still data from the tool; a call that
+    failed at the protocol level (a JSON-RPC error response, such as an unknown tool) returned
+    no tool data and says "Tool call failed" in agent state and "Tool call failed · <tool>" in
+    the context. A message carrying document blocks shows
+    its own text first, then each block below it in prompt order as "Document evidence ·
+    <document ID> v<version> · chunk <chunk ID>" (with "· untrusted" for an untrusted
+    document), followed by the block''s text. Other entries and messages carry no source
+    label.'
 lineage_selection:
   select: 'In the Lineage tab each tracked value can be selected (a toggle button); one
     value at a time. Escape or selecting it again clears the selection. It stays while
@@ -546,10 +563,16 @@ rag_retrieval:
   projection: 'A plain scatter plot of 05 fixtures.projection_2d (x = cost − rules, y = product
     − technical, both from −1 to 1, equal scales): the axes are named by meaning at their
     ends (rules ← → cost, technical ↓ ↑ product), every chunk point and the question''s point
-    (retrieve-03) are labelled directly, and retained points are filled in the accent. A label
-    sits right or left of its point; where it would overlap another label, a point, the
-    question''s mark, an axis, an axis name or a leader line, it moves up or down by a line,
-    nearest first, beside a leader line kept as short as that allows. A leader line crosses
+    (retrieve-03) are labelled directly, and retained points are filled in the accent. Chunks
+    with identical vectors and the same outcome (both retained, or both dropped for the same
+    reason; the versions of one chunk in rag-conflict)
+    share one label at their common point, naming each version once (for example
+    "savings-account@1.0/1.2 · 001"); each chunk is still its own point for assistive
+    technology. A label sits right or left of its point; where it would overlap another label,
+    a point, the question''s mark, an axis, an axis name or a leader line, it moves up or down
+    by a line, nearest first, beside a leader line kept as short as that allows: of the
+    candidate layouts in which every label fits (several horizontal positions of the plot and
+    orders of placement), the one whose leaders are shortest is drawn. A leader line crosses
     no label, point, axis name or other leader line. The plot keeps a side of at least 260
     px and only the room its outermost labels need on each side. A lineage-selected
     chunk''s label has the selection background and an ink underline. Each point is exposed to
@@ -581,6 +604,38 @@ rag_retrieval:
     if that control is gone, moves to the panel's heading. When the panel disappears
     (stepping back before retrieve-05) while it holds focus, focus moves to the step slider,
     as in rag_ingestion.
+combined_answer:
+  shown_in: 'The Combined scenario and its variants, below the timeline, from the step that
+    displays the answer (c-08); absent before. The answer and its sources are read from the
+    played c-08, the balance from the played tools/call result (mcp-23) and chunk text from the
+    index the scenario searches, so the screen always equals the events.'
+  title: Where each part of the answer comes from
+  statements: 'The answer, labelled simulated (learning.simulated_behaviour), as its statements
+    in answer order, each with its source as a label in a column of its own to the left (above
+    the statement below 64rem), so label and position carry the provenance and colour does not.
+    The statements are the parts the engine composes the answer from (06
+    answer_composition.rule, 05 answer_rules), recomputed for the scenario as its derived events
+    are, never found by parsing the text: "Tool data · MCP" for an intro sentence whose source
+    is tool, "Session context" for one whose source is session, "Document evidence · RAG" for
+    each group sentence and each conflict sentence, "Not in the evidence" for the sentence
+    naming the unsupported aspects or the no-evidence answer, "Note" for the injection note, and
+    "Comparison" for the comparison sentence, if one applies. Joined by single spaces, the
+    statements are exactly the answer of c-08; where they are not, the answer is shown as one
+    unlabelled statement.'
+  links: 'The balance in the tool statement is a button that opens the tool result below the
+    statements: the tool and its arguments (the tools/call request), the result''s
+    structuredContent, the step of the tools/call result as a jump link, and the step of the
+    first model request that contains the result. Each [n] is a citation button that opens its
+    chunk next to its source document, as rag_retrieval.answer does, and never breaks from the
+    punctuation after it. One of them is open at a time; activating it again closes it; the open
+    one is pressed and keeps focus while the panel rebuilds.'
+  sources: 'Below the statements the sources, in the order of the statements: "Tool data" with
+    "<tool> result, returned at step <n>" (a jump link), then "Documents" with the source lines
+    exactly as 05 answer_rules writes them.'
+  gap: In a variant whose evidence lacks terms (combined-missing-terms), the "Not in the
+    evidence" statement names them and the comparison statement says that no comparison is
+    made; the gap is stated in words like every other statement.
+  focus: As rag_retrieval.focus, with this panel's heading and the step slider.
 accessibility:
 - Keyboard operable controls
 - Visible focus

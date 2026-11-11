@@ -4,10 +4,35 @@
  */
 import type { Snapshot } from '../engine/playback.ts';
 import type { Json, ScenarioEvent } from '../scenarios/types.ts';
+import { promptParts } from './retrieval.ts';
+
+/**
+ * Where an item came from (02 context_panel.provenance): data a tool returned, an isError
+ * result of a tool, a tool call that failed at the protocol level (no tool data), or
+ * retrieved documents.
+ */
+export type Source = 'tool' | 'tool-error' | 'tool-failed' | 'documents';
+
+/** The label naming each source in agent state. */
+export const SOURCE_LABELS: Readonly<Record<Source, string>> = {
+  tool: 'Tool data',
+  'tool-error': 'Tool data · error result',
+  'tool-failed': 'Tool call failed',
+  documents: 'Document evidence',
+};
+
+/** The label of a tool message in the model-visible context, naming its tool. */
+export function toolMessageLabel(source: Source, tool: string): string {
+  if (source === 'tool-failed') return `Tool call failed · ${tool}`;
+  if (source === 'tool-error') return `Tool data · ${tool} error result`;
+  return `Tool data · ${tool} result`;
+}
 
 export interface MemoryEntry {
   step: number;
   description: string;
+  /** Tool data or document evidence; absent for anything else. */
+  source?: Source;
   value?: Json;
   /** Not yet sent to the model by a later LLM request. */
   unseen: boolean;
@@ -15,10 +40,25 @@ export interface MemoryEntry {
   added: boolean;
 }
 
+/** A document block of a model-visible message. */
+export interface DocumentBlock {
+  documentId: string;
+  version: string;
+  chunkId?: string;
+  untrusted: boolean;
+  text: string;
+}
+
 export interface VisibleMessage {
   role: string;
-  /** The message text, or a summary of its tool calls. */
+  /** The message text without its document blocks, or a summary of its tool calls. */
   text: string;
+  /** For a tool message, the tool its call named. */
+  tool?: string;
+  /** For a tool message, the outcome of its call. */
+  source?: Source;
+  /** The message's document blocks, in prompt order. */
+  documents: DocumentBlock[];
   /** New since the previous step. */
   added: boolean;
 }
@@ -52,6 +92,84 @@ function messageText(message: Obj): string {
       .join('; ');
   }
   return JSON.stringify(content ?? null);
+}
+
+/** Whether a stored value is a tool result or a tool message. */
+function isToolData(value: Json | undefined): boolean {
+  const v = obj(value);
+  return (
+    v['role'] === 'tool' ||
+    Object.hasOwn(v, 'structuredContent') ||
+    typeof v['isError'] === 'boolean'
+  );
+}
+
+/**
+ * The outcome of the last MCP tools/call (of the named tool, if given) answered before
+ * `before`: a JSON-RPC error fails the call; a result with isError true is an error result.
+ * Undefined when no such call was answered.
+ */
+function callOutcome(
+  events: readonly ScenarioEvent[],
+  before: number,
+  tool?: string,
+): Source | undefined {
+  for (let i = Math.min(before, events.length) - 1; i >= 0; i -= 1) {
+    const request = events[i] as ScenarioEvent;
+    const payload = obj(request.payload as Json | undefined);
+    if (request.protocol !== 'MCP' || payload['method'] !== 'tools/call') continue;
+    if (tool !== undefined && obj(payload['params'])['name'] !== tool) continue;
+    const at = events.findIndex((e) => e.id === request.pair_id);
+    if (at < 0 || at >= before) continue;
+    const response = obj(events[at]?.payload as Json | undefined);
+    if (Object.hasOwn(response, 'error')) return 'tool-failed';
+    return obj(response['result'])['isError'] === true ? 'tool-error' : 'tool';
+  }
+  return undefined;
+}
+
+/** The outcome a tool value states itself, where no MCP call answers it. */
+function ownOutcome(value: Json | undefined): Source {
+  const v = obj(value);
+  return v['isError'] === true || v['is_error'] === true ? 'tool-error' : 'tool';
+}
+
+/**
+ * A memory entry's source: tool data (qualified by its call's outcome), or a non-empty list
+ * of retained chunks from a retrieval step.
+ */
+function memorySource(
+  events: readonly ScenarioEvent[],
+  index: number,
+  value: Json | undefined,
+): Source | undefined {
+  if (isToolData(value)) return callOutcome(events, index + 1) ?? ownOutcome(value);
+  const stored = events[index];
+  if (stored?.protocol === 'RAG_INTERNAL' && Array.isArray(value) && value.length)
+    return 'documents';
+  return undefined;
+}
+
+/** Splits a message's text from its document blocks. */
+function withDocuments(text: string): { text: string; documents: DocumentBlock[] } {
+  const parts = promptParts(text, []);
+  const documents: DocumentBlock[] = [];
+  let own = '';
+  for (const part of parts) {
+    if (!('block' in part)) {
+      own += part.text;
+      continue;
+    }
+    const b = part.block;
+    documents.push({
+      documentId: b['id'] ?? '',
+      version: b['version'] ?? '',
+      ...(b['chunk'] !== undefined ? { chunkId: b['chunk'] } : {}),
+      untrusted: b['trust'] === 'untrusted',
+      text: part.text,
+    });
+  }
+  return documents.length ? { text: own.trimEnd(), documents } : { text, documents };
 }
 
 /** String leaves of a value. */
@@ -103,9 +221,11 @@ export function contextModel(
   const entries = memory.map((raw, i): MemoryEntry => {
     const entry = obj(raw);
     const index = events.findIndex((e) => e.id === entry['event']);
+    const source = memorySource(events, index, entry['value']);
     const entryOut: MemoryEntry = {
       step: index + 1,
       description: String(entry['description'] ?? ''),
+      ...(source ? { source } : {}),
       unseen: unseen(events[index], strings(entry['value']), index, requests),
       added: i >= earlier,
     };
@@ -120,16 +240,37 @@ export function contextModel(
   const listBefore = Array.isArray(obj(visibleBefore)['messages'])
     ? (obj(visibleBefore)['messages'] as Json[])
     : [];
+  // Tool names by tool call ID, from the assistant messages' tool calls.
+  const tools = new Map<string, string>();
+  for (const m of list ?? []) {
+    const calls = obj(m)['tool_calls'];
+    for (const c of Array.isArray(calls) ? calls : [])
+      tools.set(String(obj(c)['id']), String(obj(c)['name']));
+  }
+  // The request the model saw: the latest LLM request played.
+  const sentAt = requests.at(-1)?.index ?? snapshot.cursor;
   const messages = list?.map((m, i): VisibleMessage => {
     const message = obj(m);
+    const role = String(message['role'] ?? '');
+    const tool = role === 'tool' ? tools.get(String(message['tool_call_id'])) : undefined;
     return {
-      role: String(message['role'] ?? ''),
-      text: messageText(message),
+      role,
+      ...withDocuments(messageText(message)),
+      ...(role === 'tool'
+        ? {
+            tool: tool ?? 'unknown tool',
+            source: callOutcome(events, sentAt, tool) ?? ownOutcome(m),
+          }
+        : {}),
       added: i >= listBefore.length || JSON.stringify(m) !== JSON.stringify(listBefore[i]),
     };
   });
-  const tools = obj(visible)['tools'];
-  return { memory: entries, messages, tools: Array.isArray(tools) ? tools.length : 0 };
+  const definitions = obj(visible)['tools'];
+  return {
+    memory: entries,
+    messages,
+    tools: Array.isArray(definitions) ? definitions.length : 0,
+  };
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -141,6 +282,16 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (cls) node.className = cls;
   node.append(...children);
   return node;
+}
+
+/** A source label: weight 600 in ink, so it does not depend on colour. */
+function sourceLabel(text: string): HTMLElement {
+  return el('strong', 'source-label', text);
+}
+
+/** A source label and the separator after it, which never break apart. */
+function sourceTag(text: string): (Node | string)[] {
+  return [sourceLabel(text), '\u00a0· '];
 }
 
 /** Renders the panel's two columns. */
@@ -156,6 +307,7 @@ export function renderContext(model: ContextModel): HTMLElement {
       'li',
       entry.added ? 'context-added' : undefined,
       el('span', 'small muted', `Step ${entry.step} · `),
+      ...(entry.source ? sourceTag(SOURCE_LABELS[entry.source]) : []),
       entry.description,
     );
     if (entry.unseen) item.append(el('span', 'unseen', ' · not yet seen by the model'));
@@ -179,14 +331,34 @@ export function renderContext(model: ContextModel): HTMLElement {
   } else {
     const messages = el('ol', 'context-list');
     for (const m of model.messages) {
-      messages.append(
-        el(
-          'li',
-          m.added ? 'context-added' : undefined,
-          el('span', 'small muted', `${m.role} · `),
-          m.text,
-        ),
+      const item = el(
+        'li',
+        m.added ? 'context-added' : undefined,
+        el('span', 'small muted', `${m.role} · `),
+        ...(m.tool !== undefined ? sourceTag(toolMessageLabel(m.source ?? 'tool', m.tool)) : []),
+        m.text,
       );
+      // Document blocks below the message's own text, in prompt order.
+      if (m.documents.length) {
+        const blocks = el('ol', 'context-documents');
+        for (const d of m.documents) {
+          const where = [
+            `${d.documentId} v${d.version}`,
+            ...(d.chunkId !== undefined ? [`chunk ${d.chunkId}`] : []),
+            ...(d.untrusted ? ['untrusted'] : []),
+          ].join(' · ');
+          blocks.append(
+            el(
+              'li',
+              undefined,
+              el('p', 'small', ...sourceTag(SOURCE_LABELS.documents), where),
+              el('p', 'context-document-text', d.text),
+            ),
+          );
+        }
+        item.append(blocks);
+      }
+      messages.append(item);
     }
     visible.append(messages);
     if (model.tools) {
