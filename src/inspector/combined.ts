@@ -289,12 +289,15 @@ export class CombinedPanel {
           ),
         );
       }
-      const item = el(
-        'li',
-        'statement',
-        el('span', 'statement-source small', st.source ? STATEMENT_LABELS[st.source] : ''),
-        text,
-      );
+      // An unlabelled statement (the fallback) has no empty label beside it.
+      const item = st.source
+        ? el(
+            'li',
+            'statement',
+            el('span', 'statement-source small', STATEMENT_LABELS[st.source]),
+            text,
+          )
+        : el('li', 'statement', text);
       if (st.source) item.dataset['source'] = st.source;
       return item;
     });

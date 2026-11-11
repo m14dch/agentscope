@@ -51,7 +51,8 @@ const INPUT_WINDOW = 1000;
 
 /**
  * Tells the learner's own scrolling of the page (02 layout.phone.stepping_area): a scroll of
- * the page counts as theirs only when it follows their input, a wheel, a touch, a scrolling
+ * the page counts as theirs only when it follows their input, a wheel, a touch that moves
+ * (a tap that only steps does not count), a scrolling
  * key nothing else handled, or a press on the scrollbar. Scrolls the browser makes by itself
  * (scroll anchoring, clamping when content shrinks) and the app's own jumps never count.
  */
@@ -69,7 +70,8 @@ export class PageScroll {
     const arm = (): void => {
       this.armedUntil = performance.now() + INPUT_WINDOW;
     };
-    for (const type of ['wheel', 'touchstart', 'touchmove'] as const)
+    // A touch counts once it moves: a tap on Next must not make the next scroll the learner's.
+    for (const type of ['wheel', 'touchmove'] as const)
       window.addEventListener(type, arm, { passive: true, signal });
     window.addEventListener(
       'keydown',
@@ -99,6 +101,14 @@ export class PageScroll {
       },
       { signal },
     );
+    // The browser took the pointer over (for example to scroll): the press has ended.
+    window.addEventListener(
+      'pointercancel',
+      () => {
+        this.pressing = false;
+      },
+      { signal },
+    );
     window.addEventListener(
       'scroll',
       () => {
@@ -117,6 +127,7 @@ export class PageScroll {
   reset(): void {
     this.user = false;
     this.armedUntil = 0;
+    this.pressing = false;
   }
 
   /** Scrolls the page by `delta` at once, as the app's own jump, which never counts. */

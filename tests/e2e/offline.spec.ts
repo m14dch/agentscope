@@ -262,7 +262,8 @@ test.describe('without a service worker', () => {
     // As in a tab still running a build whose files are gone.
     await context.route('**/assets/specimen-*.js', (route) => route.abort('failed'));
     await page.goto('./#/design');
-    await expect(page.locator('.error')).toHaveText(
+    // An alert, so assistive technology announces it.
+    await expect(page.getByRole('alert')).toHaveText(
       '× The design specimen could not be loaded. Reload the page to get the current version.',
     );
     await page.getByRole('link', { name: 'Back to the app' }).click();

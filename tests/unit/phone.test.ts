@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { stepDelta } from '../../src/app/phone.ts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PageScroll, stepDelta } from '../../src/app/phone.ts';
 
 // 02-ui-ux.yaml layout.phone.stepping_area: how far the page jumps to show a span above the bar.
 describe('stepDelta', () => {
@@ -20,5 +20,54 @@ describe('stepDelta', () => {
 
   it('puts a span too tall for the screen at the top', () => {
     expect(stepDelta({ top: 600, bottom: 1400 }, bar)).toBe(592);
+  });
+});
+
+// 02 layout.phone.stepping_area: which scrolls of the page count as the learner's.
+describe('PageScroll', () => {
+  const root = {};
+  const fakeWindow = Object.assign(new EventTarget(), { scrollY: 0, scrollTo: () => {} });
+  const fire = (type: string, target: object = {}) => {
+    const event = new Event(type);
+    Object.defineProperty(event, 'target', { value: target });
+    fakeWindow.dispatchEvent(event);
+  };
+  let scroll: PageScroll;
+
+  beforeEach(() => {
+    vi.stubGlobal('window', fakeWindow);
+    vi.stubGlobal('document', { documentElement: root });
+    scroll = new PageScroll();
+  });
+  afterEach(() => {
+    scroll.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it('counts a scroll after a touch that moves, not after a tap', () => {
+    fire('touchstart');
+    fire('scroll');
+    expect(scroll.userScrolled).toBe(false);
+    fire('touchmove');
+    fire('scroll');
+    expect(scroll.userScrolled).toBe(true);
+  });
+
+  it('counts scrolls while the scrollbar is pressed, until the press is cancelled', () => {
+    fire('pointerdown', root);
+    fire('scroll');
+    expect(scroll.userScrolled).toBe(true);
+    scroll.reset();
+    fire('pointerdown', root);
+    fire('pointercancel');
+    fire('scroll');
+    expect(scroll.userScrolled).toBe(false);
+  });
+
+  it('forgets a press on the scrollbar on an explicit step action', () => {
+    fire('pointerdown', root);
+    scroll.reset();
+    fire('scroll');
+    expect(scroll.userScrolled).toBe(false);
   });
 });
