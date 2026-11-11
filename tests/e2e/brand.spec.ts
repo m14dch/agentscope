@@ -18,7 +18,8 @@ const wordmark = (page: Page) =>
 test('the header shows the light wordmark as the level-1 heading, linked to the start', async ({
   page,
 }) => {
-  await page.goto('./#/mcp/mcp-balance/3');
+  // RAG has the scenario picker, the widest header (02 navigation.scenario_picker).
+  await page.goto('./#/rag/rag-query/3');
   const heading = page.getByRole('heading', { level: 1 });
   await expect(heading).toHaveAccessibleName('AgentScope');
   await expect(heading.getByRole('link', { name: 'AgentScope' })).toHaveAttribute('href', '#/');
