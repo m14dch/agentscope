@@ -169,6 +169,11 @@ export interface LayoutInput {
   /** 0 to events.length (03 state_model.cursor). */
   cursor: number;
   expanded: ReadonlySet<string>;
+  /**
+   * Shows the events up to the cursor as past, with no current step or group: a Compare pane
+   * waiting through a phase it has no events in (02 compare_view.timeline).
+   */
+  held?: boolean;
 }
 
 /** Lifeline x positions: each gap is as wide as the labels of arrows that span only it. */
@@ -209,7 +214,7 @@ export function layout(input: LayoutInput): DiagramLayout {
   const x = new Map(lines.map((l) => [l.id, l.x]));
   const headerLines = Math.max(1, ...lines.map((l) => l.lines.length));
   const top = SIZES.margin + headerLines * SIZES.headerLine + SIZES.headerGap;
-  const pair = pairOf(scenario, cursor);
+  const pair = input.held ? -1 : pairOf(scenario, cursor);
   let right = Math.max(...lines.map((l) => l.x)) + SIZES.minSpacing / 2;
 
   const arrow = (e: ScenarioEvent, index: number, y: number): Arrow => {
@@ -225,7 +230,8 @@ export function layout(input: LayoutInput): DiagramLayout {
         : xs + SIZES.labelGap;
     // The layout reserves the bold width, so nothing moves when a label becomes current.
     right = Math.max(right, labelX + measure(label, true) + SIZES.margin);
-    const vis = visibility(index, cursor);
+    const shown = visibility(index, cursor);
+    const vis = input.held && shown === 'current' ? 'past' : shown;
     const emphasized = vis === 'current' || (index === pair && index < cursor);
     const labelWidth = measure(label, emphasized);
     return {
@@ -256,7 +262,7 @@ export function layout(input: LayoutInput): DiagramLayout {
       if (i < cursor) arrows.push(arrow(e, i, y));
     });
   } else {
-    const current = cursor >= 1 ? cursor - 1 : -1;
+    const current = cursor >= 1 && !input.held ? cursor - 1 : -1;
     const phases = new Map(scenario.phases.map((p) => [p.id, p]));
     // One group per consecutive run of a phase's events.
     const runs: { phase: Phase; members: [ScenarioEvent, number][] }[] = [];

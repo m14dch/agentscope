@@ -43,12 +43,29 @@ compare:
       context: context-assembly
       generation: model-generation
       answer: answer
-  show:
-  - Data source
-  - Freshness expectations
-  - Model-visible context
-  - Actions vs retrieval
-  - Trust boundaries
+  placeholders:
+    rag-query:
+      preparation: Index built earlier by rag-index.
+  aspects:
+  - label: Data source
+    sentence: RAG answers from the bank's published documents, held as chunks in an index; MCP answers
+      from the customer's account, which the MCP server reads from the bank's REST API.
+  - label: Freshness expectations
+    sentence: RAG is as current as its last indexing run, so a changed document is out of date until
+      it is indexed again; MCP reads the balance at the moment the question is asked.
+  - label: Model-visible context
+    sentence: In RAG the model first sees the question together with the retrieved chunks; in MCP it
+      first sees the question and the tool definitions, and the balance only in the request after the
+      tool call.
+  - label: Actions vs retrieval
+    sentence: In MCP the model requests a tool and the agent runs it, and a tool may read or change data
+      (here the adapter maps get_customer_balance to a GET); in RAG the agent retrieves text before the
+      model is involved.
+  - label: Trust boundaries
+    sentence: RAG searches published documents under document-level access filters and gives the model
+      the retrieved text as untrusted data; MCP crosses into the bank's systems through an MCP server
+      that uses its own backend credential, never passing on the user's token, and its tool results also
+      reach the model as untrusted data.
   notes:
   - In MCP the model takes part in information acquisition by requesting a tool; in RAG the agent retrieves
     before the model is involved.

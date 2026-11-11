@@ -63,6 +63,7 @@ unit_tests:
 - Every participant ID exists in the 01-architecture.yaml registry
 - Every security_boundaries entry exists in 07-security-protocols.yaml
 - Identical JSON fixtures and parameters yield identical snapshots, rankings and citations
+- Every Compare step, and stepping either pane, keeps both panes on the same semantic phase
 e2e_tests:
 - id: mcp-walkthrough
   steps:
@@ -95,6 +96,12 @@ e2e_tests:
   - Load the production build under the Pages base path and wait for offline readiness.
   - Disable network access and reload the same URL.
   - Complete all three primary scenarios and inspect SVG, payloads and citations.
+- id: compare-sync
+  steps:
+  - Open Compare and step through every compare step with Next.
+  - Verify both panes always show the same semantic phase and the RAG placeholder during preparation.
+  - Step each pane with its own slider and verify the other pane follows to the same phase.
+  - Verify both panes stack at tablet width without page-level horizontal scroll.
 - id: combined-walkthrough
   steps:
   - Verify the exact combined question.

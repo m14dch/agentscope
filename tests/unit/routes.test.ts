@@ -11,7 +11,7 @@ describe('tab contents', () => {
     expect(tabs.rag.slice(0, 2)).toEqual(['rag-query', 'rag-index']);
     expect(tabs.rag).toContain('rag-prompt-injection');
     expect(tabs.combined).toEqual(['combined-balance-explanation', 'combined-missing-terms']);
-    expect(tabs.compare).toEqual([]);
+    expect(tabs.compare).toEqual(['compare-rag-mcp']);
   });
 });
 
@@ -31,7 +31,16 @@ describe('routes', () => {
       step: 0,
       mode: 'architecture',
     });
-    expect(ok('#/compare')).toEqual({ tab: 'compare', step: 0, mode: 'architecture' });
+    expect(ok('#/compare')).toEqual({
+      tab: 'compare',
+      scenario: 'compare-rag-mcp',
+      step: 0,
+      mode: 'architecture',
+    });
+    expect(ok('#/compare/compare-rag-mcp/12/protocol')).toMatchObject({
+      step: 12,
+      mode: 'protocol',
+    });
   });
 
   it('read scenario, step and mode', () => {
@@ -45,7 +54,11 @@ describe('routes', () => {
   });
 
   it('round-trip through formatRoute', () => {
-    for (const hash of ['#/mcp/mcp-balance/14/protocol', '#/rag/rag-hybrid/0', '#/compare']) {
+    for (const hash of [
+      '#/mcp/mcp-balance/14/protocol',
+      '#/rag/rag-hybrid/0',
+      '#/compare/compare-rag-mcp/12/protocol',
+    ]) {
       expect(formatRoute(ok(hash))).toBe(hash);
     }
   });
@@ -66,6 +79,10 @@ describe('routes', () => {
       message: 'Unknown step: x',
     });
     expect(parseRoute('#/mcp/mcp-balance/3/sideways', tabs)).toMatchObject({ ok: false });
-    expect(parseRoute('#/compare/rag-query', tabs)).toMatchObject({ ok: false, tab: 'compare' });
+    expect(parseRoute('#/compare/rag-query', tabs)).toMatchObject({
+      ok: false,
+      tab: 'compare',
+      message: 'Unknown scenario: rag-query',
+    });
   });
 });

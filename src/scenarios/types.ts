@@ -195,8 +195,8 @@ export interface SpecSources {
   } & JsonObject;
   rag: { scenarios: Scenario[]; variants: Variant[] } & JsonObject;
   comparison: {
-    semantic_phases: { id: string }[];
-    compare: { phase_mapping: Record<string, Record<string, string>> } & JsonObject;
+    semantic_phases: { id: string; label: string }[];
+    compare: Compare;
     combined: Composition;
   } & JsonObject;
   security: {
@@ -204,6 +204,22 @@ export interface SpecSources {
     error_taxonomy?: Record<string, string>;
   } & JsonObject;
 }
+
+/** The Compare view's data (06-comparison-scenarios.yaml compare). */
+export type Compare = {
+  id: string;
+  left_scenario: string;
+  right_scenario: string;
+  headline: string;
+  left_question: string;
+  right_question: string;
+  /** Scenario ID → scenario phase ID → semantic phase ID. */
+  phase_mapping: Record<string, Record<string, string>>;
+  /** Scenario ID → semantic phase without events → what the pane shows instead. */
+  placeholders?: Record<string, Record<string, string>>;
+  /** One sentence per comparison aspect. */
+  aspects?: { label: string; sentence: string }[];
+} & JsonObject;
 
 /** Base scenarios, expanded variants, the composed scenario and its variants, in that order. */
 export type Registry = Record<string, Scenario>;

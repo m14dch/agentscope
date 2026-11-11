@@ -23,7 +23,7 @@ export function tabScenarios(sources: SpecSources): Record<Tab, string[]> {
   return {
     mcp: [...sources.mcp.scenarios.map((s) => s.id), ...sources.mcp.variants.map((v) => v.id)],
     rag: [...ragBase, ...sources.rag.variants.map((v) => v.id)],
-    compare: [],
+    compare: [sources.comparison.compare.id],
     combined: [
       sources.comparison.combined.id,
       ...(sources.comparison.combined.variants ?? []).map((v) => v.id),
@@ -33,8 +33,8 @@ export function tabScenarios(sources: SpecSources): Record<Tab, string[]> {
 
 export interface Route {
   tab: Tab;
-  /** Absent only on the Compare tab. */
-  scenario?: string;
+  /** On the Compare tab, the compare ID; its step counts the compare timeline. */
+  scenario: string;
   step: number;
   mode: Mode;
 }
@@ -49,11 +49,6 @@ export function parseRoute(hash: string, tabs: Record<Tab, string[]>): Parsed {
     return { ok: false, tab: 'mcp', message: `Unknown page: ${tabPart}` };
   }
   const tab = tabPart as Tab;
-  if (tab === 'compare') {
-    return scenarioPart === undefined
-      ? { ok: true, route: { tab, step: 0, mode: 'architecture' } }
-      : { ok: false, tab, message: `Unknown page: compare/${scenarioPart}` };
-  }
   const scenario = scenarioPart ?? tabs[tab][0];
   if (scenario === undefined || !tabs[tab].includes(scenario)) {
     return { ok: false, tab, message: `Unknown scenario: ${scenarioPart ?? ''}` };
@@ -69,6 +64,5 @@ export function parseRoute(hash: string, tabs: Record<Tab, string[]>): Parsed {
 }
 
 export function formatRoute(route: Route): string {
-  if (route.tab === 'compare' || route.scenario === undefined) return `#/${route.tab}`;
   return `#/${route.tab}/${route.scenario}/${route.step}${route.mode === 'protocol' ? '/protocol' : ''}`;
 }

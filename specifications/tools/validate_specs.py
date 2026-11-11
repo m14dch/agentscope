@@ -672,6 +672,53 @@ def check_derived_defaults(R, rag, registry, ranked, sel):
         expect(f"rag-query/{eid}", ev[eid]["tracked_values"], {"sourceDocumentId": sel_docs, "chunkId": got})
 
 
+def default_played_phases(scn):
+    """Scenario phase IDs with an event played at the default parameters (03 optional_steps)."""
+    params = scn.get("parameters") or {}
+    off = {eid for step in scn.get("optional_steps") or []
+           if (params.get(step.get("enabled_by")) or {}).get("default") is not True
+           for eid in step.get("events", [])}
+    prefix = f"{scn['id']}:"
+    return {e["phase"] for e in scn["events"]
+            if (e["id"][len(prefix):] if e["id"].startswith(prefix) else e["id"]) not in off}
+
+
+def check_compare(cmp_, registry):
+    """Placeholders and aspects of the Compare view (02 compare_view); mirrored in validate.ts."""
+    compare = cmp_["compare"]
+    semantic = [p["id"] for p in cmp_["semantic_phases"]]
+    mappings = compare.get("phase_mapping") or {}
+    placeholders = compare.get("placeholders", {})
+    if not isinstance(placeholders, dict):
+        err("compare.placeholders", "must map scenario IDs to placeholders")
+        placeholders = {}
+    for sid in placeholders:
+        if sid not in mappings:
+            err("compare.placeholders", f"{sid} is not in phase_mapping")
+    for sid, mapping in mappings.items():
+        scn = registry.get(sid)
+        if scn is None:
+            continue
+        # A pane with no events in a semantic phase shows a placeholder (02 compare_view.timeline).
+        played = {mapping.get(p) for p in default_played_phases(scn)}
+        missing = [p for p in semantic if p not in played]
+        given = placeholders.get(sid, {})
+        if not isinstance(given, dict) or sorted(given) != sorted(missing):
+            err("compare.placeholders", f"{sid} placeholders must cover exactly: {', '.join(missing)}")
+            continue
+        for phase, text in given.items():
+            if not isinstance(text, str) or not text.strip():
+                err("compare.placeholders", f"{sid} placeholder for {phase} is empty")
+    aspects = compare.get("aspects")
+    if not isinstance(aspects, list) or not aspects:
+        err("compare.aspects", "needs at least one aspect")
+        return
+    for i, a in enumerate(aspects):
+        if not isinstance(a, dict) or set(a) != {"label", "sentence"} \
+                or not all(isinstance(v, str) and v.strip() for v in a.values()):
+            err("compare.aspects", f"aspect {i} needs exactly a label and a sentence")
+
+
 def check_rag(rag, comp, registry, ui):
     R = rag_engine(rag)
     refs = {k: v for k, v in rag["reference_results"].items() if k != "note"}
@@ -898,6 +945,7 @@ def main():
     for sid, mapping in cmp_["compare"]["phase_mapping"].items():
         if mapping != {p["id"]: p["semantic_phase"] for p in registry[sid]["phases"]}:
             err("compare.phase_mapping", f"{sid} mapping differs from scenario phases")
+    check_compare(cmp_, registry)
     final_mcp = registry["mcp-balance"]["events"][-1]["payload"]
     if "CHF 12,500.75" not in final_mcp:
         err("mcp-balance", "final answer lacks CHF 12,500.75")

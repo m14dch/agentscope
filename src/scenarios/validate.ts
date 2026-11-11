@@ -324,8 +324,81 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
       err('compare.phase_mapping', `${sid} mapping differs from scenario phases`);
     }
   }
+  problems.push(...compareProblems(sources, registry));
   if (!problems.length) problems.push(...replayProblems(registry));
   return { registry, problems };
+}
+
+/** Scenario phase IDs with an event played at the default parameters (03 optional_steps). */
+function defaultPlayedPhases(scn: Scenario): Set<string> {
+  const params = scn.parameters ?? {};
+  const off = new Set(
+    (scn.optional_steps ?? []).flatMap((step) =>
+      params[step.enabled_by]?.default === true ? [] : step.events,
+    ),
+  );
+  const prefix = `${scn.id}:`;
+  return new Set(
+    scn.events
+      .filter((e) => !off.has(e.id.startsWith(prefix) ? e.id.slice(prefix.length) : e.id))
+      .map((e) => e.phase),
+  );
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Placeholders and aspects of the Compare view (02 compare_view); mirrors check_compare in
+ * validate_specs.py, with the same messages.
+ */
+function compareProblems(sources: SpecSources, registry: Registry): string[] {
+  const problems: string[] = [];
+  const err = (where: string, msg: string): void => {
+    problems.push(`${where}: ${msg}`);
+  };
+  const compare = sources.comparison.compare as unknown as Record<string, unknown>;
+  const semantic = sources.comparison.semantic_phases.map((p) => p.id);
+  const mappings = isObject(compare['phase_mapping']) ? compare['phase_mapping'] : {};
+  let placeholders: Record<string, unknown> = {};
+  if (compare['placeholders'] !== undefined && !isObject(compare['placeholders'])) {
+    err('compare.placeholders', 'must map scenario IDs to placeholders');
+  } else if (isObject(compare['placeholders'])) {
+    placeholders = compare['placeholders'];
+  }
+  for (const sid of Object.keys(placeholders)) {
+    if (!(sid in mappings)) err('compare.placeholders', `${sid} is not in phase_mapping`);
+  }
+  for (const [sid, mapping] of Object.entries(mappings)) {
+    const scn = registry[sid];
+    if (!scn || !isObject(mapping)) continue;
+    // A pane with no events in a semantic phase shows a placeholder (02 compare_view.timeline).
+    const played = new Set([...defaultPlayedPhases(scn)].map((p) => mapping[p]));
+    const missing = semantic.filter((p) => !played.has(p));
+    const given = placeholders[sid] ?? {};
+    if (!isObject(given) || Object.keys(given).sort().join() !== [...missing].sort().join()) {
+      err('compare.placeholders', `${sid} placeholders must cover exactly: ${missing.join(', ')}`);
+      continue;
+    }
+    for (const [phase, text] of Object.entries(given)) {
+      if (typeof text !== 'string' || !text.trim()) {
+        err('compare.placeholders', `${sid} placeholder for ${phase} is empty`);
+      }
+    }
+  }
+  const aspects = compare['aspects'];
+  if (!Array.isArray(aspects) || !aspects.length) {
+    err('compare.aspects', 'needs at least one aspect');
+    return problems;
+  }
+  aspects.forEach((a: unknown, i) => {
+    const ok =
+      isObject(a) &&
+      Object.keys(a).sort().join() === 'label,sentence' &&
+      Object.values(a).every((v) => typeof v === 'string' && v.trim() !== '');
+    if (!ok) err('compare.aspects', `aspect ${i} needs exactly a label and a sentence`);
+  });
+  return problems;
 }
 
 /** Replays every scenario through the reducer; only run on structurally valid data. */
