@@ -119,26 +119,72 @@
   font-weight: var(--weight-strong);
 }
 
-.lineage-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  align-items: baseline;
+/* What the message carries, under the message line (02 inspector.carries). */
+.carries {
+  margin-top: var(--space-1);
+}
+
+.carries ul {
+  margin: 0;
+  padding-left: var(--space-3);
+}
+
+/* The Annotations toggle folds like every fold (02 inspector.annotations.toggle). */
+.annotations-toggle {
+  border: none;
+  padding: 0;
+  background: none;
+  text-decoration: underline dotted var(--color-ink-muted);
+  text-underline-offset: 0.25em;
+}
+
+.annotations-toggle[aria-expanded='true'] {
+  font-weight: var(--weight-strong);
+}
+
+/* Open: each group's lines, then its callout, set off by a hairline rule and indentation
+   only: no card, fill or shadow (02 inspector.annotations.open). */
+.annotated .json-line {
+  padding-left: calc(var(--depth, 0) * var(--space-2));
+}
+
+.annotation {
+  margin: var(--space-1) 0 var(--space-2);
+  border-left: var(--line-hair) solid var(--color-rule);
+  padding-left: var(--space-2);
+}
+
+.annotation-heading {
+  margin: 0;
+  font-size: var(--size-text);
+  line-height: var(--leading-text);
+  font-weight: var(--weight-strong);
+}
+
+.annotation p {
+  margin: 0;
+}
+
+.annotation-values {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.annotation-value {
   font-family: var(--font-code);
   font-size: var(--size-small);
-  margin-bottom: var(--space-1);
 }
 
-.lineage-values {
-  flex-basis: 100%;
-  margin: 0;
-  padding-left: var(--space-2);
-  list-style: none;
+/* Where a tracked value travels: a line of its own below the meaning. */
+.travel {
+  display: block;
+  color: var(--color-ink-muted);
 }
 
-.lineage-row .link {
+.travel .link {
   margin-right: 0;
-  font-family: var(--font-text);
+  color: var(--color-ink);
 }
 
 /* Controls that fold or expand content: dotted ink-muted underline (02 design). */
@@ -212,10 +258,6 @@
   font-size: var(--size-small);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.select-value[aria-pressed='true'] {
-  background: var(--color-selection);
 }
 
 /* The earlier-revision comparison: collapsed, opened only on request (02 earlier_revision). */

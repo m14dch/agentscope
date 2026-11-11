@@ -43,68 +43,11 @@ test('no context panel where the scenario has no agent state', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Model context' })).toHaveCount(0);
 });
 
-test('selecting a tracked value marks its reached steps in the diagram, and Escape clears it', async ({
+test('tracked values are highlighted in the payload (02 inspector.payload_features)', async ({
   page,
 }) => {
-  await open(page, '#/mcp/mcp-balance/24/protocol');
-  await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
-  await page.getByRole('button', { name: 'Select balance 12500.75' }).click();
-  // Reached steps that carry the balance: 20 to 24.
-  await expect(page.locator('.step .label-mark')).toHaveCount(5);
-  await expect(page.getByRole('button', { name: 'Select balance 12500.75' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  // Later steps are not revealed in the occurrences.
-  const row = page.locator('.lineage-row').filter({ hasText: 'balance' });
-  await expect(row.locator('li')).toHaveText('12500.75 first at step 20; also 21, 22, 23 Selected');
-  // The selection stays while stepping.
-  await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.locator('.step .label-mark')).toHaveCount(6);
-  await page.locator('body').click({ position: { x: 5, y: 5 } });
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.step .label-mark')).toHaveCount(0);
-});
-
-test('with a selection only its fields are highlighted in the payload', async ({ page }) => {
   await open(page, '#/mcp/mcp-balance/23/protocol');
   const marks = page.locator('.tab-panel .json-value.json-mark');
   await expect(marks.filter({ hasText: '"123"' }).first()).toBeVisible();
-  await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
-  await page.getByRole('button', { name: 'Select balance 12500.75' }).click();
-  await page.getByRole('tab', { name: 'Payload', exact: true }).click();
-  await expect(marks.filter({ hasText: '"123"' })).toHaveCount(0);
   await expect(marks.filter({ hasText: '12500.75' }).first()).toBeVisible();
-});
-
-test('architecture mode marks the group caption holding the selected value with a solid ink underline', async ({
-  page,
-}) => {
-  await open(page, '#/mcp/mcp-balance/24/protocol');
-  await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
-  await page.getByRole('button', { name: 'Select balance 12500.75' }).click();
-  await page.getByRole('button', { name: 'Architecture' }).click();
-  const caption = page.locator('.group-label.arrow-label--selected').first();
-  await expect(caption).toBeVisible();
-  const style = await caption.evaluate((node) => {
-    const s = getComputedStyle(node);
-    return { line: s.textDecorationLine, kind: s.textDecorationStyle };
-  });
-  expect(style).toEqual({ line: 'underline', kind: 'solid' });
-});
-
-test('Escape in the scenario picker closes it and keeps the selection', async ({ page }) => {
-  // Only RAG has a scenario picker (02 navigation.scenario_picker).
-  await open(page, '#/rag/rag-query/10/protocol');
-  await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
-  await page
-    .getByRole('button', { name: /^Select / })
-    .first()
-    .click();
-  const marks = await page.locator('.step .label-mark').count();
-  expect(marks).toBeGreaterThan(0);
-  await page.locator('.picker summary').click();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.picker')).not.toHaveAttribute('open', '');
-  await expect(page.locator('.step .label-mark')).toHaveCount(marks);
 });

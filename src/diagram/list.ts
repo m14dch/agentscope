@@ -50,15 +50,11 @@ function renderRow(a: Arrow, names: Readonly<Record<string, string>>): string {
   const from = esc(names[e.sender] ?? e.sender);
   const to = esc(names[e.receiver] ?? e.receiver);
   const current = a.visibility === 'current' ? ' data-current=""' : '';
-  const label = a.selected ? 'row-label row-label--selected' : 'row-label';
-  const selected = a.selected
-    ? '<span class="visually-hidden">, carries the selected value</span>'
-    : '';
   // The arrow never stands alone on a line: it keeps the word next to it.
   const route = a.self
     ? `${glueLast(from, `${arrowMark(a)}<span class="visually-hidden">to itself</span>`)}`
     : `${from} ${glueFirst(`${arrowMark(a)}<span class="visually-hidden">to</span>`, to)}`;
-  return `<li class="${cls.join(' ')}" data-index="${a.index}"${current}><span class="row-number"><span class="visually-hidden">Step </span>${a.index + 1}</span><span class="${label}">${esc(a.label)}${selected}</span><span class="row-route">${route}</span></li>`;
+  return `<li class="${cls.join(' ')}" data-index="${a.index}"${current}><span class="row-number"><span class="visually-hidden">Step </span>${a.index + 1}</span><span class="row-label">${esc(a.label)}</span><span class="row-route">${route}</span></li>`;
 }
 
 function renderRows(arrows: readonly Arrow[], names: Readonly<Record<string, string>>): string {
@@ -74,9 +70,7 @@ function renderSection(g: Group, names: Readonly<Record<string, string>>): strin
   const takeaway = g.continued
     ? ''
     : `<span class="phase-takeaway">${esc(g.phase.takeaway)}</span>`;
-  const caption = g.selected
-    ? `<span class="row-label--selected">${esc(g.caption)}</span><span class="visually-hidden">, carries the selected value</span>`
-    : esc(g.caption);
+  const caption = esc(g.caption);
   return `<section class="${cls.join(' ')}" data-phase="${esc(g.phase.id)}"${current}><button type="button" class="phase-toggle" data-group="${esc(g.key)}" aria-expanded="${g.expanded}">${takeaway}<span class="phase-caption">${caption}</span></button>${g.expanded ? renderRows(g.arrows, names) : ''}</section>`;
 }
 

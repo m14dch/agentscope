@@ -11,6 +11,7 @@ import {
 } from '../../src/scenarios/annotations.ts';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
 import { ragDerivation } from '../../src/rag/bundled.ts';
+import { travel, valueLabel } from '../../src/inspector/annotated.ts';
 import { ANNOTATED_PROTOCOLS } from '../../src/scenarios/validate.ts';
 import type { AnnotationGroup, Json } from '../../src/scenarios/types.ts';
 
@@ -169,5 +170,34 @@ describe('bundled annotations', () => {
       }
     }
     expect(checked).toBeGreaterThan(1000);
+  });
+});
+
+describe('annotation bullets', () => {
+  const events = loadRegistry()['mcp-balance']?.events ?? [];
+  const at = (id: string): number => events.findIndex((e) => e.id === id);
+
+  it('show a value in the code face, long strings cut and containers summarised', () => {
+    expect(valueLabel('123')).toBe('"123"');
+    expect(valueLabel('x'.repeat(41))).toBe(`"${'x'.repeat(36)}…"`);
+    expect(valueLabel([1, 2])).toBe('[…] 2 items');
+    expect(valueLabel({})).toBe('{…} 0 members');
+  });
+
+  it('say where a tracked value comes from, where it is sent and when it reaches the model', () => {
+    // The balance comes from the core ledger and reaches the model with the tool result.
+    expect(travel(events, at('mcp-23'), 12500.75)).toEqual({
+      first: at('mcp-20'),
+      model: at('mcp-26'),
+      tool: at('mcp-21'),
+    });
+    // The customer ID first appears in the request to the model: the model is not named again.
+    expect(travel(events, at('mcp-14'), '123')).toEqual({
+      first: at('mcp-10'),
+      tool: at('mcp-14'),
+    });
+    // Untracked values and values inside longer strings get no travel line.
+    expect(travel(events, at('mcp-14'), 'tools/call')).toBeUndefined();
+    expect(travel(events, at('mcp-23'), '{"customerId":"123"}')).toBeUndefined();
   });
 });

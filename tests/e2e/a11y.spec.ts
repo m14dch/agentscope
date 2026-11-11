@@ -14,7 +14,8 @@ const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 const ROUTES = [
   '#/mcp/mcp-balance/0',
-  '#/mcp/mcp-balance/12',
+  // A tools/call request: payload with annotations, transport and security.
+  '#/mcp/mcp-balance/14',
   '#/rag/rag-index/6',
   '#/rag/rag-query/10',
   '#/compare/compare-rag-mcp/8',
@@ -61,9 +62,10 @@ for (const size of WIDTHS) {
           await page.goto(url);
           await page.locator('[data-measured]').first().waitFor();
           await scan(page, `${url} as loaded`);
-          // The panels open: step details (phones), model context, an expanded group, the
-          // scenario picker on desktop or the menu on phones.
+          // The panels open: step details (phones), the payload's annotations, model context,
+          // an expanded group, the scenario picker on desktop or the menu on phones.
           await expand(page, 'Step details');
+          await expand(page, 'Annotations');
           await expand(page, 'Model context');
           const group = page.locator('[data-group][aria-expanded="false"]').first();
           if ((await group.count()) > 0 && (await group.isVisible())) await group.click();

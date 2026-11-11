@@ -27,8 +27,9 @@ explaining it, and the exact payloads on demand.
   documents, each statement labelled with its source. Scenario: `combined-balance-explanation`.
 
 Two modes show the same step at two levels: **Architecture** groups each phase under its takeaway;
-**Protocol** shows every event. The inspector holds Payload, Transport, Security and Lineage; the **Model
-context** panel puts the agent's state beside what the model has actually seen. On a phone the diagram
+**Protocol** shows every event. The inspector says what each message carries and holds Payload, Transport
+and Security; **Annotations** split the payload into groups that explain every field in place, including
+where the customer ID and the balance come from and go. The **Model context** panel puts the agent's state beside what the model has actually seen. On a phone the diagram
 becomes a step list and the controls move to a bar at the bottom of the screen. After the first visit the
 site works offline.
 

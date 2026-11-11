@@ -15,7 +15,7 @@ import {
   type SourceDocument,
   sourceDocuments,
 } from '../inspector/ingestion.ts';
-import { type Boundary, Inspector, occurrences, type Selection } from '../inspector/inspector.ts';
+import { type Boundary, Inspector } from '../inspector/inspector.ts';
 import {
   projection,
   RetrievalPanel,
@@ -155,8 +155,6 @@ interface ScenarioView {
   view: DiagramView;
   /** Index of the event whose prediction prompt is showing, if any. */
   prompt: number | undefined;
-  /** The selected lineage value; cleared when the scenario changes. */
-  selection: Selection | undefined;
   render: () => void;
   dispose: () => void;
 }
@@ -354,8 +352,7 @@ export class Shell {
       if (target.closest('a')) close(false);
       else if (target.closest('[data-mode]')) close(true);
     });
-    // Escape anywhere on the page closes the open menu, and does nothing else (it does not
-    // clear a lineage selection: the window's key handler skips a handled event).
+    // Escape anywhere on the page closes the open menu, and does nothing else.
     document.addEventListener(
       'keydown',
       (e) => {
@@ -442,7 +439,7 @@ export class Shell {
     });
     details.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || !details.open) return;
-      // Closing the menu is all this Escape does; it does not clear a lineage selection.
+      // Closing the menu is all this Escape does.
       e.preventDefault();
       details.open = false;
       details.querySelector('summary')?.focus();
@@ -624,7 +621,6 @@ export class Shell {
       labels: this.labels,
       boundaries: this.sources.security.trust_boundaries as unknown as Boundary[],
       jump: (k) => this.go(() => player.jump(k)),
-      select: (selection) => this.select(selection),
       earlierRevision: this.sources.mcp.protocol.earlier_revision_handshake,
     });
     const inspector = el(
@@ -688,7 +684,6 @@ export class Shell {
       player,
       view,
       prompt: undefined,
-      selection: undefined,
       render: () => undefined,
       dispose: () => undefined,
     };
@@ -720,10 +715,7 @@ export class Shell {
         output.textContent = text;
       }
       ingestion?.panel.update(ingestionModel(player.playback.events, k, ingestion.sources));
-      retrieval?.panel.update(
-        retrievalModel(player.playback.events, k, retrieval.index()),
-        state.selection,
-      );
+      retrieval?.panel.update(retrievalModel(player.playback.events, k, retrieval.index()));
       combined?.update();
       for (const b of this.header.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
         b.setAttribute('aria-pressed', String(b.dataset['mode'] === view.mode));
@@ -735,11 +727,7 @@ export class Shell {
         promptSlot.replaceChildren(...this.promptContent(state));
       }
       messageSlot.replaceChildren(...this.introContent(state));
-      inspectorView.update({
-        events: player.playback.events,
-        cursor: k,
-        selection: state.selection,
-      });
+      inspectorView.update({ events: player.playback.events, cursor: k });
       if (!contextBody.hidden) {
         const previous = k > 0 ? player.playback.snapshot(k - 1) : undefined;
         contextBody.replaceChildren(
@@ -961,8 +949,7 @@ export class Shell {
 
   /**
    * Changes a parameter (02 controls.action_rules.parameter_change): the player keeps the
-   * cursor on the same event, and the lineage marks follow the recomputed events; a selected
-   * value that no longer occurs is cleared.
+   * cursor on the same event.
    */
   private setParameter(name: string, value: Json): void {
     const c = this.current;
@@ -971,12 +958,6 @@ export class Shell {
     try {
       c.prompt = undefined;
       c.player.setParameters({ [name]: value });
-      if (c.selection) {
-        const found = occurrences(c.player.playback.events, c.selection);
-        // A value no longer played (a chunk ID of other parameters) is no longer selected.
-        if (!found.length) c.selection = undefined;
-        c.view.setSelected(new Set(found));
-      }
       c.render();
     } finally {
       this.adjusting = false;
@@ -998,16 +979,6 @@ export class Shell {
     this.pageScroll.jumpBy(top - 8);
   }
 
-  /** Selects a lineage value or clears the selection (02 lineage_selection). */
-  private select(selection: Selection | undefined): void {
-    const c = this.current;
-    if (!c) return;
-    c.selection = selection;
-    const events = c.player.playback.events;
-    c.view.setSelected(new Set(selection ? occurrences(events, selection) : []));
-    c.render();
-  }
-
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     const compare = this.compare;
@@ -1023,11 +994,6 @@ export class Shell {
     }
     const c = this.current;
     if (!c) return;
-    if (e.key === 'Escape' && c.selection) {
-      this.select(undefined);
-      e.preventDefault();
-      return;
-    }
     if (keyBelongsToFocus(e.target, e.key)) return;
     if (e.key === 'ArrowRight') this.next();
     else if (e.key === 'ArrowLeft') this.go(() => c.player.previous());

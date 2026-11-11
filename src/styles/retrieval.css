@@ -253,16 +253,6 @@
   stroke-width: 2px;
 }
 
-.projection-plot .label-mark {
-  fill: var(--color-selection);
-  stroke: none;
-}
-
-.projection-plot .label-underline {
-  stroke: var(--color-ink);
-  stroke-width: var(--line-hair);
-}
-
 /* The compact form of phones: each chunk point named in a list below the plot. */
 .projection-list {
   margin: var(--space-1) 0 0;

@@ -52,7 +52,6 @@ const reducedMotion = (): boolean =>
 export class DiagramView {
   private viewMode: Mode;
   private readonly expansion = new Expansion();
-  private selected: ReadonlySet<number> = new Set();
   private held = false;
   private readonly unsubscribe: () => void;
   private readonly root: HTMLElement;
@@ -108,12 +107,6 @@ export class DiagramView {
     this.render();
   }
 
-  /** Marks the steps carrying the selected lineage value (02 lineage_selection.diagram). */
-  setSelected(indices: ReadonlySet<number>): void {
-    this.selected = indices;
-    this.render();
-  }
-
   /** Shows no current step while true (02 compare_view.timeline: a waiting pane). */
   setHeld(held: boolean): void {
     if (held === this.held) return;
@@ -162,7 +155,6 @@ export class DiagramView {
       cursor: this.player.cursor,
       expanded: this.expansion.expanded,
       measure: this.measure,
-      selected: this.selected,
       held: this.held,
     });
     const title = `${scenario.title}, ${this.viewMode} view, step ${this.player.cursor} of ${this.player.playback.length}`;
