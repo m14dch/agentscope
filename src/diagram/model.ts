@@ -184,6 +184,41 @@ function pairOf(scenario: Scenario, cursor: number): number {
   return scenario.events.findIndex((e) => e.id === current.pair_id);
 }
 
+export interface GroupRun {
+  /** The phase ID, then "#2", "#3" … for each later run of the same phase. */
+  key: string;
+  phase: Phase;
+  continued: boolean;
+  /** The run's events with their indices in the scenario. */
+  members: [ScenarioEvent, number][];
+}
+
+/** One group per consecutive run of a phase's events (02 modes.architecture_groups). */
+export function groupRuns(scenario: Scenario): GroupRun[] {
+  const phases = new Map(scenario.phases.map((p) => [p.id, p]));
+  const runs: { phase: Phase; members: [ScenarioEvent, number][] }[] = [];
+  scenario.events.forEach((e, i) => {
+    const last = runs[runs.length - 1];
+    if (last && last.phase.id === e.phase) last.members.push([e, i]);
+    else {
+      const phase = phases.get(e.phase);
+      if (phase) runs.push({ phase, members: [[e, i]] });
+    }
+  });
+  const seen = new Map<string, number>();
+  return runs.map(({ phase, members }) => {
+    const n = (seen.get(phase.id) ?? 0) + 1;
+    seen.set(phase.id, n);
+    return { key: n === 1 ? phase.id : `${phase.id}#${n}`, phase, continued: n > 1, members };
+  });
+}
+
+/** Key of the group holding the step at the cursor; undefined at step 0. */
+export function currentGroupKey(scenario: Scenario, cursor: number): string | undefined {
+  if (cursor < 1) return undefined;
+  return groupRuns(scenario).find((r) => r.members.some(([, i]) => i === cursor - 1))?.key;
+}
+
 export function layout(input: LayoutInput): DiagramLayout {
   const { scenario, mode, cursor, expanded } = input;
   const measure = input.measure ?? estimate;
@@ -239,23 +274,7 @@ export function layout(input: LayoutInput): DiagramLayout {
     });
   } else {
     const current = cursor >= 1 && !input.held ? cursor - 1 : -1;
-    const phases = new Map(scenario.phases.map((p) => [p.id, p]));
-    // One group per consecutive run of a phase's events.
-    const runs: { phase: Phase; members: [ScenarioEvent, number][] }[] = [];
-    scenario.events.forEach((e, i) => {
-      const last = runs[runs.length - 1];
-      if (last && last.phase.id === e.phase) last.members.push([e, i]);
-      else {
-        const phase = phases.get(e.phase);
-        if (phase) runs.push({ phase, members: [[e, i]] });
-      }
-    });
-    const seen = new Map<string, number>();
-    for (const { phase, members } of runs) {
-      const n = (seen.get(phase.id) ?? 0) + 1;
-      seen.set(phase.id, n);
-      const key = n === 1 ? phase.id : `${phase.id}#${n}`;
-      const continued = n > 1;
+    for (const { key, phase, continued, members } of groupRuns(scenario)) {
       const xs = members.flatMap(([e]) => [x.get(e.sender) ?? 0, x.get(e.receiver) ?? 0]);
       const left = Math.min(...xs) - SIZES.minSpacing / 2 + 8;
       const spanRight = Math.max(...xs) + SIZES.minSpacing / 2 - 8;

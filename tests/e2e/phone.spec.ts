@@ -526,16 +526,17 @@ test.describe('at 390 × 844', () => {
   test('architecture groups expand from the step list by touch and keyboard', async ({ page }) => {
     await page.goto('./#/mcp/mcp-balance/14');
     await list(page).and(page.locator('[data-measured]')).waitFor();
+    // The current group is open, its current row in view (02 modes.architecture_groups).
     const group = list(page).locator('[data-group="tool"]');
-    await expect(group).toHaveAttribute('aria-expanded', 'false');
-    await group.tap();
     await expect(group).toHaveAttribute('aria-expanded', 'true');
-    await expect(list(page).locator('.phase--current .row[data-current]')).toHaveCount(1);
+    await expect(list(page).locator('.phase--current .row[data-current]')).toBeInViewport();
+    await group.tap();
+    await expect(group).toHaveAttribute('aria-expanded', 'false');
     await group.focus();
     await page.keyboard.press('Enter');
     await expect(list(page).locator('[data-group="tool"]')).toHaveAttribute(
       'aria-expanded',
-      'false',
+      'true',
     );
     await expect(list(page).locator('[data-group="tool"]')).toBeFocused();
     // Stepping keeps focus on the same group.

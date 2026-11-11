@@ -1,10 +1,11 @@
 /**
  * Mounts the sequence diagram for one scenario and keeps it in step with a Player:
- * mode switching keeps the cursor, groups expand on click, Enter or Space, and the current
- * step stays in view (02-ui-ux.yaml diagram, modes).
+ * mode switching keeps the cursor, the group the cursor enters expands, groups expand or
+ * collapse on click, Enter or Space, and the current step stays in view (02-ui-ux.yaml diagram, modes).
  */
 import type { Player } from '../engine/player.ts';
-import { estimate, layout, type Measure, type Mode } from './model.ts';
+import { currentGroupKey, estimate, layout, type Measure, type Mode } from './model.ts';
+import { Expansion } from './expansion.ts';
 import { renderSvg } from './render.ts';
 import { renderList } from './list.ts';
 import { phoneQuery } from '../app/phone.ts';
@@ -44,7 +45,7 @@ const reducedMotion = (): boolean =>
 
 export class DiagramView {
   private viewMode: Mode;
-  private readonly expanded = new Set<string>();
+  private readonly expansion = new Expansion();
   private selected: ReadonlySet<number> = new Set();
   private held = false;
   private readonly unsubscribe: () => void;
@@ -113,13 +114,12 @@ export class DiagramView {
 
   /** Expands or collapses a group by its key (data-group). */
   toggleGroup(key: string): void {
-    if (this.expanded.has(key)) this.expanded.delete(key);
-    else this.expanded.add(key);
+    this.expansion.toggle(key);
     this.render();
   }
 
   isExpanded(key: string): boolean {
-    return this.expanded.has(key);
+    return this.expansion.has(key);
   }
 
   destroy(): void {
@@ -144,12 +144,14 @@ export class DiagramView {
         ? (focused.closest<HTMLElement | SVGElement>('[data-group]')?.dataset['group'] ?? '')
         : undefined;
     const list = this.phone?.matches ?? false;
+    // The group the cursor enters expands; a waiting Compare pane has no current group.
+    this.expansion.follow(this.held ? undefined : currentGroupKey(scenario, this.player.cursor));
     const model = layout({
       scenario,
       labels: this.options.labels,
       mode: this.viewMode,
       cursor: this.player.cursor,
-      expanded: this.expanded,
+      expanded: this.expansion.expanded,
       measure: this.measure,
       selected: this.selected,
       held: this.held,
@@ -185,9 +187,11 @@ export class DiagramView {
 
   /** Scrolls the region (never the page) so the current step or group is in view. */
   private scrollToCurrent(): void {
-    // In the step list the innermost current element: the row inside an expanded group.
+    // The innermost current element: the step inside an expanded current group (it follows
+    // the group in document order), else the collapsed group or the protocol step. A group
+    // frame can be wider than the region, which would leave its step out of view.
     const all = this.root.querySelectorAll<Element>('[data-current]');
-    const current = this.root.dataset['presentation'] === 'list' ? all[all.length - 1] : all[0];
+    const current = all[all.length - 1];
     if (!current) return;
     const region = this.root.getBoundingClientRect();
     const box = current.getBoundingClientRect();
