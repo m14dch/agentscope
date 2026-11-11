@@ -78,6 +78,14 @@ export class CompareView {
   readonly timeline: CompareTimeline;
   /** The architecture/protocol switch, placed in the top bar by the shell. */
   readonly modeSwitch: HTMLElement;
+  /** What the shell rearranges on phones (02 layout.phone.controls). */
+  readonly phoneControls: {
+    bar: HTMLElement;
+    status: HTMLElement;
+    speeds: HTMLElement;
+    start: HTMLElement;
+    reset: HTMLElement;
+  };
   private readonly options: CompareOptions;
   private readonly clock: Clock;
   private readonly panes: readonly [Pane, Pane];
@@ -131,14 +139,16 @@ export class CompareView {
       b.dataset['speed'] = String(speed);
       this.speeds.append(b);
     }
+    const start = button('Start', () => this.navigate(1));
+    const reset = button('Reset', () => this.reset());
     const controls = el(
       'div',
       { class: 'controls', role: 'group', 'aria-label': 'Playback of both panes' },
-      button('Start', () => this.navigate(1)),
+      start,
       button('Previous', () => this.previous()),
       this.play,
       button('Next', () => this.next()),
-      button('Reset', () => this.reset()),
+      reset,
       this.speeds,
     );
 
@@ -150,7 +160,8 @@ export class CompareView {
       'aria-label': 'Compare step',
     });
     this.slider.addEventListener('input', () => this.navigate(Number(this.slider.value)));
-    this.status = el('span', { class: 'small muted' });
+    this.status = el('span', { class: 'small muted compare-status' });
+    this.phoneControls = { bar: controls, status: this.status, speeds: this.speeds, start, reset };
     const phaseList = el('ol', { class: 'compare-phases small', 'aria-label': 'Semantic phases' });
     for (const phase of phases) {
       const item = el('li', {}, phase.label);
@@ -307,14 +318,11 @@ export class CompareView {
     const position = el('p', { class: 'small muted' });
     const message = el('div', { class: 'compare-message' });
     const inspect = el('a', { class: 'small' });
-    const diagram = el('div', {
-      class: 'diagram-pane',
-      role: 'region',
-      'aria-label': `${label} sequence diagram, scrolls in both directions`,
-    });
+    const diagram = el('div', { class: 'diagram-pane', role: 'region' });
     const view = new DiagramView(diagram, player, {
       labels: this.options.labels,
       mode: this.mode,
+      name: `${label} sequence diagram`,
       id: `compare-${side === 0 ? 'left' : 'right'}`,
     });
     const root = el(

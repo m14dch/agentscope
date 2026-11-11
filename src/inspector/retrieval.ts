@@ -402,7 +402,10 @@ export interface ProjectionLayout {
   pixels: { x: number; y: number }[];
   /** Each point's mark as a box (to keep labels off it). */
   marks: Box[];
-  labels: PlacedLabel[];
+  /** Each point's label, in input order; in the compact form only the question's. */
+  labels: (PlacedLabel | undefined)[];
+  /** The compact form of phones: only the question is labelled at its point. */
+  compact: boolean;
   axes: { x: [number, number, number, number]; y: [number, number, number, number] };
   axisNames: { text: string; x: number; y: number; anchor: 'start' | 'end'; box: Box }[];
 }
@@ -486,10 +489,10 @@ function placeInOrder(
   fixed: readonly Box[],
   names: readonly Box[],
   width: number,
-): { labels: PlacedLabel[]; cost: number } {
+): { labels: (PlacedLabel | undefined)[]; cost: number } {
   const placed: Box[] = [];
   const leaders: [number, number, number, number][] = [];
-  const labels = new Array<PlacedLabel>(points.length);
+  const labels = new Array<PlacedLabel | undefined>(points.length).fill(undefined);
   let cost = 0;
   for (const i of order) {
     const p = pixels[i] as { x: number; y: number };
@@ -548,6 +551,7 @@ export function layoutAt(
   side: number,
   margin: number,
   width: number,
+  compact = false,
 ): { layout: ProjectionLayout; cost: number } {
   const top = 40;
   const px = (x: number): number => margin + ((x + 1) / 2) * side;
@@ -598,15 +602,19 @@ export function layoutAt(
     ).length;
   const indices = points.map((_, i) => i);
   const by = (f: (i: number) => number) => [...indices].sort((a, b) => f(a) - f(b) || a - b);
-  const orders = [
-    by((i) => pixels[i]?.y ?? 0),
-    by((i) => -(pixels[i]?.y ?? 0)),
-    by((i) => pixels[i]?.x ?? 0),
-    by((i) => -(pixels[i]?.x ?? 0)),
-    by((i) => -near(i)),
-    by((i) => near(i)),
-  ];
-  let best: { labels: PlacedLabel[]; cost: number } | undefined;
+  // The compact form labels the question only (02 rag_retrieval.projection).
+  const labelled = compact ? indices.filter((i) => !points[i]?.id) : indices;
+  const orders = compact
+    ? [labelled]
+    : [
+        by((i) => pixels[i]?.y ?? 0),
+        by((i) => -(pixels[i]?.y ?? 0)),
+        by((i) => pixels[i]?.x ?? 0),
+        by((i) => -(pixels[i]?.x ?? 0)),
+        by((i) => -near(i)),
+        by((i) => near(i)),
+      ];
+  let best: { labels: (PlacedLabel | undefined)[]; cost: number } | undefined;
   for (const order of orders) {
     const result = placeInOrder(order, points, pixels, marks, fixed, names, width);
     if (!best || result.cost < best.cost) best = result;
@@ -616,12 +624,12 @@ export function layoutAt(
   const height = Math.ceil(
     Math.max(
       py(-1) + 32,
-      ...labels.map((l) => l.box.bottom + 4),
+      ...labels.map((l) => (l ? l.box.bottom + 4 : 0)),
       ...axisNames.map((a) => a.box.bottom + 4),
     ),
   );
   return {
-    layout: { width, height, pixels, marks, labels, axes, axisNames },
+    layout: { width, height, pixels, marks, labels, axes, axisNames, compact },
     cost: best?.cost ?? 0,
   };
 }
@@ -640,8 +648,8 @@ const SHARES = [0.7, 0.5, 0.85, 0.3, 0.6, 0.4, 1, 0];
  * leader line that crosses nothing. The plot takes the largest side (at most 560 px, at
  * least 260 px) at which every label fits somewhere within the width; of the positions at
  * that side, the one with the shortest leaders (by squared length) is drawn, the earlier in
- * SHARES on a tie. Only when none fits is the layout wider than `available`, with room for
- * labels on both sides.
+ * SHARES on a tie. When none fits (phones), it is the compact form (compactLayout), which
+ * is never wider than `available` either.
  */
 export function projectionLayout(
   points: readonly ProjectedPoint[],
@@ -657,13 +665,34 @@ export function projectionLayout(
     }
     if (best) return best.layout;
   }
-  const longest = Math.max(8, ...points.map((p) => p.label.length)) * CODE_CHAR;
-  const margin = Math.ceil(longest + GAP + 8);
-  // Too narrow (phones): a wider layout that scrolls, with room for labels on both sides.
-  let wide = layoutAt(points, 480, margin, 480 + 2 * margin);
-  for (let side = 500; wide.cost >= 1e6 && side <= 640; side += 20)
-    wide = layoutAt(points, side, margin, side + 2 * margin);
-  return wide.layout;
+  return compactLayout(points, available);
+}
+
+/** The compact form's largest side (02 rag_retrieval.projection). */
+const COMPACT_SIDE = 360;
+
+/**
+ * The compact form for widths where no labelled layout fits (phones): the square plot at the
+ * available width, at most 360 px, with only the question labelled at its point. The view
+ * names the other points in a list below the plot (02 rag_retrieval.projection).
+ */
+export function compactLayout(
+  points: readonly ProjectedPoint[],
+  available: number,
+): ProjectionLayout {
+  const width = Math.floor(available);
+  const side = Math.max(120, Math.min(COMPACT_SIDE, width - 2 * (GAP + MARK)));
+  return layoutAt(points, side, Math.floor((width - side) / 2), width, true).layout;
+}
+
+/**
+ * One line per chunk point of the compact form: its label, its position named by the axes
+ * with 2 decimals, and whether it is retained (02 rag_retrieval.projection).
+ */
+export function positionLine(p: ProjectedPoint): string {
+  const x = `${p.x < 0 ? 'rules' : 'cost'} ${Math.abs(p.x).toFixed(2)}`;
+  const y = `${p.y < 0 ? 'technical' : 'product'} ${Math.abs(p.y).toFixed(2)}`;
+  return `${p.label}: ${x}, ${y}${p.retained ? ' · retained' : ''}`;
 }
 
 /** One document's source version and the versions the index holds. */
@@ -1034,7 +1063,7 @@ export class RetrievalPanel {
       );
       points.forEach((p, i) => {
         const at = layout.pixels[i] as { x: number; y: number };
-        const l = layout.labels[i] as PlacedLabel;
+        const l = layout.labels[i];
         const name = (id: string): string =>
           `${id || 'The question'}: x ${p.x.toFixed(4)}, y ${p.y.toFixed(4)}${p.retained ? ', retained' : ''}`;
         const g = svg('g', {
@@ -1045,11 +1074,13 @@ export class RetrievalPanel {
             : name(p.id),
         });
         if (p.id) g.dataset['chunk'] = p.id;
-        if (l.leader) {
+        if (l?.leader) {
           const [x1, y1, x2, y2] = l.leader;
           g.append(svg('line', { class: 'leader', x1, y1, x2, y2 }));
         }
-        if (p.id && (p.id === marked || (typeof marked === 'string' && p.also?.includes(marked)))) {
+        const selected =
+          !!p.id && (p.id === marked || (typeof marked === 'string' && !!p.also?.includes(marked)));
+        if (l && selected) {
           // Selection background plus an ink underline (02 design.colour.use).
           const { left, right, top, bottom } = l.box;
           g.append(
@@ -1077,9 +1108,10 @@ export class RetrievalPanel {
               d: `M${at.x - 5},${at.y} h10 M${at.x},${at.y - 5} v10`,
             }),
           );
-        g.append(
-          svg('text', { class: 'point-label', x: l.x, y: l.y, 'text-anchor': l.anchor }, p.label),
-        );
+        if (l)
+          g.append(
+            svg('text', { class: 'point-label', x: l.x, y: l.y, 'text-anchor': l.anchor }, p.label),
+          );
         root.append(g);
         // Each chunk sharing the point stays its own point for assistive technology; its mark
         // lies exactly on the first one's.
@@ -1094,7 +1126,31 @@ export class RetrievalPanel {
           root.append(twin);
         }
       });
-      node.replaceChildren(root);
+      // The compact form names every chunk point in a list below the plot, in score order.
+      const list = layout.compact
+        ? [
+            el(
+              'ol',
+              'projection-list small',
+              ...points
+                .filter((p) => p.id)
+                .map((p) => {
+                  const selected =
+                    p.id === marked || (typeof marked === 'string' && !!p.also?.includes(marked));
+                  const [label, rest] = [p.label, positionLine(p).slice(p.label.length)];
+                  const item = el(
+                    'li',
+                    p.retained ? 'retained' : undefined,
+                    el('span', selected ? 'chunk-mark' : undefined, label),
+                    rest,
+                  );
+                  item.dataset['chunk'] = p.id;
+                  return item;
+                }),
+            ),
+          ]
+        : [];
+      node.replaceChildren(root, ...list);
     };
     this.plot = { node, draw };
     return figure;

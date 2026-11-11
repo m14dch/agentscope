@@ -39,6 +39,7 @@ import {
   tabScenarios,
 } from './routes.ts';
 import { offlineIndicator } from './offline.ts';
+import { relocate } from './phone.ts';
 import { CompareView } from '../compare/view.ts';
 import { appUrl } from '../base.ts';
 import '../styles/diagram.css';
@@ -46,6 +47,7 @@ import '../styles/shell.css';
 import '../styles/inspector.css';
 import '../styles/ingestion.css';
 import '../styles/retrieval.css';
+import '../styles/phone.css';
 
 const SIMULATED = 'Everything here is simulated. Nothing leaves your browser.';
 /** The approved wordmark for the light paper (02 layout brand); the app is light only. */
@@ -177,6 +179,8 @@ export class Shell {
   private compare: CompareView | undefined;
   /** Removes the document listeners of the current header. */
   private headerListeners: AbortController | undefined;
+  /** The header's menu on phones (02 layout.phone.header). */
+  private menu: { toggle: HTMLButtonElement; body: HTMLElement } | undefined;
   /** Whether a page has been shown; the first one does not take focus. */
   private shown = false;
   private route: Route | undefined;
@@ -291,11 +295,109 @@ export class Shell {
     });
     const brand = el('h1', { class: 'brand' }, el('a', { href: '#/' }, wordmark));
     const row = el('div', { class: 'shell-bar' }, brand, nav);
-    if (scenario && this.tabs[tab].length > 1) row.append(this.picker(tab, scenario));
-    if (scenario) row.append(this.modeSwitch());
+    this.menu = this.phoneMenu(row);
+    if (scenario && this.tabs[tab].length > 1) {
+      row.append(this.picker(tab, scenario));
+      const scenarios = this.menuRow('Scenario', this.scenarioList(tab, scenario));
+      scenarios.classList.add('menu-row--scenarios');
+      this.menu.body.append(scenarios);
+      this.menu.toggle.hidden = false;
+    }
     this.header.replaceChildren(
       row,
       el('p', { class: 'small muted simulated' }, SIMULATED, offlineIndicator()),
+    );
+    if (scenario) this.toMenu('View', [this.modeSwitch()], row);
+  }
+
+  /**
+   * The menu that holds the scenario picker, the view switch, the speeds, Start and Reset on
+   * phones (02 layout.phone.header); hidden from 48rem, where they sit in their own places.
+   * It is shown once something is in it.
+   */
+  private phoneMenu(row: HTMLElement): { toggle: HTMLButtonElement; body: HTMLElement } {
+    const signal = (this.headerListeners ??= new AbortController()).signal;
+    const body = el('div', { id: 'menu', class: 'menu-body', hidden: '' });
+    const toggle = button(
+      'Menu',
+      () => {
+        const open = toggle.getAttribute('aria-expanded') !== 'true';
+        toggle.setAttribute('aria-expanded', String(open));
+        body.hidden = !open;
+      },
+      { class: 'menu-toggle', 'aria-expanded': 'false', 'aria-controls': 'menu', hidden: '' },
+    );
+    const close = (focus: boolean): void => {
+      toggle.setAttribute('aria-expanded', 'false');
+      body.hidden = true;
+      if (focus) toggle.focus();
+    };
+    body.addEventListener('click', (e) => {
+      if ((e.target as Element).closest('a')) close(false);
+    });
+    for (const node of [toggle, body] as HTMLElement[]) {
+      node.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || body.hidden) return;
+        // Closing the menu is all this Escape does; it does not clear a lineage selection.
+        e.preventDefault();
+        close(true);
+      });
+    }
+    document.addEventListener(
+      'pointerdown',
+      (e) => {
+        const target = e.target as Node;
+        if (!body.hidden && !body.contains(target) && !toggle.contains(target)) close(false);
+      },
+      { signal },
+    );
+    row.append(toggle, body);
+    return { toggle, body };
+  }
+
+  /** A labelled row of the menu. */
+  private menuRow(label: string | undefined, ...children: Node[]): HTMLElement {
+    return el(
+      'div',
+      { class: 'menu-row' },
+      ...(label ? [el('span', { class: 'small muted' }, label)] : []),
+      ...children,
+    );
+  }
+
+  /**
+   * Puts a control into the menu while the phone layout applies (02 layout.phone.header);
+   * `parent` is where it sits otherwise. The control moves; it is never copied.
+   */
+  private toMenu(label: string | undefined, nodes: Element[], parent?: Element): void {
+    if (!this.menu) return;
+    parent?.append(...nodes);
+    const row = this.menuRow(label);
+    // The scenario list, the longest, comes last.
+    this.menu.body.insertBefore(row, this.menu.body.querySelector('.menu-row--scenarios'));
+    this.menu.toggle.hidden = false;
+    relocate(nodes, row, (this.headerListeners ??= new AbortController()).signal);
+  }
+
+  /** The scenarios of a tab as the menu lists them: the picker's list, shown in place. */
+  private scenarioList(tab: Tab, scenario: Scenario): HTMLElement {
+    return el(
+      'ul',
+      { class: 'menu-scenarios' },
+      ...this.tabs[tab].map((id) => {
+        const lesson = this.lessons.get(id);
+        const link = el(
+          'a',
+          { href: `#/${tab}/${id}/0`, 'aria-current': id === scenario.id ? 'true' : undefined },
+          this.registry[id]?.title ?? id,
+        );
+        return el(
+          'li',
+          {},
+          link,
+          ...(lesson ? [el('span', { class: 'small muted' }, lesson)] : []),
+        );
+      }),
     );
   }
 
@@ -377,7 +479,25 @@ export class Shell {
         if (location.hash !== hash) history.replaceState(null, '', hash);
       },
     });
-    this.header.querySelector('.shell-bar')?.append(this.compare.modeSwitch);
+    const bar = this.header.querySelector('.shell-bar') ?? undefined;
+    this.toMenu('View', [this.compare.modeSwitch], bar);
+    this.toPhoneControls(this.compare.phoneControls);
+  }
+
+  /**
+   * On phones the playback controls become the bottom bar with the position line, and the
+   * speeds, Start and Reset move into the menu (02 layout.phone.controls).
+   */
+  private toPhoneControls(c: {
+    bar: HTMLElement;
+    status: HTMLElement;
+    speeds: HTMLElement;
+    start: HTMLElement;
+    reset: HTMLElement;
+  }): void {
+    relocate([c.status], c.bar, (this.headerListeners ??= new AbortController()).signal);
+    this.toMenu('Speed', [c.speeds]);
+    this.toMenu(undefined, [c.start, c.reset]);
   }
 
   private renderScenario(scenario: Scenario, route: Route): ScenarioView {
@@ -391,6 +511,8 @@ export class Shell {
       el('p', { class: 'headline' }, scenario.headline),
     );
     const play = button('Play', () => player.toggle());
+    const start = button('Start', () => this.go(() => player.start()));
+    const reset = button('Reset', () => this.go(() => player.reset()));
     const speeds = el('div', { class: 'segmented', role: 'group', 'aria-label': 'Speed' });
     for (const speed of SPEEDS) {
       const b = button(`${speed}×`, () => player.setSpeed(speed as Speed), {
@@ -402,11 +524,11 @@ export class Shell {
     const controls = el(
       'div',
       { class: 'controls', role: 'group', 'aria-label': 'Playback' },
-      button('Start', () => this.go(() => player.start())),
+      start,
       button('Previous', () => this.go(() => player.previous())),
       play,
       button('Next', () => this.next()),
-      button('Reset', () => this.go(() => player.reset())),
+      reset,
       speeds,
     );
 
@@ -478,11 +600,8 @@ export class Shell {
       );
     }
 
-    const diagram = el('div', {
-      class: 'diagram-pane',
-      role: 'region',
-      'aria-label': 'Sequence diagram, scrolls in both directions',
-    });
+    // DiagramView names the region and states how it scrolls.
+    const diagram = el('div', { class: 'diagram-pane', role: 'region' });
     const splitter = el('div', {
       class: 'splitter',
       role: 'separator',
@@ -563,7 +682,11 @@ export class Shell {
       leave: () => slider.focus({ preventScroll: true }),
     });
 
-    const view = new DiagramView(diagram, player, { labels: this.labels, mode: route.mode });
+    const view = new DiagramView(diagram, player, {
+      labels: this.labels,
+      mode: route.mode,
+      name: 'Sequence diagram',
+    });
     const state: ScenarioView = {
       scenario,
       defaults: player.playback.events,
@@ -659,6 +782,7 @@ export class Shell {
       ...(retrieval ? [retrieval.panel.root] : []),
       ...(combined ? [combined.root] : []),
     );
+    this.toPhoneControls({ bar: controls, status, speeds, start, reset });
     state.render();
     return state;
   }

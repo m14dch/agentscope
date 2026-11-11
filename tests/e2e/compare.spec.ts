@@ -29,7 +29,8 @@ const mcpPhases = semanticOf('mcp-balance');
 
 const rag = (page: Page) => page.getByRole('region', { name: 'RAG', exact: true });
 const mcp = (page: Page) => page.getByRole('region', { name: 'MCP', exact: true });
-const status = (page: Page) => page.locator('.compare-timeline > span');
+// The compare step's line; on phones it moves into the bottom bar (02 layout.phone.controls).
+const status = (page: Page) => page.locator('.compare-status');
 
 async function open(page: Page, hash: string): Promise<void> {
   await page.goto(`./${hash}`);

@@ -214,6 +214,8 @@ export class Inspector {
   private readonly root: HTMLElement;
   private readonly context: InspectorContext;
   private chosen: TabId = 'payload';
+  /** Phones fold the tabs behind "Step details" (02 layout.phone.inspector); kept while stepping. */
+  private collapsed = true;
   /** The step last rendered, so unrelated player changes keep folds and focus. */
   private rendered: InspectorStep | undefined;
 
@@ -292,7 +294,22 @@ export class Inspector {
     }
     panel.setAttribute('aria-labelledby', `inspector-tab-${shown}`);
     panel.replaceChildren(...(panels.get(shown)?.() ?? []));
-    this.root.replaceChildren(...message, tablist, panel);
+    // From 48rem the toggle is not shown and the tabs always are (src/styles/inspector.css).
+    const details = el('div', 'inspector-details', tablist, panel);
+    details.id = 'inspector-details';
+    const toggle = focusKey(el('button', 'details-toggle', 'Step details'), 'details-toggle');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-controls', details.id);
+    const fold = (): void => {
+      toggle.setAttribute('aria-expanded', String(!this.collapsed));
+      details.toggleAttribute('data-collapsed', this.collapsed);
+    };
+    fold();
+    toggle.addEventListener('click', () => {
+      this.collapsed = !this.collapsed;
+      fold();
+    });
+    this.root.replaceChildren(...message, toggle, details);
   }
 
   private choose(id: TabId, step: InspectorStep, focus = false): void {

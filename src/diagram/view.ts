@@ -6,12 +6,16 @@
 import type { Player } from '../engine/player.ts';
 import { estimate, layout, type Measure, type Mode } from './model.ts';
 import { renderSvg } from './render.ts';
+import { renderList } from './list.ts';
+import { phoneQuery } from '../app/phone.ts';
 
 export interface DiagramOptions {
   labels: Readonly<Record<string, string>>;
   mode?: Mode;
   /** Unique per page, for marker IDs. */
   id?: string;
+  /** The region's name, for example "Sequence diagram"; its scrolling is appended. */
+  name?: string;
 }
 
 /** Measures text in the diagram's font with a canvas; falls back to the estimate. */
@@ -51,6 +55,12 @@ export class DiagramView {
   private destroyed = false;
   /** Mode and cursor the region last scrolled to. */
   private scrolledTo = '';
+  /** Below 48rem the diagram is the step list (02 diagram.phone_list). */
+  private readonly phone = phoneQuery();
+  private readonly onPhoneChange = (): void => {
+    this.scrolledTo = '';
+    this.render();
+  };
 
   constructor(root: HTMLElement, player: Player, options: DiagramOptions) {
     this.root = root;
@@ -61,6 +71,7 @@ export class DiagramView {
     root.tabIndex = 0;
     root.addEventListener('click', this.onClick);
     root.addEventListener('keydown', this.onKey);
+    this.phone?.addEventListener('change', this.onPhoneChange);
     this.unsubscribe = player.subscribe(() => this.render());
     // Measure with the real font once it has loaded, then lay out again.
     if (typeof document !== 'undefined' && document.fonts) {
@@ -116,6 +127,7 @@ export class DiagramView {
     this.unsubscribe();
     this.root.removeEventListener('click', this.onClick);
     this.root.removeEventListener('keydown', this.onKey);
+    this.phone?.removeEventListener('change', this.onPhoneChange);
     this.root.replaceChildren();
   }
 
@@ -128,9 +140,10 @@ export class DiagramView {
     const scenario = { ...this.player.playback.scenario, events: [...this.player.playback.events] };
     const focused = document.activeElement;
     const focusKey =
-      focused instanceof SVGElement && this.root.contains(focused)
-        ? focused.closest<SVGGElement>('[data-group]')?.dataset['group']
+      focused instanceof Element && focused !== this.root && this.root.contains(focused)
+        ? (focused.closest<HTMLElement | SVGElement>('[data-group]')?.dataset['group'] ?? '')
         : undefined;
+    const list = this.phone?.matches ?? false;
     const model = layout({
       scenario,
       labels: this.options.labels,
@@ -142,14 +155,21 @@ export class DiagramView {
       held: this.held,
     });
     const title = `${scenario.title}, ${this.viewMode} view, step ${this.player.cursor} of ${this.player.playback.length}`;
-    this.root.innerHTML = renderSvg(
-      model,
-      title,
-      this.options.id ?? 'diagram',
-      this.options.labels,
+    this.root.innerHTML = list
+      ? renderList(model, title, this.options.labels)
+      : renderSvg(model, title, this.options.id ?? 'diagram', this.options.labels);
+    this.root.dataset['presentation'] = list ? 'list' : 'diagram';
+    const name = this.options.name ?? 'Sequence diagram';
+    this.root.setAttribute(
+      'aria-label',
+      list ? `${name}, a list of steps` : `${name}, scrolls in both directions`,
     );
-    if (focusKey) {
-      const group = this.root.querySelector<SVGGElement>(`[data-group="${CSS.escape(focusKey)}"]`);
+    if (focusKey !== undefined) {
+      const group = focusKey
+        ? this.root.querySelector<HTMLElement | SVGElement>(
+            `[data-group="${CSS.escape(focusKey)}"]`,
+          )
+        : null;
       // A group that no longer exists hands focus to the region, not to the page.
       (group ?? this.root).focus({ preventScroll: true });
     }
@@ -162,7 +182,9 @@ export class DiagramView {
 
   /** Scrolls the region (never the page) so the current step or group is in view. */
   private scrollToCurrent(): void {
-    const current = this.root.querySelector<SVGGElement>('[data-current]');
+    // In the step list the innermost current element: the row inside an expanded group.
+    const all = this.root.querySelectorAll<Element>('[data-current]');
+    const current = this.root.dataset['presentation'] === 'list' ? all[all.length - 1] : all[0];
     if (!current) return;
     const region = this.root.getBoundingClientRect();
     const box = current.getBoundingClientRect();
@@ -185,7 +207,7 @@ export class DiagramView {
   }
 
   private readonly onClick = (event: Event): void => {
-    const group = (event.target as Element).closest<SVGGElement>('[data-group]');
+    const group = (event.target as Element).closest<HTMLElement | SVGElement>('[data-group]');
     if (!group?.dataset['group']) return;
     group.focus({ preventScroll: true });
     this.toggleGroup(group.dataset['group']);
@@ -193,6 +215,8 @@ export class DiagramView {
 
   private readonly onKey = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
+    // A button in the step list activates itself, through onClick.
+    if (event.target instanceof HTMLButtonElement) return;
     const group = (event.target as Element).closest<SVGGElement>('[data-group]');
     if (!group?.dataset['group']) return;
     event.preventDefault();
