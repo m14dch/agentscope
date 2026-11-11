@@ -144,7 +144,7 @@ e2e_tests:
   - Fail on external requests or runtime API traffic.
 - id: accessibility
   steps:
-  - At desktop and phone width, scan every tab and representative scenarios and steps in both modes
+  - At desktop, tablet and phone width, scan every tab and representative scenarios and steps in both modes
     with axe-core, as loaded and with the step details, the model context, a group and the scenario
     picker or the menu open, and fail on any serious or critical finding.
   - At desktop and tablet width, on every tab in both modes, move through the page with Tab and verify
