@@ -20,7 +20,8 @@ modules:
   diagram_renderer: Displays lifelines, phases, arrows, request/response pairs
   inspector: Displays exact logical payload, transport framing, rationale and notes
   context_inspector: Separately displays agent working state and model-visible messages
-  lineage_view: Highlights value origin, transformations and destinations
+  payload_annotations: Explain each payload's fields in place, including where tracked
+    values come from and go (replaces the lineage view, issue 49)
   rag_engine: Pure functions for chunking, demo embeddings, scoring, filtering, reranking
     and evidence-based answer composition (05-rag-scenarios.yaml)
   rag_visualizer: Chunking and simplified 2D embedding projection
