@@ -17,6 +17,12 @@ export interface DiagramOptions {
   id?: string;
   /** The region's name, for example "Sequence diagram"; its scrolling is appended. */
   name?: string;
+  /**
+   * Called with the width the region needs to show the diagram without scrolling sideways
+   * (its natural width plus the region's scrollbar), whenever that changes; 0 in the step
+   * list. The workspace widens up to it (02 layout.max_width).
+   */
+  onNaturalWidth?: (px: number) => void;
 }
 
 /** Measures text in the diagram's font with a canvas; falls back to the estimate. */
@@ -54,6 +60,9 @@ export class DiagramView {
   private readonly options: DiagramOptions;
   private measure: Measure = estimate;
   private destroyed = false;
+  /** The natural width last reported, and the widest layout it was derived from. */
+  private reportedWidth = -1;
+  private widest: { events: readonly unknown[]; measure: Measure; width: number } | undefined;
   /** Mode and cursor the region last scrolled to. */
   private scrolledTo = '';
   /** Below 48rem the diagram is the step list (02 diagram.phone_list). */
@@ -161,6 +170,7 @@ export class DiagramView {
       ? renderList(model, title, this.options.labels)
       : renderSvg(model, title, this.options.id ?? 'diagram', this.options.labels);
     this.root.dataset['presentation'] = list ? 'list' : 'diagram';
+    this.reportWidth(list ? 0 : Math.max(model.width, this.widestWidth(scenario)));
     // Focus moved by the keyboard scrolls clear of the sticky participant names too.
     const header = this.headerHeight();
     this.root.style.scrollPaddingTop = header ? `${header}px` : '';
@@ -183,6 +193,37 @@ export class DiagramView {
       this.scrolledTo = position;
       this.scrollToCurrent();
     }
+  }
+
+  /**
+   * The scenario's widest layout at its current parameters: protocol mode with every step
+   * shown. Computed once per set of events and measure, so stepping does not change it.
+   */
+  private widestWidth(scenario: Parameters<typeof layout>[0]['scenario']): number {
+    const events = this.player.playback.events;
+    if (this.widest?.events !== events || this.widest.measure !== this.measure) {
+      const { width } = layout({
+        scenario,
+        labels: this.options.labels,
+        mode: 'protocol',
+        cursor: events.length,
+        expanded: new Set(),
+        measure: this.measure,
+      });
+      this.widest = { events, measure: this.measure, width };
+    }
+    return this.widest.width;
+  }
+
+  /** Tells the owner the width the region needs, only when it changes. */
+  private reportWidth(natural: number): void {
+    if (!this.options.onNaturalWidth || natural === this.reportedWidth) return;
+    // The region's vertical scrollbar takes width from the diagram; read once per change,
+    // and again at the next render while the region is not yet on the page.
+    const connected = this.root.isConnected;
+    this.reportedWidth = connected ? natural : -1;
+    const scrollbar = natural && connected ? this.root.offsetWidth - this.root.clientWidth : 0;
+    this.options.onNaturalWidth(natural ? natural + scrollbar : 0);
   }
 
   /** Scrolls the region (never the page) so the current step or group is in view. */

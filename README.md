@@ -74,7 +74,7 @@ type, colour tokens and contrast, charts, motion, writing) are in `specification
 `design`; the live specimen at [`#/design`](https://m14dch.github.io/agentscope/#/design) shows them
 in use.
 
-- Deep Slate Olive carries text and data on a cream page, Neutral Gray carries structure only,
+- Deep Slate Olive carries text and data on a white page, Neutral Gray carries structure only,
   Peach Red marks the current step, Naples Yellow marks what the learner selected or tracks, and
   the app's own errors (an unknown address, invalid scenario data) always carry a × and a text naming
   them. Colour is never the only signal.
