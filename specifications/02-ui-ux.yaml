@@ -225,9 +225,11 @@ layout:
       Continue, Play or Pause, Start, Reset, the keys, a step slider or a jump link) always
       does this, even when the learner had scrolled down to read the payload: it brings the
       stepping area back. A step made by Play does it only while the learner has not scrolled
-      the page since the last explicit step action; the learner''s scrolling is a wheel, a
-      touch move, a scrolling key that nothing else handled, or the scrollbar, never the
-      page''s own jumps. Once the learner scrolls during Play, its steps leave the page where it
+      the page since the last explicit step action. A scroll of the page counts as the
+      learner''s only when it follows their input within a second (a wheel, a touch, a
+      scrolling key that nothing else handled, or a press on the scrollbar); scrolls the browser
+      makes by itself (scroll anchoring, clamping when content shrinks) and the page''s own
+      jumps never count. Once the learner scrolls during Play, its steps leave the page where it
       is until the next explicit step action. In Compare, after a change of compare step the
       same rules bring the panes whose step changed on screen above the bar: when both panes
       changed and their current rows fit on screen together, both current rows; otherwise the
