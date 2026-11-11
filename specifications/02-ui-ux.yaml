@@ -210,7 +210,8 @@ layout:
   source_link: 'A text link "GitHub" to https://github.com/m14dch/agentscope ends the header
     row, after the tabs and the controls there; it opens in the same tab, has no icon and is
     styled like the tabs (ink, no underline). On phones (layout.phone.header) it is the last
-    entry of the menu. It is an ordinary link: nothing is fetched from GitHub, so the app
+    entry of the menu; where the menu would hold nothing else (the error page for an unknown
+    tab or scenario), there is no menu and the link ends the wordmark row instead. It is an ordinary link: nothing is fetched from GitHub, so the app
     stays free of external requests.'
   offline_indicator: 'After the service worker has cached the build and activated (01-architecture.yaml
     deployment offline_mechanics readiness), the header''s simulated statement ends with "Available
@@ -219,22 +220,21 @@ layout:
   tablet: Stack inspector below horizontally scrollable diagram
   breakpoint: Side by side from 64rem; stacked below; the phone layout below 48rem
   max_width: 'The page does not use more width than its content needs. The header, the
-    simulated statement, the learning question and headline, the controls, the timeline and
-    the panels below it lie in a column at most 90rem (1440 px) wide, side margins included,
-    centred; beyond it the paper is empty on both sides. Only the workspace (the diagram
-    region with the splitter and the inspector; in Compare the two panes) may be wider, and
-    only as far as its diagram needs: at most the diagram''s natural width plus the splitter
-    and the inspector (in Compare twice the wider pane''s natural width plus the gap between
-    the panes), and never wider than the screen less its side margins; it is centred on the same axis
-    and never narrower than the column. A diagram that fits the column (rag-query) keeps the
-    column''s width; one that needs more (mcp-balance) gets it, so at 1920 px it does not
-    scroll sideways. The natural width is the widest layout of the scenario at its current
-    parameters (protocol mode with every step shown, or the current layout if wider), so
-    the workspace does not change width while stepping. The inspector''s share (splitter)
-    is of the workspace up to the column''s width, so a wider workspace gives all its extra
-    width to the diagram. Below 64rem, where the inspector
-    stacks, nothing changes. Running text keeps a measure of about 45–75 characters: the
-    learning question and headline are at most 36rem wide.'
+    simulated statement, the learning question and headline, the control row and the panels
+    below the workspace lie in a column at most 90rem (1440 px) wide, side margins included,
+    centred; beyond it the paper is empty on both sides. Only the workspace of the MCP, RAG
+    and Combined tabs (the diagram region with the splitter and the inspector) may be wider,
+    and only as far as its diagram needs: at most the diagram''s natural width plus the
+    splitter and the inspector, and never wider than the screen less its side margins; it is
+    centred on the same axis and never narrower than the column. A diagram that fits the
+    column (rag-query) keeps the column''s width; one that needs more (mcp-balance) gets it,
+    so at 1920 px it does not scroll sideways. The natural width is the widest layout of the
+    scenario at its current parameters (protocol mode with every step shown, or the current
+    layout if wider), so the workspace does not change width while stepping. Compare stays
+    in the column, its panes included: two panes side by side would gain little and pull
+    their text out of the column, so each pane''s diagram scrolls inside its region. Below
+    64rem, where the inspector stacks, nothing changes. Running text keeps a measure of
+    about 45–75 characters: the learning question and headline are at most 36rem wide.'
   phone:
     breakpoint: Below 48rem (768 px), which includes a desktop browser zoomed to 200%; from
       48rem the tablet and desktop layouts apply unchanged.
@@ -297,9 +297,14 @@ layout:
       compact form (rag_retrieval.projection).
     input: Nothing depends on hover. Focus, the keys of controls.keyboard and the focus
       order work as on desktop, for a learner with a hardware keyboard.
-  splitter: The boundary between diagram and inspector is a separator that resizes them
-    by pointer drag or, when focused, the arrow keys; the inspector keeps 20rem to 60% of
-    the width
+  splitter: 'The boundary between diagram and inspector is a separator that resizes them by
+    pointer drag or, when focused, the arrow keys; the inspector keeps 20rem to 60% of the
+    width. Its width is a share of the workspace up to the column''s width (layout.max_width),
+    so a workspace widened for its diagram gives all its extra width to the diagram. A drag
+    sets the inspector to the distance from the pointer to the workspace''s right edge; each
+    arrow key changes it by 2% of the workspace up to the column''s width. The separator''s
+    value and label ("Inspector <n>% of the width") give the share of the workspace the
+    inspector takes on screen, and its minimum the share 20rem takes.'
   timeline: A step slider from 0 to the number of steps, labelled with the step and its
     phase, and the position line "Step <k> of <n> · <phase>" beside it, both in the control
     row after the playback buttons (controls.row), never at the bottom of the page
