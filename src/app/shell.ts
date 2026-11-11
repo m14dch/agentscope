@@ -52,6 +52,8 @@ import '../styles/phone.css';
 const SIMULATED = 'Everything here is simulated. Nothing leaves your browser.';
 /** The approved wordmark for the light paper (02 layout brand); the app is light only. */
 const WORDMARK = 'brand/agentscope-silver-light.svg';
+/** The source repository, linked at the end of the header (02 layout.source_link). */
+const SOURCE_URL = 'https://github.com/m14dch/agentscope';
 
 /** A parameter control (02 rag_controls.control_kinds). */
 type ParameterControl =
@@ -315,6 +317,13 @@ export class Shell {
       row,
       el('p', { class: 'small muted simulated' }, SIMULATED, offlineIndicator()),
     );
+    // The GitHub link ends the header row and the menu (02 layout.source_link). Its slot
+    // keeps it last in the row when controls join the row later (toMenu).
+    const source = el('a', { class: 'source-link', href: SOURCE_URL }, 'GitHub');
+    row.append(el('span', { class: 'source-slot' }, source));
+    const sourceRow = this.toMenu(undefined, [source]);
+    sourceRow.classList.add('menu-row--source');
+    this.menu.body.append(sourceRow);
     if (scenario) this.toMenu('View', [this.modeSwitch()], row);
   }
 
@@ -386,9 +395,15 @@ export class Shell {
   private toMenu(label: string | undefined, nodes: Element[], parent?: Element): HTMLElement {
     const row = this.menuRow(label);
     if (!this.menu) return row;
-    parent?.append(...nodes);
-    // The scenario list, the longest, comes last.
-    this.menu.body.insertBefore(row, this.menu.body.querySelector('.menu-row--scenarios'));
+    // The GitHub link stays last in the header row.
+    const slot = parent?.querySelector(':scope > .source-slot');
+    if (slot) slot.before(...nodes);
+    else parent?.append(...nodes);
+    // The scenario list, the longest, comes last but for the GitHub link.
+    this.menu.body.insertBefore(
+      row,
+      this.menu.body.querySelector('.menu-row--scenarios, .menu-row--source'),
+    );
     this.menu.toggle.hidden = false;
     relocate(nodes, row, (this.headerListeners ??= new AbortController()).signal);
     return row;

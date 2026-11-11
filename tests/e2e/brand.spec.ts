@@ -82,3 +82,43 @@ test('all three brand images ship with the build and are precached', () => {
     expect(listed, file).toContain(file);
   }
 });
+
+// 02-ui-ux.yaml layout.max_width, layout.source_link and design.typography (issue #47).
+test('on a wide screen the content is at most 90rem wide and centred, the header ends with the GitHub link', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto('./#/mcp/mcp-balance/3');
+  const github = page.getByRole('link', { name: 'GitHub', exact: true });
+  await expect(github).toBeVisible();
+
+  // Everything sits inside the centred 1440 px column, the diagram region included.
+  const shell = await page.locator('.shell').boundingBox();
+  expect(shell).not.toBeNull();
+  if (!shell) return;
+  expect(shell.width).toBeLessThanOrEqual(1440);
+  expect(Math.abs(shell.x - (1920 - shell.x - shell.width))).toBeLessThanOrEqual(1);
+  for (const region of [page.locator('.workspace'), page.locator('.timeline')]) {
+    const box = await region.boundingBox();
+    expect(box && box.x >= shell.x && box.x + box.width <= shell.x + shell.width).toBe(true);
+  }
+
+  // The link ends the header row: an ordinary link in the same tab, after the view switch.
+  await expect(github).toHaveAttribute('href', 'https://github.com/m14dch/agentscope');
+  await expect(github).not.toHaveAttribute('target', /.+/);
+  const link = await github.boundingBox();
+  const view = await page.getByRole('group', { name: 'View', exact: true }).boundingBox();
+  expect(link && view && link.x > view.x + view.width).toBe(true);
+  await page.getByRole('button', { name: 'Protocol', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(github).toBeFocused();
+
+  // Sentences above the diagram have a line height of at least 1.5.
+  for (const text of ['.simulated', '.lesson h2', '.headline']) {
+    const ratio = await page.locator(text).evaluate((node) => {
+      const style = getComputedStyle(node);
+      return parseFloat(style.lineHeight) / parseFloat(style.fontSize);
+    });
+    expect(ratio, text).toBeGreaterThanOrEqual(1.5);
+  }
+});

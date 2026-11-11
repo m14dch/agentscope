@@ -472,7 +472,7 @@ test.describe('at 390 × 844', () => {
     await expect(status).toHaveText(new RegExp(`^Step ${n} of ${n}`));
   });
 
-  test('the menu holds the scenario list, the view switch, the speeds, Start and Reset', async ({
+  test('the menu holds the scenario list, the view switch, the speeds, Start, Reset and the GitHub link', async ({
     page,
   }) => {
     await page.goto('./#/rag/rag-query/10');
@@ -490,6 +490,12 @@ test.describe('at 390 × 844', () => {
     await expect(body.getByRole('button', { name: 'Start' })).toBeVisible();
     await expect(body.getByRole('button', { name: 'Reset' })).toBeVisible();
     await expect(body.getByRole('link', { name: 'Ingest and index documents' })).toBeVisible();
+    // Last in the menu, after the scenario list: the GitHub link, reached by Tab.
+    const github = body.locator('.menu-row:last-child').getByRole('link', { name: 'GitHub' });
+    await expect(github).toHaveAttribute('href', 'https://github.com/m14dch/agentscope');
+    await body.locator('.menu-scenarios a').last().focus();
+    await page.keyboard.press('Tab');
+    await expect(github).toBeFocused();
     // Each scenario link exists once: the picker's list moved, it was not copied.
     await expect(
       page.getByRole('link', { name: 'Ingest and index documents', includeHidden: true }),

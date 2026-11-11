@@ -136,6 +136,14 @@
     margin-top: 0;
   }
 
+  .menu-row .source-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+    margin-left: 0;
+  }
+
   /* The bottom bar: the position, then Previous, Play or Pause and Next in equal widths. */
   .controls {
     position: fixed;

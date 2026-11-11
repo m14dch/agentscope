@@ -1,5 +1,7 @@
 /* App shell (02-ui-ux.yaml layout): one quiet frame around the diagram. */
 .shell {
+  max-width: var(--content-max);
+  margin-inline: auto;
   padding: var(--space-2) var(--page-margin) var(--space-3);
 }
 
@@ -48,6 +50,17 @@
 
 .simulated {
   margin: var(--space-1) 0 0;
+  line-height: var(--leading-small-sentence);
+}
+
+/* The GitHub link ends the header row (02 layout.source_link). */
+.source-slot {
+  display: contents;
+}
+
+.source-link {
+  margin-left: auto;
+  text-decoration: none;
 }
 
 /* Scenario picker: a menu below its summary. */
@@ -94,8 +107,8 @@
 }
 
 .lesson {
-  margin-block: var(--space-2);
-  max-width: 48rem;
+  margin-block: var(--space-3);
+  max-width: var(--measure);
 }
 
 .lesson h2 {
@@ -105,7 +118,7 @@
 }
 
 .headline {
-  margin: 0;
+  margin: var(--space-1) 0 0;
 }
 
 .controls {

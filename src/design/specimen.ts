@@ -18,7 +18,7 @@ type Token = (typeof TOKENS)[number];
 const BACKGROUNDS: ReadonlySet<Token> = new Set(['paper', 'selection']);
 
 const USE: Record<Token, string> = {
-  paper: 'Cream · page',
+  paper: 'White · page',
   selection: 'Naples Yellow · what the learner selected or tracks',
   ink: 'Deep Slate Olive · text and data',
   'ink-muted': 'Secondary text, past-step labels, in-process arrows',

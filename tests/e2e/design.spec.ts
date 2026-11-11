@@ -60,7 +60,7 @@ test('font licences ship with the site', async ({ page }) => {
 
 test('contrast ratios on the specimen come from the live tokens', async ({ page }) => {
   await page.goto('./#/design');
-  await expect(page.getByText('ink 12.97 : 1')).toBeVisible();
+  await expect(page.getByText('ink 13.63 : 1')).toBeVisible();
 });
 
 test('the score axis lines up with the plotted values', async ({ page }) => {
