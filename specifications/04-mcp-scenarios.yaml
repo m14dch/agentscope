@@ -861,11 +861,12 @@ scenarios:
       body_ref: payload
     explanation: The tool succeeded. isError is false.
     technical_notes:
-    - 'Had the call failed, the failure would show here in one of three kinds (07 error_taxonomy): a backend
-      failure such as a 404 or a rejected backend credential is a tool execution error, a successful JSON-RPC
-      response with isError true that the model can explain; an unknown tool, for example from a stale tool
-      cache, is a protocol error, a JSON-RPC error object; and an HTTP or connection failure is a transport
-      error, not a failing tool.'
+    - 'Had the call failed, it would fail in one of three kinds (07 error_taxonomy). A backend 404 or a
+      rejected backend credential happens behind the MCP server, which reports it here as a tool execution
+      error: a successful JSON-RPC response with isError true that the model can explain. A failure of the
+      HTTP connection between MCP client and MCP server is a transport error: no MCP response arrives at
+      all. An unknown tool, for example from a stale tool cache, is a protocol error: a JSON-RPC error
+      object instead of a result.'
     tracked_values:
       customerId: '123'
       balance: 12500.75

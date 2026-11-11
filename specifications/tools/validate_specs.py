@@ -779,6 +779,10 @@ def main():
     if "DiscoverRequest" not in ctx["schema"].get("$defs", {}):
         err("--mcp-schema", "schema lacks DiscoverRequest; it is not revision 2026-07-28 or later")
 
+    # One scenario per use case (03 scenario_format.one_scenario_per_use_case): no variants.
+    for where, doc in (("04", mcp), ("05", rag), ("06 combined", cmp_["combined"])):
+        if "variants" in doc:
+            err(where, "variants are not allowed: one scenario per use case")
     registry = {}
     for scn in mcp["scenarios"] + rag["scenarios"]:
         registry[scn["id"]] = scn

@@ -152,6 +152,13 @@ navigation:
     scenario shows an error naming it, with a link to the tab. Stepping replaces the
     history entry; changing tab or scenario adds one. Parameters are not part of the route,
     so a step number refers to the events played at the scenario''s default parameters.'
+  removed_scenarios: 'Addresses of the variants removed in issue 46 still open: a removed scenario
+    shows its base scenario at step 0 in the same mode, and the address is replaced with the
+    base scenario''s (step 0, because a variant''s step numbers named other events). On MCP,
+    mcp-resources, mcp-not-found, mcp-unauthorized, mcp-jsonrpc-error and mcp-multiple-tools
+    open mcp-balance; on RAG, rag-stale, rag-no-match, rag-conflict, rag-hybrid and
+    rag-prompt-injection open rag-query; on Combined, combined-missing-terms opens
+    combined-balance-explanation. On another tab such an ID is unknown.'
   route_steps: 'While the parameters differ from the defaults, the address shows the step at
     which the current event is played at the defaults; if it is not played there, the step of
     the nearest earlier current event that is, else 0. A step read from the address names the

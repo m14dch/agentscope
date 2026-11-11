@@ -176,7 +176,7 @@ scenario_format:
     variant taught (failures, resources, several tools, stale or conflicting documents, prompt
     injection, missing terms) is stated in a technical note of the base step it concerns, and
     what the RAG parameters show (no match, keyword retrieval and reranking) is reached with
-    them (issue 46).'
+    them (issue 46). A variants key in 04, 05 or 06 combined fails validation.'
 composition_format:
   description: Used by the Combined scenario (06-comparison-scenarios.yaml).
   steps:

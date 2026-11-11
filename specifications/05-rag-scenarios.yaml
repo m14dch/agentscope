@@ -548,8 +548,8 @@ scenarios:
       - documentId: release-notes.md
         version: '1.2'
         words: 54
-    explanation: The ingestion pipeline reads the official Markdown documents. openapi.yaml is exposed
-      through MCP instead and is not indexed.
+    explanation: The ingestion pipeline reads the official Markdown documents. openapi.yaml would be
+      served through MCP as a resource and is not indexed.
     state_changes:
     - path: rag_index.sources
       op: set
@@ -1105,8 +1105,9 @@ scenarios:
     technical_notes:
     - The access filter is applied inside the search, before any text leaves the database.
     - 'The search finds only what was indexed: an index built before a document changed returns the outdated
-      text, and one that holds two versions of a document can return both, because chunks that differ only
-      in numbers have identical vectors.'
+      text, and one that holds two versions of a document can return both, because in this demo''s embedding
+      chunks that differ only in numbers have identical vectors (a learned embedding would make them
+      near-identical).'
     security_boundaries:
     - vector-search
   - id: retrieve-05
@@ -1907,6 +1908,16 @@ reference_results:
     sources:
     - '[1] account-opening.md v1.2, chunk account-opening@1.2-c50o10-001'
     - '[2] everyday-account.md v1.2, chunk everyday-account@1.2-c50o10-002'
+  rag-query-no-match:
+    parameters:
+      chunk_size_words: 50
+      overlap_words: 10
+      top_k: 1
+      similarity_threshold: 0.99
+    selected: []
+    answer: I could not find sufficiently relevant information in the indexed documents to answer this
+      question.
+    sources: []
   rag-query-keyword-rerank:
     parameters:
       chunk_size_words: 50
