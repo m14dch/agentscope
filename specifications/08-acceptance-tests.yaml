@@ -108,6 +108,20 @@ e2e_tests:
   - Trace MCP tool use and RAG evidence separately.
   - Verify CHF 12,500.75 and cited fee, interest and access trade-offs.
   - Run combined-missing-terms and verify the answer states the evidence gap.
+- id: phone-layout
+  steps:
+  - At 390 × 844 and 360 × 800, open every scenario of the MCP, RAG and Combined tabs in both
+    modes and step through it with the inspector's step details and the model context open,
+    then every group expanded at its last step, and verify that nothing scrolls horizontally,
+    on the page or inside any element, and that no element extends past the screen's edges.
+  - Verify the diagram is the step list, every reached step names its sender and receiver, and
+    the current step is highlighted and inside its region.
+  - Step through the longest scenario with Next in the bottom bar and verify that Previous,
+    Play/Pause and Next stay inside the viewport, uncovered, at every step without scrolling.
+  - Verify every control outside running text is at least 44 × 44 px, and the menu holds the
+    scenario picker, the view switch, the speeds, Start and Reset.
+  - Step through Compare in both modes and verify both panes use the step list without
+    horizontal scrolling; verify the RAG projection takes its compact form.
 - id: pages
   steps:
   - Build and serve dist under a repository subpath.
@@ -120,6 +134,7 @@ quality_gates:
   min_supported_events_rule: Counted over the events played at each scenario's default
     parameters, so optional steps that are off do not count
   desktop_and_tablet: true
+  phone: true
   keyboard_navigation: true
   reduced_motion: true
   scenario_schema_validation: true

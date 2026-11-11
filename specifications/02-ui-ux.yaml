@@ -117,9 +117,10 @@ design:
   - The 2D projection is a plain scatter plot with points labelled directly and axes
     named by meaning.
   - Charts fit the available width with text at its real size. Only sequence diagrams
-    keep a fixed scale and scroll horizontally on narrow screens; as an interim exception
-    until issue 30, the RAG projection (rag_retrieval.projection) may scroll inside its
-    named, keyboard-focusable region on phones (below 768 px), never from 768 px up.
+    keep a fixed scale and scroll horizontally, from 48rem (768 px) up where they do not
+    fit; below 48rem they become the step list (diagram.phone_list), and the RAG projection
+    takes its compact form (rag_retrieval.projection), so nothing scrolls horizontally on
+    a phone.
   - Figures expose their text to assistive technology; scrollable regions are named
     and keyboard-focusable.
   motion: Motion only shows causality (an arrow draws from sender to receiver). Nothing
@@ -173,7 +174,7 @@ layout:
   brand: 'The header starts with the wordmark (public/brand/agentscope-silver-light.svg, the
     variant for the light paper; light theme only) as the page''s level-1 heading, an image
     with the text alternative "AgentScope" that links to #/. It is 40 px high (five baseline
-    units), its badge flush with the left alignment line and the baseline of its lettering
+    units; 32 px, four units, on phones, layout.phone), its badge flush with the left alignment line and the baseline of its lettering
     on the baseline of the header row, so it does not crowd the tabs, the controls or the
     simulated statement. index.html declares agentscope-silver-favicon.svg as an
     image/svg+xml icon. Both URLs resolve against the base path, are served from the app''s
@@ -183,7 +184,40 @@ layout:
     offline." in the same small ink-muted text. Nothing is shown before that, nor where no service
     worker runs (the development server, insecure origins); there is no progress or error message.'
   tablet: Stack inspector below horizontally scrollable diagram
-  breakpoint: Side by side from 64rem; stacked below
+  breakpoint: Side by side from 64rem; stacked below; the phone layout below 48rem
+  phone:
+    breakpoint: Below 48rem (768 px), which includes a desktop browser zoomed to 200%; from
+      48rem the tablet and desktop layouts apply unchanged.
+    principle: One column that reads top to bottom. Nothing scrolls horizontally, on the
+      page or inside any region, in any tab, scenario, mode or panel, from 360 px wide.
+    header: 'The wordmark (32 px high), then on its row a disclosure "Menu" (dotted underline
+      like every fold); below them the tabs and the simulated statement, always visible.
+      The menu holds the scenario picker (its list shown in place), the architecture/protocol
+      switch, the speeds, Start and Reset, each group labelled in small ink-muted text. It
+      opens below the wordmark row and pushes the page down; it closes on Escape (focus
+      returns to it), a pointer press outside it, or a scenario choice.'
+    controls: 'A bar fixed to the bottom edge of the screen, within thumb reach: the position
+      ("Step <k> of <n> · <phase>", the line the timeline shows from 48rem), then Previous,
+      Play or Pause and Next side by side in equal widths. It stays in place while the page
+      scrolls; the page ends with room for it, and focused elements scroll clear of it. In
+      Compare it holds the compare step and the shared Previous, Play or Pause and Next. The
+      step sliders stay where they are.'
+    touch_targets: 'Every control outside running text (buttons, tabs, the menu and its
+      entries, toggles, sliders) is at least 44 × 44 px. Links and buttons inside a sentence
+      (citations, step links, the lineage jumps) and folds inside code are exempt, as in WCAG
+      2.5.8.'
+    presentation: The diagram region shows the step list (diagram.phone_list) and scrolls
+      vertically only, at most 45% of the screen's height, so the message below it stays
+      in view while stepping.
+    inspector: 'Below the diagram region, in this order: the prediction prompt when shown
+      (learning.prediction), the message line and the error line, always visible; then a
+      toggle "Step details" (aria-expanded, dotted underline) over the tabs, collapsed at
+      start and kept as the learner left it while stepping. Long values and code wrap; no
+      tab scrolls sideways.'
+    panels: Every panel below the timeline stacks into one column; the projection takes its
+      compact form (rag_retrieval.projection).
+    input: Nothing depends on hover. Focus, the keys of controls.keyboard and the focus
+      order work as on desktop, for a learner with a hardware keyboard.
   splitter: The boundary between diagram and inspector is a separator that resizes them
     by pointer drag or, when focused, the arrow keys; the inspector keeps 20rem to 60% of
     the width
@@ -210,7 +244,8 @@ diagram:
     with it (HTTP 200 OK). In-process, RAG-internal and UI steps show the operation only.'
   layout:
     lifeline_spacing: At least 110 px; wider gaps only where an arrow label needs the room,
-      up to 240 px. On narrow screens the diagram scrolls horizontally.
+      up to 240 px. From 48rem, where it does not fit, the diagram scrolls horizontally;
+      below 48rem it is the step list (phone_list).
     rows: One row per event in order, so labels never share a row. The label sits above
       its arrow, starting at the arrow's left end; a label longer than its arrow extends
       to the right and the diagram widens to fit it.
@@ -223,6 +258,22 @@ diagram:
     current: emphasized
     future: hidden in protocol mode; rows keep their space so the layout does not move
       as the cursor advances
+  phone_list: 'Below 48rem (layout.phone) the diagram is a one-dimensional list in the same
+    region, from the same events, visibility, marks and expanded groups as the diagram.
+    Protocol mode lists each reached event in order (future steps are not listed, so the
+    current step is the last row): its step number in small ink-muted text, its arrow label
+    (labels, error_events), and below it the sender and the receiver by registry label,
+    joined by a short arrow 32 px long drawn with the event''s encoding (line kind, filled or
+    open head, the accent for the current step and its pair, the error colour for an error).
+    A self-call names its participant once, followed by a short loop. Each row names its two
+    participants, so there are no lifelines and no participant header. Architecture mode
+    stacks the groups of modes.architecture_groups as flat sections in order, separated by a
+    hairline rule, with no frame: each section is one full-width button with the takeaway,
+    then the caption below it; the current group has a 3 px accent bar along its left edge
+    and its takeaway in weight 600; an expanded group lists its reached events below its
+    button, as protocol mode does. A selected lineage value marks a row''s label, or a
+    collapsed group''s caption, as in the diagram. The region scrolls vertically only and
+    keeps the current row or group in view (auto_scroll_to_current, modes.scrolling).'
   pair_highlighting: true
   auto_scroll_to_current: Keep the current step (or current group) in view; scroll
     smoothly, or instantly with reduced motion
@@ -424,7 +475,10 @@ compare_view:
     (rag-query, headed RAG) and the right scenario (mcp-balance, headed MCP), side by side from 64rem
     and stacked below, left first. Then one row per entry of compare.aspects: its label in small
     ink-muted text beside its sentence, the label above the sentence below 48rem. Nothing makes the
-    page scroll horizontally at any width; each diagram scrolls inside its own region.'
+    page scroll horizontally at any width; each diagram scrolls inside its own region, and below
+    48rem each pane''s diagram is the step list (diagram.phone_list), the shared Previous, Play or
+    Pause and Next sit in the bottom bar and the speeds, Start, Reset and the mode switch in the
+    menu (layout.phone).'
   pane: 'Each pane shows its scenario''s question, its position ("Step <k> of <n> · <scenario phase
     label>") with its own step slider, the current event''s explanation with sender → receiver and
     operation (inspector.message_line), its sequence diagram, and a link "Inspect step <k> in <tab>"
@@ -579,8 +633,14 @@ rag_retrieval:
     assistive technology as an image named by its chunk ID, coordinates and whether it is
     retained. One sentence below states that the projection is fixed and conceptual and that
     scores are computed in all dimensions. The plot fits the available width with text at its
-    real size from 768 px up; on narrower screens, where the plot and its labels cannot fit,
-    it scrolls horizontally in a named, keyboard-focusable region (labels_and_charts).'
+    real size. Where no layout with a side of at least 260 px places every label within the
+    width (phones, below 768 px), the plot takes a compact form instead of scrolling: the
+    square plot at the available width (side at most 360 px) with its axes, their names and
+    every point marked as above, only the question labelled at its point; then, below it, a
+    list of the chunk points in score order, each with its label (shared labels as above), its
+    position named by the axes with 2 decimals (for example "everyday-account@1.2 · 001: rules
+    0.31, product 0.62") and "retained" in words when it is. The compact form shows where the
+    retained chunks lie relative to the question; the list names every point without a key.'
   prompt: 'From retrieve-09, "Prompt before and after retrieval": retrieve-09 prompt_before
     and retrieve-09 prompt_after filled in (its system message, and its user_template with
     the question and one document block per item of its document_blocks and retrievedText,
