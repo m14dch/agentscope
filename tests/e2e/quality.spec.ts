@@ -115,18 +115,27 @@ type Stop = { what: string; index: number; visible: boolean; onScreen: boolean }
  */
 async function markControls(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const selector = [
+    const interactive = [
       'a[href]',
       'button',
       'input',
       'select',
       'textarea',
       'summary',
-      '[tabindex]',
+      '[role="button"]',
+      '[role="tab"]',
     ].join(',');
+    // Anything else in the tab order (scroll regions, for example) counts too.
+    const selector = `${interactive},[tabindex]:not([tabindex="-1"])`;
+    /** A tab of a roving group: out of the tab order while another tab of its list is in it. */
+    const roving = (el: Element) =>
+      el.matches('[role="tab"]') &&
+      !!el.closest('[role="tablist"]')?.querySelector('[role="tab"][tabindex="0"]');
     const controls = [...document.querySelectorAll<HTMLElement | SVGElement>(selector)].filter(
       (el) => {
-        if (el.getAttribute('tabindex') === '-1' || el.matches(':disabled')) return false;
+        // An interactive control taken out of the tab order is a finding, unless it is roving.
+        if (el.getAttribute('tabindex') === '-1' && roving(el)) return false;
+        if (el.matches(':disabled')) return false;
         if (!el.checkVisibility({ visibilityProperty: true })) return false;
         const box = el.getBoundingClientRect();
         return box.width > 0 && box.height > 0;
