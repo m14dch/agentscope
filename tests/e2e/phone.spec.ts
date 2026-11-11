@@ -238,6 +238,94 @@ for (const [width, height] of SIZES) {
       });
     }
 
+    test('Play keeps the stepping area on screen until the learner scrolls; Next brings it back', async ({
+      page,
+    }) => {
+      // mcp-balance asks for predictions before steps 11, 14 and 26: Play runs 14 to 25.
+      await page.goto('./#/mcp/mcp-balance/14/protocol');
+      await list(page).and(page.locator('[data-measured]')).waitFor();
+      await page.getByRole('button', { name: 'Step details' }).click();
+      const status = page.locator('.controls .status');
+      const barTop = async (): Promise<number> => (await bar(page).boundingBox())?.y ?? 0;
+      const inView = async (): Promise<boolean> => {
+        const region = await list(page).boundingBox();
+        const message = await page.locator('.inspector .message').boundingBox();
+        const limit = await barTop();
+        return (
+          !!region && !!message && region.y >= -0.5 && message.y + message.height <= limit + 0.5
+        );
+      };
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await bar(page).getByRole('button', { name: 'Play', exact: true }).click();
+      // Without scrolling, each Play step keeps the stepping area on screen.
+      for (const k of [16, 17, 18]) {
+        await expect(status).toHaveText(new RegExp(`^Step ${k} of 28`));
+        expect(await inView(), `step ${k}`).toBe(true);
+      }
+      // The learner scrolls down to read the payload: Play leaves the page where it is.
+      await page.mouse.move(width / 2, 200);
+      await page.mouse.wheel(0, 600);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+      await page.waitForTimeout(100);
+      const reading = await page.evaluate(() => window.scrollY);
+      expect(await inView()).toBe(false);
+      for (const k of [21, 22, 23]) {
+        await expect(status).toHaveText(new RegExp(`^Step ${k} of 28`));
+        expect(await page.evaluate(() => window.scrollY), `step ${k}`).toBe(reading);
+      }
+      // An explicit step brings the stepping area back.
+      await bar(page).getByRole('button', { name: 'Next', exact: true }).click();
+      expect(await inView()).toBe(true);
+    });
+
+    test('Compare: stepping with Next keeps the current rows of the changed panes above the bar', async ({
+      page,
+    }) => {
+      for (const mode of ['/protocol', '']) {
+        await page.goto(`./#/compare/compare-rag-mcp/0${mode}`);
+        await expect(page.locator('[data-presentation="list"][data-measured]')).toHaveCount(2);
+        await page.evaluate(() => window.scrollTo(0, 0));
+        const n = Number(
+          await page.getByRole('slider', { name: 'Compare step' }).getAttribute('max'),
+        );
+        const sliders = ['RAG step', 'MCP step'].map((name) => page.getByRole('slider', { name }));
+        const cursors = async (): Promise<string[]> =>
+          Promise.all(sliders.map(async (s) => (await s.inputValue()) ?? ''));
+        const panes = [
+          page.getByRole('region', { name: 'RAG', exact: true }),
+          page.getByRole('region', { name: 'MCP', exact: true }),
+        ];
+        for (let k = 1; k <= n; k += 1) {
+          const before = await cursors();
+          await bar(page).getByRole('button', { name: 'Next', exact: true }).click();
+          await expect(page.locator('.controls .compare-status')).toHaveText(
+            new RegExp(`^Step ${k} of ${n}`),
+          );
+          const after = await cursors();
+          const limit = (await bar(page).boundingBox())?.y ?? 0;
+          const rows = [];
+          for (const i of [0, 1]) {
+            if (before[i] === after[i]) continue;
+            const box = await (panes[i] as Locator)
+              .locator('.diagram-pane [data-current]')
+              .last()
+              .boundingBox();
+            expect(box, `compare ${k}${mode} pane ${i}`).not.toBeNull();
+            if (box) rows.push(box);
+          }
+          if (!rows.length) continue;
+          const on = (b: { y: number; height: number }): boolean =>
+            b.y >= -0.5 && b.y + b.height <= limit + 0.5;
+          const lower = rows[rows.length - 1] as { y: number; height: number };
+          const upper = rows[0] as { y: number; height: number };
+          // Both when they fit together, else the lower changed pane's.
+          const together = lower.y + lower.height - upper.y <= limit - 16;
+          if (together) for (const b of rows) expect(on(b), `compare ${k}${mode}: rows`).toBe(true);
+          else expect(on(lower), `compare ${k}${mode}: lower row`).toBe(true);
+        }
+      }
+    });
+
     test('Compare: both panes use the step list and nothing scrolls sideways', async ({ page }) => {
       for (const mode of ['', '/protocol']) {
         await page.goto(`./#/compare/compare-rag-mcp/0${mode}`);

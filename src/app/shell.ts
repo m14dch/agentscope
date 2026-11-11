@@ -39,7 +39,7 @@ import {
   tabScenarios,
 } from './routes.ts';
 import { offlineIndicator } from './offline.ts';
-import { isPhone, relocate } from './phone.ts';
+import { isPhone, PageScroll, relocate } from './phone.ts';
 import { CompareView } from '../compare/view.ts';
 import { appUrl } from '../base.ts';
 import '../styles/diagram.css';
@@ -186,6 +186,10 @@ export class Shell {
   private route: Route | undefined;
   /** True while a parameter changes, which never scrolls the page (02 layout.phone.stepping_area). */
   private adjusting = false;
+  /** True during an explicit step action of the learner (02 layout.phone.stepping_area). */
+  private explicit = false;
+  /** Tells the learner's own scrolling from the app's jumps. */
+  private readonly pageScroll = new PageScroll();
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -199,6 +203,7 @@ export class Shell {
   destroy(): void {
     this.leaveScenario();
     window.removeEventListener('keydown', this.onKey);
+    this.pageScroll.destroy();
     this.headerListeners?.abort();
     this.root.replaceChildren();
     this.root.className = '';
@@ -457,6 +462,7 @@ export class Shell {
       return { scenario: this.registry[id] as Scenario, label: TAB_LABELS[tab], tab };
     };
     this.compare = new CompareView(this.content, {
+      pageScroll: this.pageScroll,
       compare,
       phases: semantic_phases,
       panes: [pane(compare.left_scenario), pane(compare.right_scenario)],
@@ -500,7 +506,7 @@ export class Shell {
       el('h2', { tabindex: '-1' }, scenario.learning_question),
       el('p', { class: 'headline' }, scenario.headline),
     );
-    const play = button('Play', () => player.toggle());
+    const play = button('Play', () => this.act(() => player.toggle()));
     const start = button('Start', () => this.go(() => player.start()));
     const reset = button('Reset', () => this.go(() => player.reset()));
     const speeds = el('div', { class: 'segmented', role: 'group', 'aria-label': 'Speed' });
@@ -746,8 +752,11 @@ export class Shell {
       }
       this.syncUrl();
       const position = `${k}:${promptAt ?? ''}`;
-      if (rendered !== undefined && position !== rendered && !this.adjusting)
-        this.keepInView(diagram, inspector, controls);
+      // An explicit step brings the stepping area back; a Play tick (or a link followed) only
+      // while the learner has not scrolled the page since (02 layout.phone.stepping_area).
+      if (rendered !== undefined && position !== rendered && !this.adjusting) {
+        if (!this.pageScroll.userScrolled) this.keepInView(diagram, inspector, controls);
+      }
       rendered = position;
     };
 
@@ -807,15 +816,33 @@ export class Shell {
     ];
   }
 
+  /** Runs an explicit step action of the learner (02 layout.phone.stepping_area). */
+  private act(action: () => void): void {
+    // The learner's scrolling counts until the next explicit step action.
+    this.pageScroll.reset();
+    this.explicit = true;
+    try {
+      action();
+    } finally {
+      this.explicit = false;
+    }
+  }
+
   /** Runs a navigation that never shows a prediction prompt. */
   private go(action: () => void): void {
-    if (this.current) this.current.prompt = undefined;
-    action();
-    this.current?.render();
+    this.act(() => {
+      if (this.current) this.current.prompt = undefined;
+      action();
+      this.current?.render();
+    });
   }
 
   /** Next: show a pending prediction first, then run the step (02 learning.prediction_rules). */
   private next(): void {
+    this.act(() => this.nextStep());
+  }
+
+  private nextStep(): void {
     const c = this.current;
     if (!c) return;
     const upcoming = c.player.playback.event(c.player.cursor + 1);
@@ -973,7 +1000,7 @@ export class Shell {
     const lines = inspector.querySelectorAll('.prediction, .message, .message ~ p');
     const bottom = Math.max(0, ...[...lines].map((l) => l.getBoundingClientRect().bottom));
     if (top >= 0 && bottom <= bar.getBoundingClientRect().top) return;
-    window.scrollTo({ top: window.scrollY + top - 8, behavior: 'instant' });
+    this.pageScroll.jumpBy(top - 8);
   }
 
   /** Selects a lineage value or clears the selection (02 lineage_selection). */
@@ -991,6 +1018,7 @@ export class Shell {
     const compare = this.compare;
     if (compare) {
       if (keyBelongsToFocus(e.target, e.key)) return;
+      // CompareView treats these as the learner's explicit step actions.
       if (e.key === 'ArrowRight') compare.next();
       else if (e.key === 'ArrowLeft') compare.previous();
       else if (e.key === ' ') compare.toggle();
@@ -1008,7 +1036,7 @@ export class Shell {
     if (keyBelongsToFocus(e.target, e.key)) return;
     if (e.key === 'ArrowRight') this.next();
     else if (e.key === 'ArrowLeft') this.go(() => c.player.previous());
-    else if (e.key === ' ') c.player.toggle();
+    else if (e.key === ' ') this.act(() => c.player.toggle());
     else return;
     e.preventDefault();
   };

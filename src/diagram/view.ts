@@ -203,7 +203,9 @@ export class DiagramView {
     top = Math.max(0, top);
     left = Math.max(0, left);
     if (top === this.root.scrollTop && left === this.root.scrollLeft) return;
-    this.root.scrollTo({ top, left, behavior: reducedMotion() ? 'instant' : 'smooth' });
+    // The step list scrolls at once, so the page can follow it (02 layout.phone.stepping_area).
+    const instant = reducedMotion() || this.root.dataset['presentation'] === 'list';
+    this.root.scrollTo({ top, left, behavior: instant ? 'instant' : 'smooth' });
   }
 
   private readonly onClick = (event: Event): void => {
