@@ -211,11 +211,21 @@ layout:
     worker runs (the development server, insecure origins); there is no progress or error message.'
   tablet: Stack inspector below horizontally scrollable diagram
   breakpoint: Side by side from 64rem; stacked below; the phone layout below 48rem
-  max_width: 'The page''s content (header, lesson, controls, diagram, inspector, timeline and
-    panels) is at most 90rem (1440 px) wide, centred, the side margins inside it; nothing
-    extends beyond it, the diagram region included, which scrolls inside it as before. Beyond
-    90rem the paper is empty on both sides. Running text keeps a measure of about 45–75
-    characters: the learning question and headline are at most 36rem wide.'
+  max_width: 'The page does not use more width than its content needs. The header, the
+    simulated statement, the learning question and headline, the controls, the timeline and
+    the panels below it lie in a column at most 90rem (1440 px) wide, side margins included,
+    centred; beyond it the paper is empty on both sides. Only the workspace (the diagram
+    region with the splitter and the inspector; in Compare the two panes) may be wider, and
+    only as far as its diagram needs: at most the diagram''s natural width plus the splitter
+    and the inspector at its current share (in Compare twice the wider pane''s natural width
+    plus the gap between the panes), and never wider than the screen less its side margins; it is centred on the same axis
+    and never narrower than the column. A diagram that fits the column (rag-query) keeps the
+    column''s width; one that needs more (mcp-balance) gets it, so at 1920 px it does not
+    scroll sideways. The natural width is the widest layout of the scenario at its current
+    parameters (protocol mode with every step shown, or the current layout if wider), so
+    the workspace does not change width while stepping. Below 64rem, where the inspector
+    stacks, nothing changes. Running text keeps a measure of about 45–75 characters: the
+    learning question and headline are at most 36rem wide.'
   phone:
     breakpoint: Below 48rem (768 px), which includes a desktop browser zoomed to 200%; from
       48rem the tablet and desktop layouts apply unchanged.
