@@ -255,11 +255,14 @@ for (const [width, height] of [
           expect(stops.filter((s) => !s.visible).map((s) => s.what)).toEqual([]);
           expect(stops.filter((s) => !s.onScreen).map((s) => s.what)).toEqual([]);
 
-          // Enter on Next steps; arrows move between the inspector's tabs.
+          // Enter on Previous step steps back; the focused icon button shows its name and key.
           await page.reload();
           await ready(page);
           const now = (await line.textContent()) ?? '';
-          await tabTo(page, 'button', 'Previous');
+          await tabTo(page, 'button[data-icon="previous"]');
+          const label = focused(page).locator('.control-label');
+          await expect(label).toHaveText('Previous step (←)');
+          expect((await label.boundingBox())?.width ?? 0).toBeGreaterThan(40);
           await page.keyboard.press('Enter');
           await expect(line).not.toHaveText(now);
           if (!compare) {

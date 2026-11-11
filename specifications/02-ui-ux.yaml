@@ -36,7 +36,7 @@ design:
     background but is not shown.
   - 'Retained chunks keep the accent in the score plot and the projection (issue 15),
     although handover 4.2 reserves Peach Red for the current step: inside a retrieval chart
-    the retained chunks are what to look at now. The charts sit below the timeline, apart from
+    the retained chunks are what to look at now. The charts sit below the diagram and inspector, apart from
     the diagram''s current arrow and the current group''s accent bar above it, and they show
     the outcome of the current step itself (the selection made at the step that applies top K
     and the threshold), so the accent in both places points at the same thing. The accent is never the only
@@ -44,6 +44,11 @@ design:
     words. Nothing is retained, and nothing is in the accent, before the step that applies
     top K and the threshold. A lineage selection marks a chunk''s label with the selection
     background and ink underline, never its dot, so no accent mark sits on selection.'
+  - 'The four playback buttons Reset, Previous step, Play or Pause and Next step show the standard
+    media icons (issue 48). They are functional controls, not decorative icons: the icon is the
+    control''s face, as on any media player, and replaces a row of text labels. Each keeps a text
+    name for assistive technology and shows its name and key in words while it has focus, so
+    nothing depends on recognising the icon or on hover (controls.row).'
   governing_rule: Maximise the signal-to-noise ratio. Viewers already process protocols,
     payloads, context and trust boundaries; anything that carries no information is
     noise and is removed.
@@ -184,14 +189,16 @@ layout:
   desktop:
   - 'Top bar: navigation, scenario, architecture/protocol toggle'
   - 'Main: resizable sequence diagram + payload inspector'
-  - 'Bottom: execution timeline + a collapsible model-context panel, collapsed at start,
+  - 'Below the learning question: the control row (controls.row), the playback buttons, the
+    play speed and the timeline side by side'
+  - 'Bottom: a collapsible model-context panel, collapsed at start,
     in rag-index the ingestion panel (rag_ingestion), in rag-query the retrieval panel
     (rag_retrieval) and, in the Combined scenario, the answer''s provenance (combined_answer). Lineage lives in the inspector''s
     Lineage tab and in the diagram (lineage_selection), not in a panel of its own'
   - 'Header: one persistent statement that everything is simulated and nothing leaves
     the browser'
   - 'Above the diagram: the scenario''s learning question and headline'
-  - Bottom panels appear only once they have content; until then only the timeline shows
+  - Bottom panels appear only once they have content
   brand: 'The header starts with the wordmark (public/brand/agentscope-silver-light.svg, the
     variant for the light paper; light theme only) as the page''s level-1 heading, an image
     with the text alternative "AgentScope" that links to #/. It is 40 px high (five baseline
@@ -236,18 +243,20 @@ layout:
     header: 'The wordmark (32 px high), then on its row a disclosure "Menu" (dotted underline
       like every fold); below them the tabs and the simulated statement, always visible.
       The menu holds the scenario picker''s list of scenarios on RAG (shown in place, without the
-      picker''s own fold), the architecture/protocol switch, the speeds, Start and Reset, each
+      picker''s own fold), the architecture/protocol switch and the play speed, each
       group labelled in small ink-muted text, and last the GitHub link (layout.source_link).
       These controls move into the menu; none is duplicated. It opens below the wordmark row
-      and pushes the page down; it closes on Escape anywhere on the page while it is open (focus returns to it), a pointer press
-      outside it, a scenario choice or a change of view (focus returns to it).'
+      and pushes the page down; it closes on Escape anywhere on the page while it is open
+      (focus returns to it), a pointer press outside it, a scenario choice or a change of view
+      (focus returns to it).'
     controls: 'A bar fixed to the bottom edge of the screen, within thumb reach: the position
-      ("Step <k> of <n> · <phase>", the line the timeline shows from 48rem), then Previous,
-      Play or Pause and Next side by side in equal widths. It stays in place while the page
-      scrolls; the page ends with room for it (and for the safe area at the screen''s bottom
-      edge), and focused elements scroll clear of it. In
-      Compare it holds the compare step and the shared Previous, Play or Pause and Next. The
-      step sliders stay where they are.'
+      ("Step <k> of <n> · <phase>", the line the timeline shows from 48rem), then the step
+      slider at full width, then Reset, Previous step, Play or Pause and Next step as their icons
+      (controls.row) side by side in equal widths, so the progress sits next to the buttons. It
+      stays in place while the page scrolls; the page ends with room for it (and for the safe
+      area at the screen''s bottom edge), and focused elements scroll clear of it. In Compare it
+      holds the compare step, the shared slider and the shared buttons; each pane''s slider stays
+      in its pane.'
     touch_targets: 'Every control outside running text (buttons, tabs, the menu and its
       entries, toggles, sliders) is at least 44 × 44 px. Links and buttons inside a sentence
       (citations, step links, the lineage jumps) and folds inside code are exempt, as in WCAG
@@ -264,7 +273,7 @@ layout:
       then in view inside the region, whose list scrolls at once too
       (diagram.auto_scroll_to_current), so the learner sees the current step, any prediction
       prompt and the message without scrolling. An explicit step action (Next, Previous,
-      Continue, Play or Pause, Start, Reset, the keys, a step slider or a jump link) always
+      Continue, Play or Pause, Reset, the keys, a step slider or a jump link) always
       does this, even when the learner had scrolled down to read the payload: it brings the
       stepping area back. A step made by Play does it only while the learner has not scrolled
       the page since the last explicit step action. A scroll of the page counts as the
@@ -284,7 +293,7 @@ layout:
       toggle "Step details" (aria-expanded, dotted underline) over the tabs, collapsed at
       start and kept as the learner left it while stepping. Long values and code wrap; no
       tab scrolls sideways.'
-    panels: Every panel below the timeline stacks into one column; the projection takes its
+    panels: Every panel below the diagram and inspector stacks into one column; the projection takes its
       compact form (rag_retrieval.projection).
     input: Nothing depends on hover. Focus, the keys of controls.keyboard and the focus
       order work as on desktop, for a learner with a hardware keyboard.
@@ -292,7 +301,8 @@ layout:
     by pointer drag or, when focused, the arrow keys; the inspector keeps 20rem to 60% of
     the width
   timeline: A step slider from 0 to the number of steps, labelled with the step and its
-    phase
+    phase, and the position line "Step <k> of <n> · <phase>" beside it, both in the control
+    row after the playback buttons (controls.row), never at the bottom of the page
   minimum_lifeline_width_px: 110
 diagram:
   participants: Scenario-defined and ordered; labels from the participant registry
@@ -397,14 +407,13 @@ learning:
     is scored and the prompt never blocks keyboard navigation.
   prediction_rules: Next (button or →) on a step whose next event has a prediction shows
     the prompt instead of advancing; Next or Continue then runs the step. Play pauses
-    there and shows the prompt. Previous, jump, start and reset never show a prompt.
+    there and shows the prompt. Previous, jump and reset never show a prompt.
   simulated_behaviour: Model output is labelled as simulated wherever it appears; nothing
     suggests a live decision. The explanation of every response the model sends (LLM API
     responses from the LLM provider, tool-call requests included) starts with "Simulated model
     output".
 controls:
   actions:
-  - start
   - next
   - previous
   - play
@@ -412,11 +421,10 @@ controls:
   - reset
   - jump_to_step
   action_rules:
-    start: Go to the first step; playback keeps its status
     reset: Return to the initial state before any step and pause
     previous: Recompute the previous snapshot; never undo side effects
     play: Advance one step per interval until the last step, then pause
-    manual_navigation: Next, previous, start and jump keep playback running and restart
+    manual_navigation: Next, previous and jump keep playback running and restart
       the interval
     parameter_change: The cursor stays on the same event if that event is still played;
       otherwise it moves to the nearest earlier event that is still played, or to 0. Optional
@@ -430,12 +438,29 @@ controls:
   - 1
   - 2
   - 4
+  speed_control: 'One menu (a select) labelled "Play speed" offers the speeds as 0.5×, 1×, 2× and
+    4×, 1× chosen at first. It sets the interval of Play: at once while playing, else the next
+    time Play runs. There are no separate speed buttons.'
+  row: 'One row below the learning question, in this order: Reset, Previous step, Play or Pause,
+    Next step, the play speed (speed_control), then the timeline (layout.timeline): the step slider,
+    taking the remaining width but at least 12rem, and the position line. The four buttons show the standard media
+    icons, inline SVG in ink at 24 px: a circular arrow (Reset), a bar and a triangle pointing left
+    (Previous step), a triangle pointing right (Play) or two bars (Pause), and a triangle pointing
+    right and a bar (Next step). Each button is named in text (Reset, Previous step, Play or Pause,
+    Next step), declares its key of controls.keyboard (aria-keyshortcuts; Reset has none) and,
+    while it has focus, shows its name and key in small text: below the button, clear of the
+    rule under the row, and on phones above the whole bottom bar, so it covers neither the
+    position line nor the slider; nothing depends on hover.
+    While playing, Play shows the Pause icon and is named Pause. When the row is too narrow, the
+    timeline wraps onto its own line directly below the buttons. Below 48rem the position line,
+    the slider and the buttons form the bottom bar and the speed moves into the menu
+    (layout.phone).'
   keyboard:
     ArrowRight: next
     ArrowLeft: previous
     Space: toggle play/pause
   keyboard_scope: The keys act anywhere on the page except where focus needs them itself
-    (Space on buttons, links and menus; the arrow keys on text fields, the step slider,
+    (Space on buttons, links and menus; the arrow keys on text fields, the play speed, the step slider,
     the splitter, the inspector tabs and the diagram's scroll region)
   reduced_motion: true
 inspector:
@@ -538,13 +563,14 @@ lineage_selection:
     so a long list adds no information. Steps after the current one are not revealed.
 compare_view:
   shown_in: The Compare tab (navigation.tab_contents), built from 06-comparison-scenarios.yaml compare.
-  layout: 'The headline, the shared controls, the phase line, then two panes: the left scenario
+  layout: 'The headline, the shared control row (controls.row, with the shared slider and the
+    compare step as its timeline), the semantic phase labels, then two panes: the left scenario
     (rag-query, headed RAG) and the right scenario (mcp-balance, headed MCP), side by side from 64rem
     and stacked below, left first. Then one row per entry of compare.aspects: its label in small
     ink-muted text beside its sentence, the label above the sentence below 48rem. Nothing makes the
     page scroll horizontally at any width; each diagram scrolls inside its own region, and below
     48rem each pane''s diagram is the step list (diagram.phone_list), the shared Previous, Play or
-    Pause and Next sit in the bottom bar and the speeds, Start, Reset and the mode switch in the
+    Pause and Next sit with Reset in the bottom bar and the play speed and the mode switch in the
     menu (layout.phone).'
   pane: 'Each pane shows its scenario''s question, its position ("Step <k> of <n> · <scenario phase
     label>") with its own step slider, the current event''s explanation with sender → receiver and
@@ -562,14 +588,15 @@ compare_view:
     for exactly these phases) replaces the message. Both panes therefore always show the same semantic
     phase. This needs each scenario''s events to visit the semantic phases in their order, which a unit
     test checks.'
-  controls: 'One set of shared controls drives the timeline: Start (compare step 1), Previous, Play or
-    Pause, Next, Reset, the speeds and the keys of controls.keyboard, under controls.action_rules (Play
-    advances one compare step per interval). Next therefore steps whichever panes still have events in
+  controls: 'One set of shared controls drives the timeline, in the order and form of controls.row:
+    Reset, Previous step, Play or Pause, Next step, the play speed, the shared slider and the compare
+    step, with the keys of controls.keyboard, under controls.action_rules (Play advances one compare
+    step per interval). Next therefore steps whichever panes still have events in
     the current phase, and moves both to the next phase once neither has. A shared slider jumps to any
     compare step. A pane''s own slider moves that pane: the position becomes the first compare step at
     which that pane is at the chosen step, and the other pane follows to the same semantic phase.'
-  phase_line: 'Above the panes, the compare step ("Step <s> of <m> · <phase label>") and the semantic
-    phase labels in order, the current one in weight 600 and marked as the current step for assistive
+  phase_line: 'Above the panes, the compare step ("Step <s> of <m> · <phase label>", in the control
+    row) and below the row the semantic phase labels in order, the current one in weight 600 and marked as the current step for assistive
     technology; the others in ink-muted. Before step 1 no phase is current.'
   defaults: 'Both scenarios play at their default parameters; Compare offers no parameter controls.
     Prediction prompts are not shown in Compare, since a shared step would answer a question asked in
@@ -624,7 +651,7 @@ rag_controls:
     Each control keeps keyboard focus while the scenario recomputes; the slider moves with
     the arrow keys, which then do not step the scenario (controls.keyboard_scope).'
 rag_ingestion:
-  shown_in: rag-index, below the timeline, from the step that returns the chunks (index-05);
+  shown_in: rag-index, below the diagram and inspector, from the step that returns the chunks (index-05);
     its chunk IDs and vectors are read from the played index-05 and index-07 events, so the
     screen always equals them.
   layout: 'Three columns from 64rem, stacked below: the source document (chosen with a
@@ -649,7 +676,7 @@ rag_ingestion:
 rag_retrieval:
   shown_in: 'Scenarios that derive retrieve-12, the answer (rag-query; the
     Combined scenario derives only retrieve-05 and retrieve-06 and has no panel), below the
-    timeline, from the step that returns the scored chunks (retrieve-05). Scores, the
+    diagram and inspector, from the step that returns the scored chunks (retrieve-05). Scores, the
     threshold, the selection, the prompt and the answer are read from the played events
     (retrieve-03, retrieve-05, hybrid-02, hybrid-03, retrieve-06, retrieve-09, retrieve-10,
     retrieve-12), so the screen always equals them and shows nothing a later step decides;
@@ -724,7 +751,7 @@ rag_retrieval:
     (stepping back before retrieve-05) while it holds focus, focus moves to the step slider,
     as in rag_ingestion.
 combined_answer:
-  shown_in: 'The Combined scenario, below the timeline, from the step that
+  shown_in: 'The Combined scenario, below the diagram and inspector, from the step that
     displays the answer (c-08); absent before. The answer and its sources are read from the
     played c-08, the balance from the played tools/call result (mcp-23) and chunk text from the
     index the scenario searches, so the screen always equals the events.'

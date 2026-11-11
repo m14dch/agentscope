@@ -107,7 +107,7 @@ test('a prediction appears before its step and the step answers it', async ({ pa
 
 test('play pauses at a prediction', async ({ page }) => {
   await open(page, '#/mcp/mcp-balance/9');
-  await page.getByRole('button', { name: '4×' }).click();
+  await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
   await page.getByRole('button', { name: 'Play' }).click();
   await expect(page.locator('.prediction')).toBeVisible({ timeout: 5000 });
   await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
@@ -212,6 +212,62 @@ test('the splitter resizes the inspector with the keyboard, within 20rem and 60%
   expect(await width()).toBeLessThanOrEqual(narrower * 0.6 + 1);
   await splitter.press('End');
   expect(await width()).toBeGreaterThanOrEqual(320 - 1);
+});
+
+// 02 controls.row and speed_control: four named icon buttons, one speed menu, no Start.
+test('the control row: named icon buttons with their keys, one play speed, the timeline beside them', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await open(page, '#/mcp/mcp-balance/0');
+  const controls = page.getByRole('group', { name: 'Playback' });
+  const buttons = controls.getByRole('button');
+  const expected = [
+    ['Reset', null],
+    ['Previous step', 'ArrowLeft'],
+    ['Play', 'Space'],
+    ['Next step', 'ArrowRight'],
+  ] as const;
+  await expect(buttons).toHaveCount(expected.length);
+  for (const [i, [name, key]] of expected.entries()) {
+    const b = buttons.nth(i);
+    await expect(b).toHaveAccessibleName(name);
+    if (key) await expect(b).toHaveAttribute('aria-keyshortcuts', key);
+    else await expect(b).not.toHaveAttribute('aria-keyshortcuts');
+    await expect(b.locator('svg.icon')).toHaveAttribute('aria-hidden', 'true');
+  }
+  await expect(page.getByRole('button', { name: /^Start$/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /×$/ })).toHaveCount(0);
+  // The slider and the position line share the row with the buttons.
+  const top = async (selector: string) => (await page.locator(selector).boundingBox())?.y ?? -1;
+  const row = { y: await top('.controls'), h: (await controls.boundingBox())?.height ?? 0 };
+  for (const selector of ['.control-row input[type="range"]', '.control-row .status']) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box && box.y + box.height / 2).toBeGreaterThan(row.y);
+    expect(box && box.y + box.height / 2).toBeLessThan(row.y + row.h);
+  }
+  // Play speed: one menu, 1× at first; at 4× Play steps every 375 ms. Play becomes Pause.
+  const speed = page.getByRole('combobox', { name: 'Play speed' });
+  await expect(speed).toHaveValue('1');
+  await expect(speed.locator('option')).toHaveText(['0.5×', '1×', '2×', '4×']);
+  // The arrow keys on the menu change the speed and do not step (controls.keyboard_scope).
+  await speed.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(speed).toHaveValue('2');
+  await expect(status(page)).toHaveText('Step 0 of 28');
+  await speed.selectOption('4');
+  await buttons.nth(2).click();
+  await expect(buttons.nth(2)).toHaveAccessibleName('Pause');
+  await page.clock.runFor(400);
+  await expect(status(page)).toHaveText(/^Step 1 of 28/);
+  // The next step comes at 750 ms, not before.
+  await page.clock.runFor(340);
+  await expect(status(page)).toHaveText(/^Step 1 of 28/);
+  await page.clock.runFor(20);
+  await expect(status(page)).toHaveText(/^Step 2 of 28/);
+  await buttons.nth(0).click();
+  await expect(status(page)).toHaveText('Step 0 of 28');
+  await expect(buttons.nth(2)).toHaveAccessibleName('Play');
 });
 
 test('Space during a prediction plays on, like the Play button', async ({ page }) => {

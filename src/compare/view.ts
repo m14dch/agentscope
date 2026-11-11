@@ -3,7 +3,8 @@
  * stepped in sync by semantic phase with one set of shared controls, then one sentence per
  * comparison aspect.
  */
-import { type Clock, Player, SPEEDS, type Speed, STEP_INTERVAL_MS } from '../engine/player.ts';
+import { type Clock, Player, type Speed, STEP_INTERVAL_MS } from '../engine/player.ts';
+import { ControlRow } from '../app/controls.ts';
 import { DiagramView } from '../diagram/view.ts';
 import { type Mode, operationLabel } from '../diagram/model.ts';
 import { createPlayback } from '../rag/bundled.ts';
@@ -81,23 +82,13 @@ export class CompareView {
   readonly timeline: CompareTimeline;
   /** The architecture/protocol switch, placed in the top bar by the shell. */
   readonly modeSwitch: HTMLElement;
-  /** What the shell rearranges on phones (02 layout.phone.controls). */
-  readonly phoneControls: {
-    bar: HTMLElement;
-    status: HTMLElement;
-    speeds: HTMLElement;
-    start: HTMLElement;
-    reset: HTMLElement;
-  };
+  /** The shared control row, which the shell rearranges on phones (02 layout.phone.controls). */
+  readonly controls: ControlRow;
   private readonly options: CompareOptions;
   private readonly clock: Clock;
   private readonly panes: readonly [Pane, Pane];
   private readonly phaseLabels: ReadonlyMap<string, string>;
   private readonly phaseItems = new Map<string, HTMLElement>();
-  private readonly status: HTMLElement;
-  private readonly slider: HTMLInputElement;
-  private readonly play: HTMLButtonElement;
-  private readonly speeds: HTMLElement;
   private readonly announcer: HTMLElement;
   private position: number;
   private mode: Mode;
@@ -142,41 +133,21 @@ export class CompareView {
       this.modeSwitch.append(b);
     }
 
-    this.play = button('Play', () => this.toggle());
-    this.speeds = el('div', { class: 'segmented', role: 'group', 'aria-label': 'Speed' });
-    for (const speed of SPEEDS) {
-      const b = button(`${speed}×`, () => this.setSpeed(speed), {
-        'aria-label': `Speed ${speed}×`,
-      });
-      b.dataset['speed'] = String(speed);
-      this.speeds.append(b);
-    }
-    const start = button('Start', () => this.act(() => this.navigate(1)));
-    const reset = button('Reset', () => this.reset());
-    const controls = el(
-      'div',
-      { class: 'controls', role: 'group', 'aria-label': 'Playback of both panes' },
-      start,
-      button('Previous', () => this.previous()),
-      this.play,
-      button('Next', () => this.next()),
-      reset,
-      this.speeds,
-    );
-
-    this.slider = el('input', {
-      type: 'range',
-      min: '0',
-      max: String(this.timeline.length),
-      step: '1',
-      'aria-label': 'Compare step',
+    // The shared control row (02 compare_view.controls, controls.row).
+    this.controls = new ControlRow({
+      name: 'Playback of both panes',
+      sliderName: 'Compare step',
+      statusClass: 'compare-status',
+      reset: () => this.reset(),
+      previous: () => this.previous(),
+      toggle: () => this.toggle(),
+      next: () => this.next(),
+      speed: (speed) => this.setSpeed(speed),
+      jump: (step) => this.act(() => this.navigate(step)),
     });
-    this.slider.addEventListener('input', () =>
-      this.act(() => this.navigate(Number(this.slider.value))),
-    );
-    this.status = el('span', { class: 'small muted compare-status' });
-    this.bar = controls;
-    this.phoneControls = { bar: controls, status: this.status, speeds: this.speeds, start, reset };
+    const steps = this.timeline.length;
+    this.controls.reserve(phases.map((p) => `Step ${steps} of ${steps} · ${p.label}`));
+    this.bar = this.controls.buttons;
     const phaseList = el('ol', { class: 'compare-phases small', 'aria-label': 'Semantic phases' });
     for (const phase of phases) {
       const item = el('li', {}, phase.label);
@@ -184,14 +155,8 @@ export class CompareView {
       phaseList.append(item);
     }
     this.announcer = el('div', { class: 'visually-hidden', 'aria-live': 'polite' });
-    const timeline = el(
-      'div',
-      { class: 'compare-timeline' },
-      this.slider,
-      this.status,
-      phaseList,
-      this.announcer,
-    );
+    // The semantic phase labels below the control row (02 compare_view.phase_line).
+    const phaseLine = el('div', { class: 'compare-phase-line' }, phaseList, this.announcer);
 
     const aspects = el(
       'section',
@@ -209,8 +174,8 @@ export class CompareView {
 
     root.replaceChildren(
       el('section', { class: 'lesson' }, el('h2', { tabindex: '-1' }, compare.headline)),
-      controls,
-      timeline,
+      this.controls.root,
+      phaseLine,
       this.paneRow,
       aspects,
     );
@@ -459,16 +424,16 @@ export class CompareView {
     const where = phase
       ? `Step ${this.position} of ${this.timeline.length} · ${phase}`
       : `Step ${this.position} of ${this.timeline.length}`;
-    this.status.textContent = where;
-    this.slider.value = String(this.position);
-    this.slider.setAttribute('aria-valuetext', where);
+    this.controls.update({
+      step: this.position,
+      length: this.timeline.length,
+      where,
+      playing: this.playing,
+      speed: this.rate,
+    });
     for (const [id, item] of this.phaseItems) {
       if (id === step.phase) item.setAttribute('aria-current', 'step');
       else item.removeAttribute('aria-current');
-    }
-    this.play.textContent = this.playing ? 'Pause' : 'Play';
-    for (const b of this.speeds.querySelectorAll<HTMLButtonElement>('button')) {
-      b.setAttribute('aria-pressed', String(Number(b.dataset['speed']) === this.rate));
     }
     for (const b of this.modeSwitch.querySelectorAll<HTMLButtonElement>('button')) {
       b.setAttribute('aria-pressed', String(b.dataset['mode'] === this.mode));

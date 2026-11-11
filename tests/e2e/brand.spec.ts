@@ -104,8 +104,8 @@ test('on a wide screen the text lies in the centred 90rem column, the header end
   const github = page.getByRole('link', { name: 'GitHub', exact: true });
   await expect(github).toBeVisible();
 
-  // Header, controls and timeline fill the column; the lesson starts on its left edge.
-  for (const block of ['.shell-header', '.controls', '.timeline']) {
+  // The header and the control row fill the column; the lesson starts on its left edge.
+  for (const block of ['.shell-header', '.control-row']) {
     const { left, right } = await edges(page, block);
     expect(left, block).toBeCloseTo(COLUMN.left, 0);
     expect(right, block).toBeCloseTo(COLUMN.right, 0);
