@@ -186,10 +186,17 @@ test('compare: panes side by side on desktop, stacked on tablet, no page-level h
   expect(await pageScroll()).toBeLessThanOrEqual(0);
   for (const width of [820, 390]) {
     await page.setViewportSize({ width, height: 1180 });
-    r = await box(rag(page));
-    m = await box(mcp(page));
-    expect(m.y, `MCP below RAG at ${width}px`).toBeGreaterThanOrEqual(r.y + r.height - 1);
-    expect(m.width).toBeGreaterThan(width - 100);
+    // Below 48rem both panes lay out again as step lists; measure only once they have.
+    await expect(
+      page.locator(`[data-presentation="${width < 768 ? 'list' : 'diagram'}"]`),
+    ).toHaveCount(2);
+    await expect
+      .poll(async () => {
+        r = await box(rag(page));
+        m = await box(mcp(page));
+        return m.y >= r.y + r.height - 1 && m.width > width - 100;
+      }, `MCP below RAG and full width at ${width}px`)
+      .toBe(true);
     expect(await pageScroll(), `page scroll at ${width}px`).toBeLessThanOrEqual(0);
     // Each diagram scrolls inside its own named region instead.
     await expect(mcp(page).getByRole('region', { name: /MCP sequence diagram/ })).toBeVisible();
