@@ -111,8 +111,6 @@ export class CompareView {
   private announced: number;
   /** The bottom bar on phones: the shared controls. */
   private readonly bar: HTMLElement;
-  /** True during an explicit step action of the learner. */
-  private explicit = false;
   /** Each pane's cursor at the last render, to tell which pane's step changed. */
   private cursors: [number, number] | undefined;
 
@@ -267,12 +265,7 @@ export class CompareView {
   private act(action: () => void): void {
     // The learner's scrolling counts until the next explicit step action.
     this.options.pageScroll?.reset();
-    this.explicit = true;
-    try {
-      action();
-    } finally {
-      this.explicit = false;
-    }
+    action();
   }
 
   /**

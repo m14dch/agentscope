@@ -346,6 +346,94 @@ for (const [width, height] of SIZES) {
   });
 }
 
+/** Whether a box lies on screen above the bar's top. */
+const above = (box: { y: number; height: number } | null, limit: number): boolean =>
+  !!box && box.y >= -0.5 && box.y + box.height <= limit + 0.5;
+
+/**
+ * Plays to the end on a fake clock without any scrolling input and checks the stepping area
+ * after every step (02 layout.phone.stepping_area). A prediction prompt pauses Play; it is
+ * checked, then Continue and Play run on, as a learner would.
+ */
+async function playThrough(page: Page, check: (where: string) => Promise<void>): Promise<void> {
+  const status = page.locator('.controls .status, .controls .compare-status');
+  const play = bar(page).getByRole('button', { name: 'Play', exact: true });
+  const end = /^Step (\d+) of \1( ·|$)/;
+  await play.click();
+  for (let guard = 0; guard < 200; guard += 1) {
+    const before = (await status.textContent()) ?? '';
+    if (end.test(before)) break;
+    await page.clock.runFor(1500);
+    const after = (await status.textContent()) ?? '';
+    if (after !== before || (await page.locator('.prediction').count())) await check(after);
+    if (end.test(after)) break;
+    if (await page.locator('.prediction').count()) {
+      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      await check(`${after}, continued`);
+      await play.click();
+    }
+  }
+  await expect(status).toHaveText(end);
+}
+
+test.describe('at 360 × 800, Play without input', () => {
+  test.use({ viewport: { width: 360, height: 800 }, hasTouch: true });
+
+  test('combined-balance-explanation keeps the stepping area above the bar at every step', async ({
+    page,
+  }) => {
+    await page.clock.install();
+    await page.goto('./#/combined/combined-balance-explanation/1/protocol');
+    await list(page).and(page.locator('[data-measured]')).waitFor();
+    await playThrough(page, async (where) => {
+      const limit = (await bar(page).boundingBox())?.y ?? 0;
+      const region = await list(page).boundingBox();
+      expect(region && region.y >= -0.5, `${where}: step list starts on screen`).toBe(true);
+      const current = list(page).locator('[data-current]').last();
+      expect(above(await current.boundingBox(), limit), `${where}: current row`).toBe(true);
+      for (const line of await page
+        .locator('.inspector .prediction, .inspector .message, .inspector .message ~ p')
+        .all())
+        expect(above(await line.boundingBox(), limit), `${where}: message`).toBe(true);
+    });
+  });
+
+  for (const mode of ['', '/protocol']) {
+    test(`Compare${mode} keeps the changed panes' current rows above the bar at every step`, async ({
+      page,
+    }) => {
+      await page.clock.install();
+      await page.goto(`./#/compare/compare-rag-mcp/0${mode}`);
+      await expect(page.locator('[data-presentation="list"][data-measured]')).toHaveCount(2);
+      const sliders = ['RAG step', 'MCP step'].map((name) => page.getByRole('slider', { name }));
+      const panes = ['RAG', 'MCP'].map((name) => page.getByRole('region', { name, exact: true }));
+      const cursors = (): Promise<string[]> => Promise.all(sliders.map((s) => s.inputValue()));
+      let before = await cursors();
+      await playThrough(page, async (where) => {
+        const after = await cursors();
+        const limit = (await bar(page).boundingBox())?.y ?? 0;
+        const rows: { y: number; height: number }[] = [];
+        for (const i of [0, 1]) {
+          if (before[i] === after[i]) continue;
+          const box = await (panes[i] as Locator)
+            .locator('.diagram-pane [data-current]')
+            .last()
+            .boundingBox();
+          if (box) rows.push(box);
+        }
+        before = after;
+        const lower = rows[rows.length - 1];
+        const upper = rows[0];
+        if (!lower || !upper) return;
+        // Both when they fit together, else the lower changed pane's.
+        if (lower.y + lower.height - upper.y <= limit - 16)
+          for (const b of rows) expect(above(b, limit), `${where}: rows`).toBe(true);
+        else expect(above(lower, limit), `${where}: lower row`).toBe(true);
+      });
+    });
+  }
+});
+
 test.describe('at 390 × 844', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 

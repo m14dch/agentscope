@@ -46,40 +46,63 @@ export function relocate(nodes: readonly Element[], target: Element, signal: Abo
 /** Keys that scroll the page when nothing on the page handles them. */
 const SCROLL_KEYS = new Set(['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', ' ']);
 
+/** How long after the learner's input a scroll of the page counts as theirs, in ms. */
+const INPUT_WINDOW = 1000;
+
 /**
- * Tells the learner's own scrolling of the page from the app's jumps (02 layout.phone
- * stepping_area): a wheel, a touch move, a scrolling key nothing handled, or a scroll the app
- * did not make (the scrollbar) counts as the learner's.
+ * Tells the learner's own scrolling of the page (02 layout.phone.stepping_area): a scroll of
+ * the page counts as theirs only when it follows their input, a wheel, a touch, a scrolling
+ * key nothing else handled, or a press on the scrollbar. Scrolls the browser makes by itself
+ * (scroll anchoring, clamping when content shrinks) and the app's own jumps never count.
  */
 export class PageScroll {
   private user = false;
-  /** Where the app's last jump left the page; a scroll event there is the app's own. */
-  private expected: number | undefined;
+  /** Until when a scroll of the page follows the learner's input (performance.now()). */
+  private armedUntil = 0;
+  /** A press on the scrollbar arms until it is released. */
+  private pressing = false;
   private readonly controller = new AbortController();
 
   constructor() {
     if (typeof window === 'undefined') return;
     const signal = this.controller.signal;
-    const mark = (): void => {
-      this.user = true;
+    const arm = (): void => {
+      this.armedUntil = performance.now() + INPUT_WINDOW;
     };
-    window.addEventListener('wheel', mark, { passive: true, signal });
-    window.addEventListener('touchmove', mark, { passive: true, signal });
+    for (const type of ['wheel', 'touchstart', 'touchmove'] as const)
+      window.addEventListener(type, arm, { passive: true, signal });
     window.addEventListener(
       'keydown',
       (e) => {
         if (!SCROLL_KEYS.has(e.key)) return;
         // Decide after every handler ran: a key the app used for stepping is not a scroll.
         setTimeout(() => {
-          if (!e.defaultPrevented) mark();
+          if (!e.defaultPrevented) arm();
         });
+      },
+      { signal },
+    );
+    // The scrollbar belongs to the root element: a press there, not on the page's content.
+    window.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (e.target === document.documentElement) this.pressing = true;
+      },
+      { signal },
+    );
+    window.addEventListener(
+      'pointerup',
+      () => {
+        if (!this.pressing) return;
+        this.pressing = false;
+        arm();
       },
       { signal },
     );
     window.addEventListener(
       'scroll',
       () => {
-        if (this.expected === undefined || Math.abs(window.scrollY - this.expected) >= 2) mark();
+        if (this.pressing || performance.now() <= this.armedUntil) this.user = true;
       },
       { passive: true, signal },
     );
@@ -93,12 +116,13 @@ export class PageScroll {
   /** An explicit step action: the stepping area may be brought back. */
   reset(): void {
     this.user = false;
+    this.armedUntil = 0;
   }
 
-  /** Scrolls the page by `delta` at once, as the app's own jump. */
+  /** Scrolls the page by `delta` at once, as the app's own jump, which never counts. */
   jumpBy(delta: number): void {
+    this.armedUntil = 0;
     window.scrollTo({ top: window.scrollY + delta, behavior: 'instant' });
-    this.expected = window.scrollY;
   }
 
   destroy(): void {

@@ -186,8 +186,6 @@ export class Shell {
   private route: Route | undefined;
   /** True while a parameter changes, which never scrolls the page (02 layout.phone.stepping_area). */
   private adjusting = false;
-  /** True during an explicit step action of the learner (02 layout.phone.stepping_area). */
-  private explicit = false;
   /** Tells the learner's own scrolling from the app's jumps. */
   private readonly pageScroll = new PageScroll();
 
@@ -820,12 +818,7 @@ export class Shell {
   private act(action: () => void): void {
     // The learner's scrolling counts until the next explicit step action.
     this.pageScroll.reset();
-    this.explicit = true;
-    try {
-      action();
-    } finally {
-      this.explicit = false;
-    }
+    action();
   }
 
   /** Runs a navigation that never shows a prediction prompt. */
