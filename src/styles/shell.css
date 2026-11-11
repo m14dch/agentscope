@@ -32,7 +32,6 @@
 
 .brand a,
 .tabs a {
-  color: inherit;
   text-decoration: none;
 }
 
@@ -80,10 +79,6 @@
 
 .picker li + li {
   border-top: var(--line-hair) solid var(--color-rule);
-}
-
-.picker a {
-  color: inherit;
 }
 
 .picker a[aria-current='true'] {

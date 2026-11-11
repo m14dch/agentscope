@@ -8,10 +8,6 @@
   display: none;
 }
 
-.menu-scenarios a {
-  color: inherit;
-}
-
 @media (max-width: 47.99rem) {
   :root {
     /* The bottom bar's height: the position line, a gap, the buttons and the padding. */
