@@ -134,17 +134,17 @@ test('compare: shared controls, keys and the mode switch act on both panes', asy
   for (const pane of [rag(page), mcp(page)]) {
     await expect(pane.locator('svg.diagram')).toHaveAttribute('aria-label', /protocol view/);
   }
-  await page.getByRole('button', { name: 'Start' }).click();
-  await expect(status(page)).toHaveText('Step 1 of 28 · Preparation');
   await page.getByRole('button', { name: 'Reset' }).click();
   await expect(status(page)).toHaveText('Step 0 of 28');
+  await page.getByRole('button', { name: 'Next step' }).click();
+  await expect(status(page)).toHaveText('Step 1 of 28 · Preparation');
   await page.getByRole('slider', { name: 'Compare step' }).fill('28');
   await expect(status(page)).toHaveText('Step 28 of 28 · Answer');
   // The live region stays quiet while playing and speaks once playback pauses.
   const live = page.locator('[aria-live="polite"].visually-hidden');
   await page.getByRole('slider', { name: 'Compare step' }).fill('20');
   await expect(live).toContainText('MCP step 20 of 28.');
-  await page.getByRole('button', { name: '4×' }).click();
+  await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
   await page.getByRole('button', { name: 'Play' }).click();
   await expect(status(page)).toHaveText(/^Step 2[12] of 28/, { timeout: 3000 });
   await expect(live).toContainText('MCP step 20 of 28.');

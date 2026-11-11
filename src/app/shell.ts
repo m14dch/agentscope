@@ -1,9 +1,11 @@
 /**
  * App shell (02-ui-ux.yaml navigation, layout, controls, learning): one quiet frame with
- * tabs, the scenario picker, the mode switch, the learning question, the playback controls,
- * the diagram beside the step's message, and the step timeline.
+ * tabs, the scenario picker, the mode switch, the learning question,
+ * the control row (playback buttons, play speed and step timeline), and the diagram beside
+ * the step's message.
  */
-import { Player, SPEEDS, type Speed } from '../engine/player.ts';
+import { Player } from '../engine/player.ts';
+import { ControlRow } from './controls.ts';
 import type { Mode } from '../diagram/model.ts';
 import { contextModel, hasContext, renderContext } from '../inspector/context.ts';
 import { combinedPanel } from './combined.ts';
@@ -310,7 +312,7 @@ export class Shell {
   }
 
   /**
-   * The menu that holds the scenario picker, the view switch, the speeds, Start and Reset on
+   * The menu that holds the scenario picker, the view switch and the play speed on
    * phones (02 layout.phone.header); hidden from 48rem, where they sit in their own places.
    * It is shown once something is in it.
    */
@@ -467,23 +469,17 @@ export class Shell {
     });
     const bar = this.header.querySelector('.shell-bar') ?? undefined;
     this.toMenu('View', [this.compare.modeSwitch], bar);
-    this.toPhoneControls(this.compare.phoneControls);
+    this.toPhoneControls(this.compare.controls);
   }
 
   /**
-   * On phones the playback controls become the bottom bar with the position line, and the
-   * speeds, Start and Reset move into the menu (02 layout.phone.controls).
+   * On phones the playback buttons become the bottom bar with the position line and the step
+   * slider, and the play speed moves into the menu (02 layout.phone.controls).
    */
-  private toPhoneControls(c: {
-    bar: HTMLElement;
-    status: HTMLElement;
-    speeds: HTMLElement;
-    start: HTMLElement;
-    reset: HTMLElement;
-  }): void {
-    relocate([c.status], c.bar, (this.headerListeners ??= new AbortController()).signal);
-    this.toMenu('Speed', [c.speeds]);
-    this.toMenu(undefined, [c.start, c.reset]);
+  private toPhoneControls(row: ControlRow): void {
+    const signal = (this.headerListeners ??= new AbortController()).signal;
+    relocate([row.status, row.slider], row.buttons, signal);
+    this.toMenu(undefined, [row.speed]);
   }
 
   private renderScenario(scenario: Scenario, route: Route): ScenarioView {
@@ -496,27 +492,21 @@ export class Shell {
       el('h2', { tabindex: '-1' }, scenario.learning_question),
       el('p', { class: 'headline' }, scenario.headline),
     );
-    const play = button('Play', () => this.act(() => player.toggle()));
-    const start = button('Start', () => this.go(() => player.start()));
-    const reset = button('Reset', () => this.go(() => player.reset()));
-    const speeds = el('div', { class: 'segmented', role: 'group', 'aria-label': 'Speed' });
-    for (const speed of SPEEDS) {
-      const b = button(`${speed}×`, () => player.setSpeed(speed as Speed), {
-        'aria-label': `Speed ${speed}×`,
-      });
-      b.dataset['speed'] = String(speed);
-      speeds.append(b);
-    }
-    const controls = el(
-      'div',
-      { class: 'controls', role: 'group', 'aria-label': 'Playback' },
-      start,
-      button('Previous', () => this.go(() => player.previous())),
-      play,
-      button('Next', () => this.next()),
-      reset,
-      speeds,
-    );
+    // The control row (02 controls.row): the buttons, the play speed and the timeline.
+    const row = new ControlRow({
+      name: 'Playback',
+      sliderName: 'Step',
+      statusClass: '',
+      reset: () => this.go(() => player.reset()),
+      previous: () => this.go(() => player.previous()),
+      toggle: () => this.act(() => player.toggle()),
+      next: () => this.next(),
+      speed: (speed) => player.setSpeed(speed),
+      jump: (step) => this.go(() => player.jump(step)),
+    });
+    const { slider, buttons: controls } = row;
+    const steps = player.playback.length;
+    row.reserve(scenario.phases.map((p) => `Step ${steps} of ${steps} · ${p.label}`));
 
     const parameterButtons: HTMLButtonElement[] = [];
     const sliders: { input: HTMLInputElement; output: HTMLOutputElement; name: string }[] = [];
@@ -619,17 +609,6 @@ export class Shell {
     const workspace = el('div', { class: 'workspace' }, diagram, splitter, inspector);
     this.attachSplitter(workspace, splitter);
 
-    const slider = el('input', {
-      type: 'range',
-      min: '0',
-      max: String(player.playback.length),
-      step: '1',
-      'aria-label': 'Step',
-    });
-    slider.addEventListener('input', () => this.go(() => player.jump(Number(slider.value))));
-    // The one place that states the step and its phase; the slider carries it for assistive tech.
-    const status = el('span', { class: 'small muted status' });
-    const timeline = el('footer', { class: 'timeline' }, slider, status);
     // The model-context panel, collapsed at start (02 layout, context_panel).
     const contextBody = el('div', { id: 'context-panel', class: 'context-panel', hidden: '' });
     const contextToggle = button(
@@ -642,8 +621,10 @@ export class Shell {
       },
       { 'aria-expanded': 'false', 'aria-controls': 'context-panel', class: 'panel-toggle' },
     );
-    if (hasContext(scenario.initial_state)) timeline.append(contextToggle, contextBody);
-    // The ingestion panel (02 rag_ingestion), below the timeline so nothing above it moves.
+    const context = hasContext(scenario.initial_state)
+      ? el('div', { class: 'context-area' }, contextToggle, contextBody)
+      : undefined;
+    // The ingestion panel (02 rag_ingestion), below the workspace so nothing above it moves.
     const ingestion = scenario.derived_events?.includes('index-05')
       ? this.ingestionPanel(
           (k) => this.go(() => player.jump(k)),
@@ -686,14 +667,13 @@ export class Shell {
       const event = player.playback.event(k);
       const phase = event ? scenario.phases.find((p) => p.id === event.phase) : undefined;
       const where = phase ? `Step ${k} of ${n} · ${phase.label}` : `Step ${k} of ${n}`;
-      status.textContent = where;
-      slider.max = String(n);
-      slider.value = String(k);
-      slider.setAttribute('aria-valuetext', where);
-      play.textContent = player.status === 'playing' ? 'Pause' : 'Play';
-      for (const b of speeds.querySelectorAll<HTMLButtonElement>('button')) {
-        b.setAttribute('aria-pressed', String(Number(b.dataset['speed']) === player.speed));
-      }
+      row.update({
+        step: k,
+        length: n,
+        where,
+        playing: player.status === 'playing',
+        speed: player.speed,
+      });
       const config = player.playback.retrievalConfig;
       for (const b of parameterButtons) {
         const current = JSON.stringify(config[b.dataset['parameter'] ?? '']);
@@ -762,15 +742,15 @@ export class Shell {
 
     this.content.replaceChildren(
       lesson,
-      controls,
+      row.root,
       ...(offered.length ? [parameters] : []),
       workspace,
-      timeline,
+      ...(context ? [context] : []),
       ...(ingestion ? [ingestion.panel.root] : []),
       ...(retrieval ? [retrieval.panel.root] : []),
       ...(combined ? [combined.root] : []),
     );
-    this.toPhoneControls({ bar: controls, status, speeds, start, reset });
+    this.toPhoneControls(row);
     state.render();
     return state;
   }

@@ -1,5 +1,5 @@
 /**
- * Playback controls (02-ui-ux.yaml controls): start, next, previous, play, pause, reset
+ * Playback controls (02-ui-ux.yaml controls): next, previous, play, pause, reset
  * and jump, with speeds. Holds the cursor and playback status; snapshots come from Playback.
  */
 import type { Playback, Snapshot } from './playback.ts';
@@ -63,11 +63,6 @@ export class Player {
   subscribe(listener: (player: Player) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
-  }
-
-  /** Go to the first step; playback keeps its status. */
-  start(): void {
-    this.navigate(Math.min(1, this.playback.length));
   }
 
   next(): void {
