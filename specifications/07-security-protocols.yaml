@@ -10,9 +10,7 @@ mcp:
   - server/discover request and DiscoverResult schema
   - tools/list schema, including ttlMs and cacheScope
   - tools/call request and result schema, including structuredContent matching outputSchema
-  - resources/list and resources/read schema
   - Every result carries resultType
-  - JSON-RPC errors vs tool isError
   - Streamable HTTP POST carries one message, accepts JSON and SSE, and mirrors the
     body in MCP-Protocol-Version, Mcp-Method and (for tools/call and resources/read)
     Mcp-Name headers

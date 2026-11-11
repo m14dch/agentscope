@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Validate the AgentScope YAML specifications.
 
-Checks cross-references and invariants, expands variants and the Combined
-composition, validates every MCP payload against the pinned revision's
+Checks cross-references and invariants, expands the Combined composition,
+validates every MCP payload against the pinned revision's
 schema.json, and recomputes all RAG reference results from the fixtures.
 
 Usage:
@@ -54,92 +54,19 @@ def set_path(obj, path, value):
         obj[last] = value
 
 
-def finalize(scn, sid, prefix):
+def finalize(scn, sid):
     for i, e in enumerate(scn["events"], 1):
         e["scenario_id"] = sid
         e["sequence"] = i
-        if prefix:
-            e["id"] = f"{sid}:{e['id']}"
-            if "pair_id" in e:
-                e["pair_id"] = f"{sid}:{e['pair_id']}"
+        e["id"] = f"{sid}:{e['id']}"
+        if "pair_id" in e:
+            e["pair_id"] = f"{sid}:{e['pair_id']}"
     scn["id"] = sid
     return scn
 
 
-def parameter_problem(name, spec, value):
-    """Parameter value rules (03 state_model.reducer_rules); mirrors src/scenarios/parameters.ts."""
-    kind = lambda v: "boolean" if isinstance(v, bool) else "number" if isinstance(v, (int, float)) else type(v).__name__
-    if kind(value) != kind(spec["default"]):
-        return f"{name} must be a {kind(spec['default'])}, not {json.dumps(value)}"
-    if "options" in spec and value not in spec["options"]:
-        return f"{name} {json.dumps(value)} is not one of {', '.join(json.dumps(o) for o in spec['options'])}"
-    if kind(value) == "number":
-        if not math.isfinite(value):
-            return f"{name} must be a finite number"
-        if float(spec["default"]).is_integer() and not float(value).is_integer():
-            return f"{name} must be a whole number"
-        if not spec.get("min", value) <= value <= spec.get("max", value):
-            return f"{name} {value} is outside {spec.get('min')}..{spec.get('max')}"
-    return None
-
-
-def expand_variant(base, var):
-    scn = copy.deepcopy(base)
-    events = scn["events"]
-
-    def index(eid):
-        for i, e in enumerate(events):
-            if e["id"] == eid:
-                return i
-        raise KeyError(f"{var['id']}: unknown event {eid}")
-
-    for op in var.get("operations", []):
-        kind = op["op"]
-        if kind == "patch":
-            e = events[index(op["event"])]
-            for path, value in op["set"].items():
-                set_path(e, path, copy.deepcopy(value))
-        elif kind == "replace":
-            events[index(op["event"])] = copy.deepcopy(op["with"])
-        elif kind == "remove":
-            for eid in op["events"]:
-                events.pop(index(eid))
-        elif kind == "insert_after":
-            i = index(op["event"]) + 1
-            events[i:i] = copy.deepcopy(op["events"])
-        else:
-            err(var["id"], f"unknown operation {kind}")
-    for name, value in var.get("parameter_overrides", {}).items():
-        if name not in scn.get("parameters", {}):
-            err(var["id"], f"parameter_overrides names unknown parameter {name}")
-        else:
-            spec = scn["parameters"][name]
-            problem = parameter_problem(name, spec, value)
-            if problem:
-                err(var["id"], f"parameter_overrides {problem}")
-            spec["default"] = copy.deepcopy(value)
-    phases = {p["id"]: p for p in scn["phases"]}
-    for pid, override in var.get("phase_overrides", {}).items():
-        if pid not in phases:
-            err(var["id"], f"phase_overrides names unknown phase {pid}")
-        elif not str(override.get("takeaway", "")).strip():
-            err(var["id"], f"phase_overrides {pid} has no takeaway")
-        else:
-            phases[pid]["takeaway"] = override["takeaway"]
-    if "question" in var:
-        scn["question"] = var["question"]
-    if "fixture_overrides" in var:
-        scn["fixture_overrides"] = copy.deepcopy(var["fixture_overrides"])
-    scn["title"] = var["title"]
-    if not str(var.get("lesson", "")).strip():
-        err(var["id"], "variant has no lesson")
-    scn["headline"] = var.get("lesson", "")  # a variant is presented by its lesson
-    return finalize(scn, var["id"], True)
-
-
-def compose(comp, registry, prefix=True):
-    """The composed scenario; with prefix False its event IDs stay local, as the base of its
-    variants (03 composition_format.variants)."""
+def compose(comp, registry):
+    """The composed scenario (03 composition_format)."""
     events = []
     for step in comp["compose"]:
         if "copy" in step:
@@ -157,15 +84,13 @@ def compose(comp, registry, prefix=True):
     scn = {k: copy.deepcopy(comp[k]) for k in ("title", "question", "learning_question", "headline", "participants",
                                                 "phases", "initial_state", "derived_events") if k in comp}
     scn["events"] = events
-    return finalize(scn, comp["id"], prefix)
+    return finalize(scn, comp["id"])
 
 
 # ---------------------------------------------------------------- checks
-MCP_REQ = {"server/discover": "DiscoverRequest", "tools/list": "ListToolsRequest", "tools/call": "CallToolRequest",
-           "resources/list": "ListResourcesRequest", "resources/read": "ReadResourceRequest"}
+MCP_REQ = {"server/discover": "DiscoverRequest", "tools/list": "ListToolsRequest", "tools/call": "CallToolRequest"}
 MCP_RES = {"server/discover": "DiscoverResultResponse", "tools/list": "ListToolsResultResponse",
-           "tools/call": "CallToolResultResponse", "resources/list": "ListResourcesResultResponse",
-           "resources/read": "ReadResourceResultResponse"}
+           "tools/call": "CallToolResultResponse"}
 
 
 def check_scenario(scn, ctx):
@@ -297,8 +222,8 @@ def check_mcp(e, by_id, ctx, where):
             err(where, "protocol version differs from pinned revision")
         if h.get("Mcp-Method") != method:
             err(where, "Mcp-Method header does not match method")
-        if method in ("tools/call", "resources/read"):
-            if h.get("Mcp-Name") != p["params"].get("name", p["params"].get("uri")):
+        if method == "tools/call":
+            if h.get("Mcp-Name") != p["params"]["name"]:
                 err(where, "Mcp-Name header does not match body")
         if e["correlation_id"] != str(p["id"]):
             err(where, "correlation_id differs from JSON-RPC id")
@@ -306,8 +231,8 @@ def check_mcp(e, by_id, ctx, where):
         req = by_id[e["pair_id"]]["payload"]
         if p["id"] != req["id"] or e["correlation_id"] != str(p["id"]):
             err(where, "JSON-RPC response id does not match request")
-        validate(p, "JSONRPCErrorResponse" if "error" in p else MCP_RES[req["method"]], ctx, where)
-        if "result" in p and req["method"] == "tools/call" and not p["result"]["isError"]:
+        validate(p, MCP_RES[req["method"]], ctx, where)
+        if req["method"] == "tools/call":
             tool = next((t for t in ctx["tools"] if t["name"] == req["params"]["name"]), None)
             if tool and "outputSchema" in tool:
                 jsonschema.validate(p["result"]["structuredContent"], tool["outputSchema"])
@@ -369,25 +294,9 @@ def rag_engine(rag):
     def cos(a, b):
         return round(sum(x * y for x, y in zip(a, b)) / math.sqrt(sum(x * x for x in a)) / math.sqrt(sum(y * y for y in b)), 4)
 
-    docs12 = {d["id"]: d for d in fx["documents"]}
-    untrusted = {d["id"]: d for d in fx["untrusted_documents"]}
-
-    def corpus(versions=("1.2",), extra=(), exclude=()):
-        out = []
-        for d in list(docs12.values()) + [untrusted[x] for x in extra]:
-            if d["id"] in exclude:
-                continue
-            if d["id"] in untrusted:
-                out.append((d["id"], d["version"], d["text"]))
-                continue
-            for v in versions:
-                if v == d["version"]:
-                    out.append((d["id"], v, d["text"]))
-                else:
-                    pv = next((p for p in fx["previous_versions"] if p["id"] == d["id"] and p["version"] == v), None)
-                    if pv:
-                        out.append((d["id"], v, d["text"].replace(pv["replace"]["from"], pv["replace"]["to"])))
-        return out
+    def corpus():
+        """The indexed documents (05 derived_event_rules.inputs): (ID, version, text)."""
+        return [(d["id"], d["version"], d["text"]) for d in fx["documents"]]
 
     def chunks(docs, size, ov):
         out = []
@@ -425,17 +334,9 @@ def rag_engine(rag):
 
     facts = fx["answer_facts"]
     groups = fx["answer_groups"]
-    injected = [d["injected_instruction"] for d in fx["untrusted_documents"] if "injected_instruction" in d]
 
     def join(items):
         return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
-
-    def alone(pred):
-        head, sep, tail = pred.rpartition(", ")
-        return f"{head} and {tail}" if sep else pred
-
-    def vkey(v):
-        return tuple(int(x) for x in v.split("."))
 
     def answer(sel, intro=None):
         """Returns (answer text, cited chunks in citation order, supported fact ids)."""
@@ -454,14 +355,13 @@ def rag_engine(rag):
             marked[c["id"]] = c
             return f"\x00{c['id']}\x00"
 
-        official = [c for c in sel if c["documentId"] in docs12]
         parts = [{"kind": "intro", "source": p["source"], "text": p["text"]} for p in intro or []]
         supported, missing = set(), []
         for group in groups:
-            runs, conflicts = [], []
+            runs = []
             for f in [f for f in facts if f["group"] == group["id"]]:
                 vals = {}
-                for c in official:
+                for c in sel:
                     ev = f["evidence"].get(c["version"], f["evidence"].get("*"))
                     if c["documentId"] == f["documentId"] and ev["span"] in c["text"]:
                         vals.setdefault(ev["predicate"], []).append(c)
@@ -469,18 +369,13 @@ def rag_engine(rag):
                     missing.append(f["aspect"])
                     continue
                 supported.add(f["id"])
-                if len(vals) == 1:
-                    pred, cs = next(iter(vals.items()))
-                    best = sorted(cs, key=lambda c: (tuple(-x for x in vkey(c["version"])), c["id"]))[0]
-                    if runs and runs[-1][0] == f["subject"]:
-                        runs[-1][1].append((pred, best))
-                    else:
-                        runs.append([f["subject"], [(pred, best)]])
+                # One version per document, so one predicate; several chunks: the lowest ID.
+                (pred, cs), = vals.items()
+                best = min(cs, key=lambda c: c["id"])
+                if runs and runs[-1][0] == f["subject"]:
+                    runs[-1][1].append((pred, best))
                 else:
-                    ordered = sorted(vals.items(), key=lambda kv: vkey(kv[1][0]["version"]))
-                    alts = "; ".join(f"version {cs[0]['version']}: {f['subject']} {alone(pred)} [{cite(cs[0])}]" for pred, cs in ordered)
-                    conflicts.append(f"The indexed documents conflict on {f['aspect']} ({alts}); version "
-                                     f"{ordered[-1][1][0]['version']} is the newest.")
+                    runs.append([f["subject"], [(pred, best)]])
             phrases = []
             for subject, preds in runs:
                 items = []
@@ -490,12 +385,8 @@ def rag_engine(rag):
                 phrases.append(f"{subject} {join(items)}")
             if phrases:
                 parts.append({"kind": "group", "text": f"{group['label']}: {'; '.join(phrases)}."})
-            parts += [{"kind": "conflict", "text": t} for t in conflicts]
         if missing:
             parts.append({"kind": "gap", "text": f"The retrieved evidence does not cover {join(missing)}."})
-        if any(i in c["text"] for c in sel for i in injected):
-            parts.append({"kind": "note", "text": "Note: a retrieved document contained instructions addressed to the "
-                          "assistant; they were treated as data and ignored."})
         cites = []
 
         def number(m):
@@ -533,23 +424,6 @@ def rag_engine(rag):
             "default_k": default_k, "default_thr": default_thr, "params": params}
 
 
-def corpus_kwargs(variant):
-    """Translate a RAG variant's fixture_overrides into corpus() arguments."""
-    fo = variant.get("fixture_overrides", {}) if variant else {}
-    kw = {}
-    versions = fo.get("indexed_versions")
-    if versions:
-        found = set()
-        for v in versions.values():
-            found.update(v if isinstance(v, list) else [v])
-        kw["versions"] = tuple(sorted(found))
-    if fo.get("add_documents"):
-        kw["extra"] = tuple(fo["add_documents"])
-    if fo.get("exclude_documents"):
-        kw["exclude"] = tuple(fo["exclude_documents"])
-    return kw
-
-
 def threshold_text(x):
     """Thresholds in explanations are rounded to 2 decimals (05 derived_event_rules.inputs)."""
     r = round(float(x), 2)
@@ -557,10 +431,10 @@ def threshold_text(x):
     return str(int(r)) if r == int(r) else str(r)
 
 
-def user_message(question, evidence, untrusted):
+def user_message(question, evidence, trust_of):
     """retrieve-10's user message (05 derived_event_rules.retrieve-10)."""
     def block(c):
-        trust = "untrusted" if c["documentId"] in untrusted else "official"
+        trust = trust_of[c["documentId"]]
         chunk = "" if c.get("document") else f' chunk="{c["id"]}"'
         return f'<document id="{c["documentId"]}" version="{c["version"]}"{chunk} trust="{trust}">\n{c["text"]}\n</document>'
     blocks = "\n".join(block(c) for c in evidence) if evidence else "(none)"
@@ -571,12 +445,15 @@ def check_derived_defaults(R, rag, registry, ranked, sel):
     """Every derived event of rag-index and rag-query at the default parameters; an optional step
     with its enabling parameter on (05 derived_event_rules)."""
     fx = rag["fixtures"]
-    untrusted = {d["id"] for d in fx["untrusted_documents"]}
+    trust_of = {d["id"]: d["trust"] for d in fx["documents"]}
     chunking = next(sc for sc in rag["scenarios"] if sc["id"] == "rag-index")["parameters"]
     size, ov = chunking["chunk_size_words"]["default"], chunking["overlap_words"]["default"]
     docs = R["corpus"]()
     all_chunks = R["chunks"](docs, size, ov)
     ids = [c["id"] for c in all_chunks]
+    # rag-query searches this chunking; its projection gives every point its own label (02).
+    if len({tuple(c["embedding"]) for c in all_chunks}) != len(all_chunks):
+        err("rag-index", "two chunks share a vector at the default chunking")
 
     def expect(where, got, want):
         if got != want:
@@ -659,14 +536,14 @@ def check_derived_defaults(R, rag, registry, ranked, sel):
     tracked = {"sourceDocumentId": sel_docs, "chunkId": got, "retrievedText": [c["text"] for c in sel]}
     after = ev["retrieve-09"]["payload"]["prompt_after"]
     expect("rag-query/retrieve-09", after["document_blocks"],
-           [{"chunkId": c["id"], "trust": "untrusted" if c["documentId"] in untrusted else "official"} for c in sel])
+           [{"chunkId": c["id"], "trust": trust_of[c["documentId"]]} for c in sel])
     expect("rag-query/retrieve-09", ev["retrieve-09"]["tracked_values"], tracked)
     if after["system"].count("document ID, version and chunk ID") != 1 or "document ID and version" in after["system"]:
         err("rag-query/retrieve-09", "prompt_after.system must ask for chunk citations ('document ID, version "
             "and chunk ID') exactly once at the default parameters")
     messages = ev["retrieve-10"]["payload"]["messages"]
     expect("rag-query/retrieve-10", messages[0]["content"], after["system"])
-    expect("rag-query/retrieve-10", messages[1]["content"], user_message(scn["question"], sel, untrusted))
+    expect("rag-query/retrieve-10", messages[1]["content"], user_message(scn["question"], sel, trust_of))
     expect("rag-query/retrieve-10", ev["retrieve-10"]["tracked_values"], tracked)
     for eid in ("retrieve-11", "retrieve-12"):
         expect(f"rag-query/{eid}", ev[eid]["tracked_values"], {"sourceDocumentId": sel_docs, "chunkId": got})
@@ -744,7 +621,6 @@ def answer_composition_problem(composition):
 def check_rag(rag, comp, registry, ui):
     R = rag_engine(rag)
     refs = {k: v for k, v in rag["reference_results"].items() if k != "note"}
-    variants = {v["id"]: v for v in rag["variants"]}
     p = R["params"]
     # UI controls (02) and scenario parameters (05) must agree.
     rc = ui["rag_controls"]
@@ -755,14 +631,10 @@ def check_rag(rag, comp, registry, ui):
     for name in ("chunk_size_words", "overlap_words"):
         if (rc[name]["options"], rc[name]["default"]) != (chunking[name]["options"], chunking[name]["default"]):
             err(f"02 rag_controls.{name}", "options or default differ from 05 rag-index parameters")
-    base_docs = R["corpus"]()
-    for vid in variants:
-        if vid not in refs:
-            err(f"reference_results.{vid}", "missing for variant")
+    docs = R["corpus"]()
     for name, ref in refs.items():
-        variant = variants.get(name)
-        if not variant and not name.startswith("rag-query"):
-            err(f"reference_results.{name}", "neither a variant nor a rag-query case")
+        if not name.startswith("rag-query"):
+            err(f"reference_results.{name}", "not a rag-query case")
             continue
         cited = [int(n) for n in re.findall(r"\[(\d+)\]", ref.get("answer", ""))]
         if list(dict.fromkeys(cited)) != list(range(1, len(set(cited)) + 1)):
@@ -771,24 +643,6 @@ def check_rag(rag, comp, registry, ui):
         if not isinstance(rp, dict):
             err(f"reference_results.{name}", "missing parameters")
             continue
-        if variant:
-            expected = {"chunk_size_words": 50, "overlap_words": 10, "top_k": R["default_k"],
-                        "similarity_threshold": R["default_thr"]}
-            po = variant.get("parameter_overrides", {})
-            if "top_k" in po:
-                expected["top_k"] = po["top_k"]
-            if "similarity_threshold" in po:
-                expected["similarity_threshold"] = po["similarity_threshold"]
-            if po.get("rerank"):
-                expected["rerank"] = True
-            if rp != expected:
-                err(f"reference_results.{name}", f"parameters {rp} differ from defaults plus overrides {expected}")
-        docs = R["corpus"](**corpus_kwargs(variant))
-        fo = (variant or {}).get("fixture_overrides", {})
-        dropped = {d[0] for d in base_docs} - {d[0] for d in docs} - set(fo.get("exclude_documents", []))
-        if dropped != set(fo.get("not_indexed", [])):
-            err(f"reference_results.{name}", f"not_indexed {sorted(fo.get('not_indexed', []))} differs from the "
-                f"documents missing from the index {sorted(dropped)}")
         qv, ranked, sel = R["retrieve"](docs, size=rp["chunk_size_words"], ov=rp["overlap_words"], top_k=rp["top_k"],
                                         thr=rp["similarity_threshold"], rerank=rp.get("rerank", False))
         got = [c["id"] for c in sel]
@@ -798,20 +652,12 @@ def check_rag(rag, comp, registry, ui):
         a, cites, _ = R["answer"](sel)
         if a != ref["answer"] or R["source_lines"](cites) != ref["sources"]:
             err(f"reference_results.{name}", "answer or sources differ")
-        if name == "rag-hybrid":
-            terms = sorted(set(re.findall(r"[a-z0-9]+", rag["fixtures"]["query"].lower())) - set(rag["fixtures"]["keyword_retrieval"]["stopwords"]))
+        if "keyword_query_terms" in ref or "keyword_hits" in ref:
+            terms = sorted(set(R["toks"](rag["fixtures"]["query"])) - set(rag["fixtures"]["keyword_retrieval"]["stopwords"]))
             hits = [{"chunkId": c["id"], "keywordScore": c["keyword"], "score": c["score"]}
                     for c in sorted(ranked, key=lambda c: c["id"]) if c["keyword"] > 0]
             if ref.get("keyword_query_terms") != terms or ref.get("keyword_hits") != hits:
-                err("reference_results.rag-hybrid", "keyword terms or hits differ")
-            ev = {e["id"]: e for e in registry["rag-hybrid"]["events"]}
-            if ev.get("rag-hybrid:hybrid-02", {}).get("payload", {}).get("hits") != hits:
-                err("rag-hybrid/hybrid-02", "keyword hits differ")
-            above = [c for c in ranked if c["score"] >= rp["similarity_threshold"]]
-            candidates = [{"chunkId": c["id"], "score": c["score"], "keywordScore": c["keyword"],
-                           "rerankScore": c["rerank"]} for c in sorted(above, key=lambda c: (-c["rerank"], c["id"]))]
-            if ev.get("rag-hybrid:hybrid-03", {}).get("payload", {}).get("candidates") != candidates:
-                err("rag-hybrid/hybrid-03", "reranked candidates differ")
+                err(f"reference_results.{name}", "keyword terms or hits differ")
         if name == "rag-query":
             if qv != ref["query_embedding"]:
                 err("reference_results.rag-query", "query embedding differs")
@@ -840,55 +686,48 @@ def check_rag(rag, comp, registry, ui):
         err("combined.answer_composition", problem)
         return
     intro = composition["intro"]
-    cases = [("combined", comp, comp)] + [(v["id"], v, comp) for v in comp.get("variants", [])]
-    for label, case, base in cases:
-        if not str(case.get("lesson" if case is not base else "headline", "")).strip():
-            err(label, "missing lesson" if case is not base else "missing headline")
-        _, ranked, sel = R["retrieve"](R["corpus"](**corpus_kwargs(case if case is not base else None)))
-        parts, cites, sup = R["answer_parts"](sel, intro=intro)
-        applies = next((c for c in composition["comparisons"]
-                        if set(c.get("requires", [])) <= sup and not set(c.get("lacks", [])) & sup), None)
-        if applies:
-            parts.append({"kind": "comparison", "text": applies["sentence"]})
-        a = " ".join(p["text"] for p in parts)
-        if a != case["expected_answer"] or R["source_lines"](cites) != case["expected_sources"]:
-            err(label, "combined answer or sources differ from recomputation")
-        if case is not base and case.get("expected_selected") != [c["id"] for c in sel]:
-            err(label, "expected_selected differs from recomputation")
-        if case is base:
-            ev = {e["id"].split(":", 1)[1]: e for e in registry[comp["id"]]["events"]}
-            for eid, e in ev.items():
-                tracked = (e.get("tracked_values") or {}).get("chunkId")
-                if tracked is not None and (tracked if isinstance(tracked, list) else [tracked])  not in ([c["id"] for c in sel], [c["id"] for c in ranked]):
-                    err(f"{label}/{eid}", "tracked chunkId values are neither the ranking nor the retrieved chunks")
-            if ev["c-03"]["payload"]["document_blocks"] != [c["id"] for c in sel]:
-                err(label, "c-03 document blocks differ from the retrieved chunks")
-            untrusted = {d["id"] for d in rag["fixtures"]["untrusted_documents"]}
-            for eid in ("c-04", "c-06"):
-                if ev[eid]["payload"]["messages"][1]["content"] != user_message(comp["question"], sel, untrusted):
-                    err(label, f"{eid} user message differs from the derivation")
-            query = {e["id"]: e for e in registry["rag-query"]["events"]}
-            for eid in ("retrieve-05", "retrieve-06"):
-                if any(ev[eid].get(f) != query[eid].get(f) for f in ("payload", "explanation", "tracked_values")):
-                    err(label, f"{eid} differs from rag-query's derivation at the defaults")
-            applies_expl = applies["explanation"] if applies else composition["explanation"]
-            if ev["c-07"]["explanation"] != applies_expl:
-                err(label, "c-07 explanation differs from answer_composition")
-            if ev["c-07"]["payload"]["message"]["content"] != a + "\n\nSources:\n" + "\n".join(R["source_lines"](cites)):
-                err(label, "c-07 model message differs")
-            if ev["c-08"]["payload"]["answer"] != a or ev["c-08"]["payload"]["sources"] != R["source_objects"](cites):
-                err(label, "c-08 answer or sources differ")
+    if not str(comp.get("headline", "")).strip():
+        err("combined", "missing headline")
+    _, ranked, sel = R["retrieve"](docs)
+    parts, cites, sup = R["answer_parts"](sel, intro=intro)
+    applies = next((c for c in composition["comparisons"] if set(c.get("requires", [])) <= sup), None)
+    if applies:
+        parts.append({"kind": "comparison", "text": applies["sentence"]})
+    a = " ".join(p["text"] for p in parts)
+    if a != comp["expected_answer"] or R["source_lines"](cites) != comp["expected_sources"]:
+        err("combined", "combined answer or sources differ from recomputation")
+    ev = {e["id"].split(":", 1)[1]: e for e in registry[comp["id"]]["events"]}
+    for eid, e in ev.items():
+        tracked = (e.get("tracked_values") or {}).get("chunkId")
+        if tracked is not None and (tracked if isinstance(tracked, list) else [tracked]) not in ([c["id"] for c in sel], [c["id"] for c in ranked]):
+            err(f"combined/{eid}", "tracked chunkId values are neither the ranking nor the retrieved chunks")
+    if ev["c-03"]["payload"]["document_blocks"] != [c["id"] for c in sel]:
+        err("combined", "c-03 document blocks differ from the retrieved chunks")
+    trust_of = {d["id"]: d["trust"] for d in rag["fixtures"]["documents"]}
+    for eid in ("c-04", "c-06"):
+        if ev[eid]["payload"]["messages"][1]["content"] != user_message(comp["question"], sel, trust_of):
+            err("combined", f"{eid} user message differs from the derivation")
+    query = {e["id"]: e for e in registry["rag-query"]["events"]}
+    for eid in ("retrieve-05", "retrieve-06"):
+        if any(ev[eid].get(f) != query[eid].get(f) for f in ("payload", "explanation", "tracked_values")):
+            err("combined", f"{eid} differs from rag-query's derivation at the defaults")
+    applies_expl = applies["explanation"] if applies else composition["explanation"]
+    if ev["c-07"]["explanation"] != applies_expl:
+        err("combined", "c-07 explanation differs from answer_composition")
+    if ev["c-07"]["payload"]["message"]["content"] != a + "\n\nSources:\n" + "\n".join(R["source_lines"](cites)):
+        err("combined", "c-07 model message differs")
+    if ev["c-08"]["payload"]["answer"] != a or ev["c-08"]["payload"]["sources"] != R["source_objects"](cites):
+        err("combined", "c-08 answer or sources differ")
 
 
-def dump_rag(rag, comp):
-    """Rankings, selections and answers over a grid of parameters for every corpus a scenario
-    or variant uses (golden test of the TypeScript RAG engine)."""
+def dump_rag(rag):
+    """Rankings, selections and answers over a grid of parameters (golden test of the
+    TypeScript RAG engine)."""
     R = rag_engine(rag)
     chunking = next(sc for sc in rag["scenarios"] if sc["id"] == "rag-index")["parameters"]
-    cases = [("rag-query", None)] + [(v["id"], v) for v in rag["variants"] + comp.get("variants", [])]
     out = []
-    for name, variant in cases:
-        docs = R["corpus"](**corpus_kwargs(variant))
+    for name in ("rag-query",):
+        docs = R["corpus"]()
         for size in chunking["chunk_size_words"]["options"]:
             for ov in chunking["overlap_words"]["options"]:
                 ranking = None
@@ -943,17 +782,8 @@ def main():
     registry = {}
     for scn in mcp["scenarios"] + rag["scenarios"]:
         registry[scn["id"]] = scn
-    for var in mcp["variants"] + rag["variants"]:
-        registry[var["id"]] = expand_variant(registry[var["extends"]], var)
     comb = cmp_["combined"]
-    # Composed once with local IDs, so copy-step problems surface once; its variants expand from it.
-    local = compose(comb, registry, False)
-    registry[comb["id"]] = finalize(copy.deepcopy(local), comb["id"], True)
-    for var in comb.get("variants", []):
-        if var.get("extends") != comb["id"]:
-            err(var["id"], f"extends {var.get('extends')}, not the composed scenario {comb['id']}")
-            continue
-        registry[var["id"]] = expand_variant(local, var)
+    registry[comb["id"]] = compose(comb, registry)
     if len(registry[comb["id"]]["events"]) != comb["expanded_event_count"]:
         err(comb["id"], "expanded_event_count differs")
     for scn in registry.values():
@@ -980,12 +810,12 @@ def main():
     if args.dump_registry:
         Path(args.dump_registry).write_text(json.dumps(registry, ensure_ascii=False, indent=1))
     if args.dump_rag:
-        Path(args.dump_rag).write_text(json.dumps(dump_rag(rag, comb), ensure_ascii=False))
+        Path(args.dump_rag).write_text(json.dumps(dump_rag(rag), ensure_ascii=False))
     if errors:
         print("\n".join(errors))
-        print(f"\n{len(errors)} problem(s) in {len(registry)} expanded scenarios")
+        print(f"\n{len(errors)} problem(s) in {len(registry)} scenarios")
         return 1
-    print(f"OK: {len(registry)} expanded scenarios, {total} events, all checks passed")
+    print(f"OK: {len(registry)} scenarios, {total} events, all checks passed")
     return 0
 
 
