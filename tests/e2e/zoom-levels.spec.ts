@@ -13,7 +13,8 @@ const PROTOCOL = /\b(MCP|HTTP|JSON-RPC|LLM API|REST|tools\/call)\b/;
 
 async function open(page: Page, hash: string): Promise<void> {
   await page.goto(`./${hash}`);
-  await page.locator('[data-measured]').first().waitFor();
+  // The diagram once measured, or below 48rem the column of steps (02 phone_steps).
+  await page.locator('[data-measured], .steps-area > *').first().waitFor();
 }
 
 test('a first-time visitor sees the Overview of mcp-balance before any protocol name', async ({

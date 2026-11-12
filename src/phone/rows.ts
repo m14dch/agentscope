@@ -64,7 +64,7 @@ export interface GroupRow {
   key: string;
   /** The takeaway, or for a continued run the phase label and "continued". */
   title: string;
-  /** The phase label and the number of steps. */
+  /** The phase label and the number of steps; only the number for a continued run. */
   caption: string;
   events: EventRow[];
 }
@@ -117,7 +117,7 @@ export function groupRows(
     return {
       key: run.key,
       title: run.continued ? name : run.phase.takeaway,
-      caption: `${name} · ${steps}`,
+      caption: run.continued ? steps : `${name} · ${steps}`,
       events: run.members.map(([e, i]) => eventRow(e, i, labels)),
     };
   });

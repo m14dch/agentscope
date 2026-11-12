@@ -49,11 +49,18 @@ export function rowItem(
       ]
     : [];
   const title = el('span', { class: 'step-title' }, face.title);
-  if (face.glyph) title.append(hidden(`, ${DIRECTION_WORDS[face.glyph]}`));
+  if (face.glyph) title.append(hidden(`(${DIRECTION_WORDS[face.glyph]})`));
+  // A row without a lead or glyph (an Architecture group) starts its title at the left edge.
+  const plain = !face.lead && !face.glyph;
   const button = el(
     'button',
-    { type: 'button', class: 'step-row', 'aria-expanded': 'false', 'aria-controls': id },
-    el('span', { class: 'step-lead small muted' }, ...(face.lead ?? [])),
+    {
+      type: 'button',
+      class: plain ? 'step-row step-row--plain' : 'step-row',
+      'aria-expanded': 'false',
+      'aria-controls': id,
+    },
+    ...(plain ? [] : [el('span', { class: 'step-lead small muted' }, ...(face.lead ?? []))]),
     ...glyph,
     title,
     el('span', { class: 'step-sub small muted' }, face.sub),
@@ -61,7 +68,12 @@ export function rowItem(
   );
   button.addEventListener('click', toggle);
   const body = el('div', { class: 'step-body', id, hidden: '' });
-  const item = el('li', { class: 'step-item' }, button, body);
+  const item = el(
+    'li',
+    { class: plain ? 'step-item step-item--plain' : 'step-item' },
+    button,
+    body,
+  );
   return { item, button, body };
 }
 
@@ -120,7 +132,7 @@ export function groupEvent(
   lead: (Node | string)[] = stepNumber(row.step),
 ): HTMLElement {
   const title = el('span', { class: 'step-title' }, row.label);
-  title.append(hidden(`, ${DIRECTION_WORDS[row.direction]}`));
+  title.append(hidden(`(${DIRECTION_WORDS[row.direction]})`));
   return el(
     'li',
     { class: 'group-event', 'data-step': String(row.step) },

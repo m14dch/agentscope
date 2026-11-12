@@ -179,10 +179,10 @@ test('tabs follow the ARIA pattern and the choice survives stepping', async ({ p
 
 test('code stays readable at 200% zoom without horizontal scrolling', async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 900 });
-  // At 720 px the phone layout applies (02 layout.phone): the tabs sit behind Step details.
+  // At 720 px the phone column applies (02 phone_steps): the address's row is open, its
+  // prediction first.
   await page.goto('./#/mcp/mcp-balance/26/protocol');
-  await page.locator('[data-measured][data-presentation="list"]').waitFor();
-  await page.getByRole('button', { name: 'Step details' }).click();
+  await page.getByRole('button', { name: 'Show the step' }).click();
   await expect(page.locator('.tab-panel .json')).toBeVisible();
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '200%';
@@ -197,7 +197,7 @@ test('code stays readable at 200% zoom without horizontal scrolling', async ({ p
   // Annotations open: the groups' lines and their callouts wrap too (02 inspector.annotations.phone).
   await page.getByRole('button', { name: 'Annotations' }).click();
   const wide = await page
-    .locator('#inspector-json, #inspector-json .json')
+    .locator('#step-26-inspector-json, #step-26-inspector-json .json')
     .evaluateAll((els) => Math.max(...els.map((el) => el.scrollWidth - el.clientWidth)));
   expect(wide).toBeLessThanOrEqual(1);
   expect(

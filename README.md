@@ -32,8 +32,9 @@ five plain sentences between a few parties (You, Assistant, Bank systems), witho
 (or the keys + and -) keeps the learner's place, and the level is part of the address
 (`#/mcp/mcp-balance/14/protocol`; no suffix is the Overview). The inspector says what each message carries and holds Payload, Transport and
 Security; **Annotations** split the payload into groups that explain every field in place, including
-where the customer ID and the balance come from and go. The **Model context** panel puts the agent's state beside what the model has actually seen. On a phone the diagram
-becomes a step list and the controls move to a bar at the bottom of the screen. After the first visit the
+where the customer ID and the balance come from and go. The **Model context** panel puts the agent's state beside what the model has actually seen. On a phone each scenario is
+one column of steps, as on tls12.xargs.org: every step a closed row with its direction (→ request,
+← response, ± nothing sent), opened one by one or all at once, and only the page scrolls. After the first visit the
 site works offline.
 
 ## Development
@@ -212,7 +213,7 @@ Each use case has exactly one scenario (`03-simulation-engine.yaml` → `one_sce
 3. Run `npm run validate:specs`, `npm test` (the golden test compares the Python and TypeScript registries)
    and `npm run build`; an invalid event fails the build with an error naming its scenario and event. Update
    the counts the unit tests pin (scenarios and events) and the scenario lists of the browser tests that
-   enumerate scenarios (`diagram.spec.ts`, `phone.spec.ts`, `quality.spec.ts`).
+   enumerate scenarios (`diagram.spec.ts`, `phone-steps.spec.ts`, `quality.spec.ts`).
 4. Write for the learner: each step's explanation is its message in one sentence, and model output is
    labelled as simulated.
 
@@ -225,7 +226,7 @@ test or evidence that proves it. CI runs all of them on every pull request.
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | At least 80 events, played at the default parameters        | `tests/unit/rag.test.ts` (quality gate of supported events); `quality.spec.ts` steps through every scenario with the arrow key: 83 events, 95% of steps within 100 ms                |
 | Desktop and tablet                                          | `diagram.spec.ts` (labels at desktop and tablet width), `compare.spec.ts` (panes stack at tablet width), `quality.spec.ts` (keyboard at 1440 and 820 px), `a11y.spec.ts` at 820 px   |
-| Phone                                                       | `phone.spec.ts` (phone-layout at 390 × 844 and 360 × 800), `a11y.spec.ts` at 390 px                                                                                                  |
+| Phone                                                       | `phone-steps.spec.ts` (phone-steps at 390 × 844 and 360 × 800), `a11y.spec.ts` at 390 px                                                                                             |
 | Keyboard navigation                                         | `quality.spec.ts` (Tab reaches every control on every tab with a visible focus; keys and Enter step), `navigation.spec.ts`, `diagram.spec.ts`, `inspector.spec.ts`                   |
 | Reduced motion                                              | `quality.spec.ts` (nothing animates, diagram regions jump at once), `diagram.spec.ts`                                                                                                |
 | Scenario schema validation                                  | `npm run validate:specs`; `tests/unit/node/scenarios-build.test.ts` (a broken event fails the build), `scenarios-golden.test.ts`                                                     |

@@ -54,9 +54,7 @@
   }
 
   .picker summary {
-    display: flex;
-    align-items: center;
-    min-height: 44px;
+    padding-block: 14px;
   }
 
   /* The list opens in place and pushes the page down; nothing covers the content. */
@@ -222,13 +220,27 @@
     grid-row: 1;
   }
 
+  /* An Architecture group: the title from the left edge, its events below it in full width. */
+  .step-row--plain {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .step-row--plain .step-title,
+  .step-row--plain .step-sub {
+    grid-column: 1;
+  }
+
+  .step-row--plain .step-marker {
+    grid-column: 2;
+  }
+
   .step-row[aria-expanded='true'] .step-title {
     font-weight: var(--weight-strong);
   }
 
-  /* The body opens below its row, aligned with the titles. */
+  /* The body opens below its row in the column's full width, so payloads keep their room. */
   .step-body {
-    padding: 0 0 var(--space-3) calc(3.5rem + 2 * var(--space-1));
+    padding: 0 0 var(--space-3);
   }
 
   .step-body .inspector-details {
@@ -239,14 +251,15 @@
     padding-bottom: var(--space-2);
   }
 
+  /* Events in an opened group: number and glyph in their columns, the text aligned with the
+     titles. */
   .group-event-head {
-    margin-left: calc(-3.5rem - 2 * var(--space-1));
-    width: calc(100% + 3.5rem + 2 * var(--space-1));
     grid-template-columns: 2.25rem 1.25rem minmax(0, 1fr);
   }
 
-  .group-event .message {
+  .group-event > :not(.group-event-head) {
     margin: 0;
+    padding-left: calc(3.5rem + 2 * var(--space-1));
   }
 
   /* Panels inside a row stack into the body's width. */

@@ -200,8 +200,9 @@ test('combined-walkthrough: tool data and document evidence stay apart from ques
 
 test('on narrow screens each label sits above its statement', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  // The phone column opens the group of the address's step, which holds the panel (c-08).
   await page.goto('./#/combined/combined-balance-explanation/35/architecture');
-  await page.locator('[data-measured][data-presentation="list"]').waitFor();
+  await expect(statements(page).first()).toBeVisible();
   for (const li of await statements(page).all()) {
     const label = await li.locator('.statement-source').boundingBox();
     const text = await li.locator('.statement-text').boundingBox();

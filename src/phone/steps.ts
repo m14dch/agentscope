@@ -158,7 +158,7 @@ export class PhoneSteps {
     for (const row of this.rows) this.close(row);
   }
 
-  /** "Protocol. 28 steps.", "Architecture. 9 groups." or "Overview. 4 stages." */
+  /** "Protocol. 28 steps.", "Architecture. 10 groups." or "Overview. 4 stages." */
   private count(): string {
     const n =
       this.viewLevel === 'overview'

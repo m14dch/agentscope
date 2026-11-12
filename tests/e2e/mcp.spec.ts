@@ -130,10 +130,11 @@ test('server/discover offers the earlier initialize handshake, collapsed and lab
   await expect(earlier).toContainText('Mcp-Session-Id: demo-session-7f3a');
   await expect(earlier).toContainText('"notifications/initialized"');
   await expect(earlier).toContainText('No body');
-  // Readable at 200% zoom without horizontal scrolling, like the payload above it.
+  // Readable at 200% zoom without horizontal scrolling, like the payload above it. At 720 px
+  // the phone column applies (02 phone_steps): the address's row is open.
   await page.setViewportSize({ width: 720, height: 900 });
-  // At 720 px the phone layout applies (02 layout.phone): the tabs sit behind Step details.
-  await page.getByRole('button', { name: 'Step details' }).click();
+  await expect(page.locator('#step-2 details.earlier')).toHaveCount(1);
+  await page.locator('#step-2 details.earlier > summary').click();
   await expect(earlier.locator('.json').first()).toBeVisible();
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '200%';
@@ -148,6 +149,7 @@ test('server/discover offers the earlier initialize handshake, collapsed and lab
     document.documentElement.style.fontSize = '';
   });
   // Only on server/discover: not on its result nor on other MCP requests.
+  await page.setViewportSize({ width: 1280, height: 900 });
   for (const step of [3, 5, 14]) {
     await jump(page, step);
     if (await tab(page, 'Payload').count()) await tab(page, 'Payload').click();
