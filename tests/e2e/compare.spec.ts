@@ -68,7 +68,7 @@ test('compare-sync: Next keeps both panes on the same semantic phase, with the R
     if (phase === 'Preparation') {
       // RAG has nothing in preparation: it names no step of its own and says why.
       await expect(rag(page).locator('.compare-message')).toHaveText(
-        'Index built earlier by rag-index.',
+        "The documents were indexed earlier, in the RAG tab's indexing scenario.",
       );
       await expect(rag(page).locator('.compare-position p')).toHaveText(
         'No step in Preparation · 0 of 10 played',
@@ -104,10 +104,10 @@ test('compare-sync: stepping either pane moves the other to the same semantic ph
   await page.getByRole('slider', { name: 'MCP step' }).fill('4');
   await expect(status(page)).toHaveText('Step 4 of 28 · Preparation');
   await expect(rag(page).locator('.compare-message')).toHaveText(
-    'Index built earlier by rag-index.',
+    "The documents were indexed earlier, in the RAG tab's indexing scenario.",
   );
   await expect(page.locator('.compare-phase-line [aria-live="polite"]')).toHaveText(
-    'Preparation. RAG: Index built earlier by rag-index. MCP step 4 of 28.',
+    "Preparation. RAG: The documents were indexed earlier, in the RAG tab's indexing scenario. MCP step 4 of 28.",
   );
   // And forward to RAG's last retrieval step: MCP goes to the same offset of that phase.
   await ragSlider.fill('6');

@@ -45,7 +45,7 @@ compare:
       answer: answer
   placeholders:
     rag-query:
-      preparation: Index built earlier by rag-index.
+      preparation: "The documents were indexed earlier, in the RAG tab's indexing scenario."
   overview_headline: Two assistants answer two questions, one by asking the bank's systems for your
     live balance and the other by finding the account conditions in the bank's documents.
   aspects:

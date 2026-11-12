@@ -56,7 +56,7 @@ describe('compare timeline', () => {
       ],
     });
     expect(compare.placeholders?.['rag-query']?.['preparation']).toBe(
-      'Index built earlier by rag-index.',
+      "The documents were indexed earlier, in the RAG tab's indexing scenario.",
     );
   });
 

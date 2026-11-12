@@ -271,14 +271,18 @@ layout:
   phone:
     breakpoint: Below 48rem (768 px), which includes a desktop browser zoomed to 200%; from
       48rem the tablet and desktop layouts apply unchanged. Crossing 48rem (a window resized or
-      zoomed) lays the page out again at the same address.
+      zoomed) lays the page out again at the same address, and focus moves to the page's heading
+      (the learning question), as after a change of page.
     principle: One column that reads top to bottom, and only the page scrolls. Nothing scrolls
       horizontally, on the page or inside any region, in any tab, scenario, zoom level or panel,
       from 360 px wide; no region scrolls on its own and nothing is fixed to the screen.
     header: 'The wordmark (32 px high) with the GitHub link at the end of its row
       (layout.source_link), then the tabs, then on RAG the scenario picker
-      (navigation.scenario_picker), then the simulated statement. There is no menu: the zoom
-      control is in the column''s intro (phone_steps.intro) and there is no play speed.'
+      (navigation.scenario_picker), then the simulated statement. The picker''s list opens in place
+      and pushes the page down, so it closes only on a scenario choice, its own summary or Escape:
+      a tap elsewhere keeps it open and does what it taps, without the page moving under the
+      finger. There is no menu: the zoom control is in the column''s intro (phone_steps.intro) and
+      there is no play speed.'
     presentation: Each scenario and Compare is the column of steps (phone_steps) in place of the
       control row, the diagram, the inspector and the panels below them.
     touch_targets: 'Every control outside running text (buttons, tabs, links of the header,
@@ -449,11 +453,14 @@ phone_steps:
       only the number, as its title already names the phase).'
     protocol: 'One row per played event, in order: the step number in small ink-muted text, the
       direction glyph, the operation label (diagram.labels), and below the label the two
-      participants by registry label in small ink-muted text, "Agent → MCP server"; a computation
-      inside one participant names it once, followed by "· nothing sent".'
+      participants by their short registry label (01 participants.registry short_label) in small
+      ink-muted text, "Agent → MCP server"; a computation inside one participant names it once,
+      followed by "· nothing sent". Where a short label differs from the full label, the opened
+      body starts with the participants by their full labels in small ink-muted text.'
     glyph: '→ for a request or action sent to another participant (the filled arrowhead of the
-      diagram), ← for a response or result (the open arrowhead), ± for a computation inside one
-      participant (its sender is its receiver), which sends nothing. It sits in a column of its
+      diagram), ← for a response or result (the open arrowhead), ↻ for a computation inside one
+      participant (its sender is its receiver), which sends nothing: a loop, as the diagram draws
+      a self-call. It sits in a column of its
       own in ink and is hidden from assistive technology, which hears "request", "response" or
       "nothing sent" in its place. It is never the only signal: the participants line states
       the direction.'
@@ -475,7 +482,8 @@ phone_steps:
   predictions: 'A Protocol row whose event carries a prediction prompt (learning.prediction)
     opens with "Before this step" in small ink-muted text, the prompt, and a button "Show the
     step"; the rest of its body appears once that is pressed, and focus moves to the body''s
-    message. Open all shows every body in full, each prompt above its step. Nothing is scored.'
+    message. Open all shows every body in full, each prompt above its step, and counts as having
+    pressed it: such a row opens in full from then on. Nothing is scored.'
   inline_panels: 'A panel sits in the row of the step it explains, not below the page, and shows
     what it shows at that step on wider screens: the model context (context_panel) as a fold
     "Model context" (aria-expanded, closed at start) in the row of every LLM API request; in
@@ -495,7 +503,8 @@ phone_steps:
   address: 'The step of the address (navigation.routes) is the last row the learner opened: its
     event at Protocol, the first event of its group at Architecture; closing a row leaves it.
     Opening a page at a step opens the row holding that step (at Architecture the group holding
-    it) and scrolls the page at once so the row starts at the top of the screen. At the Overview
+    it), scrolls the page at once so the row starts 48 px below the top of the screen, keeping the
+    end of what comes before it in sight, and moves focus to the row''s button. At the Overview
     the address holds the stage as on wider screens (zoom_levels.cursor_mapping).'
   zoom: 'A change of level keeps the place (zoom_levels.cursor_mapping): the row holding the
     mapped step opens (none at step 0), the others are closed, focus stays on the zoom control and
@@ -754,7 +763,7 @@ compare_view:
     test checks. At the Overview the panes step by stage: each stage counts as one event of the
     semantic phase of its first phase, and a pane rests at the last event of its stage, so the two
     stories run side by side stage by stage under the same rules and placeholders (for example MCP
-    learns the bank''s actions while RAG shows "Index built earlier by rag-index."). A stage can
+    learns the bank''s actions while RAG shows "The documents were indexed earlier, in the RAG tab''s indexing scenario."). A stage can
     cover several semantic phases (the answer stage: context assembly, model generation and answer),
     so at the Overview a compare step is labelled with every semantic phase its panes'' stages cover,
     from the first to the last: the position line reads "Stage <s> of <m> · Context assembly to
@@ -792,7 +801,7 @@ compare_view:
     and both positions after each manual change of position while paused, and once when playback pauses
     or ends; it stays quiet while playing. For example "Information acquisition. RAG step 6 of 10. MCP
     step 14 of 28.", "Information acquisition. RAG step 6 of 10, done with this phase. MCP step 16 of
-    28." or, for a pane with a placeholder, "Preparation. RAG: Index built earlier by rag-index. MCP
+    28." or, for a pane with a placeholder, "Preparation. RAG: The documents were indexed earlier, in the RAG tab''s indexing scenario. MCP
     step 4 of 28." Controls keep focus while stepping.'
 rag_controls:
   top_k:

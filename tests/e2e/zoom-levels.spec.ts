@@ -147,7 +147,9 @@ test('every tab offers the three levels; Compare tells both stories stage by sta
   await page.getByRole('button', { name: 'Next step' }).click();
   // Preparation: MCP learns the bank's actions; RAG's index was built earlier.
   await expect(shared).toHaveText('Stage 1 of 4 · Preparation');
-  await expect(rag.locator('.compare-message')).toHaveText('Index built earlier by rag-index.');
+  await expect(rag.locator('.compare-message')).toHaveText(
+    "The documents were indexed earlier, in the RAG tab's indexing scenario.",
+  );
   await expect(mcp.locator('.compare-position p')).toHaveText('Stage 1 of 4');
   await expect(mcp.getByRole('link', { name: 'Inspect in MCP' })).toBeVisible();
   await page.getByRole('button', { name: 'Next step' }).click();

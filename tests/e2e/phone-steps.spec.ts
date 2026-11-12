@@ -330,7 +330,7 @@ test.describe('at 390 × 844', () => {
     await expect(phases.first()).toHaveText('Preparation');
     const preparation = page.locator('.compare-phase').first();
     await expect(preparation.locator('.compare-placeholder')).toHaveText(
-      'RAG Index built earlier by rag-index.',
+      "RAG The documents were indexed earlier, in the RAG tab's indexing scenario.",
     );
     await expect(preparation.locator('.step-lead').first()).toHaveText('MCP');
     const request = page.locator('.compare-phase').nth(1);

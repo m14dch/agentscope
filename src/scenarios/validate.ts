@@ -403,6 +403,24 @@ export function validateRegistry(registry: Registry, ctx: ValidationContext): st
   return problems;
 }
 
+/**
+ * Labels of the participant registry (01 participants): each has a label and a short_label,
+ * and no two share a short label. Mirrors participant_label_problems of validate_specs.py.
+ */
+export function participantLabelProblems(registry: readonly unknown[]): string[] {
+  const problems: string[] = [];
+  const shorts = new Set<string>();
+  for (const entry of registry) {
+    const p = obj(entry);
+    const short = text(p['short_label']).trim();
+    if (!text(p['label']).trim() || !short)
+      problems.push(`${text(p['id'])} needs a label and a short_label`);
+    else if (shorts.has(short)) problems.push(`short_label ${short} is not unique`);
+    shorts.add(short);
+  }
+  return problems;
+}
+
 /** Expands and validates the bundled specifications. An empty problem list means valid. */
 export function loadScenarios(sources: SpecSources): { registry: Registry; problems: string[] } {
   const { registry, problems } = buildRegistry(sources);
@@ -416,6 +434,8 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
     if (!text(o['state']).trim() || !text(o['label']).trim())
       err('03 lineage.origins', `${key} needs a state and a label`);
   }
+  for (const p of participantLabelProblems(sources.architecture.participants.registry))
+    err('01 participants', p);
   // One scenario per use case (03 scenario_format.one_scenario_per_use_case): no variants.
   for (const [where, doc] of [
     ['04', sources.mcp],
