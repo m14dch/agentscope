@@ -8,7 +8,7 @@ import { levelSuffix } from '../app/routes.ts';
 import { type Level, zoomed } from '../diagram/zoom.ts';
 import { createPlayback } from '../rag/bundled.ts';
 import type { Compare, Scenario, ScenarioEvent } from '../scenarios/types.ts';
-import { allButtons, el, groupEvent, rowItem, setOpen } from './dom.ts';
+import { allButtons, el, fullLine, groupEvent, rowItem, setOpen } from './dom.ts';
 import {
   type CompareSide,
   compareColumn,
@@ -29,6 +29,8 @@ export interface PhoneCompareOptions {
     { scenario: Scenario; label: string; tab: string },
   ];
   labels: Readonly<Record<string, string>>;
+  /** Short labels for the rows (01 participants short_label). */
+  shortLabels: Readonly<Record<string, string>>;
   level: Level;
   /** After a change of level, to write the address. */
   onChange: (level: Level) => void;
@@ -145,7 +147,7 @@ export class PhoneCompare {
 
   private render(): void {
     const overview = this.viewLevel === 'overview';
-    const { compare, phases, labels } = this.options;
+    const { compare, phases, labels, shortLabels: short } = this.options;
     this.heading.textContent = overview
       ? String(compare['overview_headline'] ?? compare.headline)
       : compare.headline;
@@ -164,12 +166,12 @@ export class PhoneCompare {
           }));
       }
       if (this.viewLevel === 'architecture') {
-        return groupRows(side.scenario, side.events, labels).map((row) => ({
+        return groupRows(side.scenario, side.events, labels, short).map((row) => ({
           unit: { kind: 'group', row },
           firstEvent: row.events[0]?.event,
         }));
       }
-      return eventRows(side.events, labels).map((row) => ({
+      return eventRows(side.events, labels, short).map((row) => ({
         unit: { kind: 'event', row },
         firstEvent: row.event,
       }));
@@ -238,12 +240,12 @@ export class PhoneCompare {
     const s = this.sides[side] as CompareSide;
     const step = unit.kind === 'event' ? unit.row.step : (unit.row.events[0]?.step ?? 0);
     const href = `#/${this.tabs[side]}/${s.scenario.id}/${step}${levelSuffix(this.viewLevel)}`;
-    const link = el('a', { href, class: 'small' }, `Inspect step ${step} in ${s.label}`);
+    const link = el('a', { href, class: 'inspect-link' }, `Inspect step ${step} in ${s.label}`);
     const content =
       unit.kind === 'event'
-        ? [el('p', { class: 'message' }, unit.row.event.explanation)]
+        ? [...fullLine(unit.row), el('p', { class: 'message' }, unit.row.event.explanation)]
         : [el('ol', { class: 'group-events' }, ...unit.row.events.map((r) => groupEvent(r)))];
-    return [...content, el('p', {}, link)];
+    return [...content, link];
   }
 
   private toggle(row: OpenRow): void {

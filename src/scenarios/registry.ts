@@ -39,6 +39,19 @@ export function participantLabels(): Readonly<Record<string, string>> {
   );
 }
 
+/** Short participant labels (01 participants short_label), by ID; the label where none. */
+export function participantShortLabels(): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    (
+      sources.architecture.participants.registry as {
+        id: string;
+        label?: string;
+        short_label?: string;
+      }[]
+    ).map((p) => [p.id, p.short_label ?? p.label ?? p.id]),
+  );
+}
+
 /** The bundled specifications (validated through loadRegistry). */
 export function specSources(): SpecSources {
   loadRegistry();

@@ -57,6 +57,8 @@ export interface InspectorContext {
   route?: boolean;
   /** The state of the Annotations toggle, when several inspectors share it. */
   toggles?: { annotated: boolean };
+  /** Called after this inspector's Annotations toggle changed the shared state. */
+  onAnnotations?: () => void;
 }
 
 /** Whether a step offers the earlier-revision comparison (02 inspector.earlier_revision). */
@@ -396,8 +398,10 @@ export class Inspector {
       toggle.setAttribute('aria-expanded', String(this.toggles.annotated));
       toggle.setAttribute('aria-controls', block);
       toggle.addEventListener('click', () => {
-        this.toggles.annotated = !this.toggles.annotated;
+        // From what this toggle shows, so a shared state never flips against it.
+        this.toggles.annotated = toggle.getAttribute('aria-expanded') !== 'true';
         this.update(step, true);
+        this.context.onAnnotations?.();
       });
       tools.append(toggle);
     }

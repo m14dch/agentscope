@@ -11,7 +11,7 @@ import { type Boundary, Inspector } from '../inspector/inspector.ts';
 import type { TravelSources } from '../inspector/annotated.ts';
 import type { EarlierRevision, Scenario, ScenarioEvent } from '../scenarios/types.ts';
 import { type EventRow, eventRows, groupAt, type GroupRow, groupRows, stageItems } from './rows.ts';
-import { allButtons, el, fold, groupEvent, rowItem, setOpen, stepNumber } from './dom.ts';
+import { allButtons, el, fold, fullLine, groupEvent, rowItem, setOpen, stepNumber } from './dom.ts';
 
 /** A panel inside a row (02 phone_steps.inline_panels). */
 export interface InlinePanel {
@@ -32,6 +32,8 @@ export interface PhoneStepsOptions {
   /** Plays the events at the current parameters; its cursor is the address's step. */
   player: Player;
   labels: Readonly<Record<string, string>>;
+  /** Short labels for the rows (01 participants short_label). */
+  shortLabels: Readonly<Record<string, string>>;
   level: Level;
   boundaries: readonly Boundary[];
   earlierRevision?: EarlierRevision | undefined;
@@ -55,6 +57,8 @@ interface Row {
   /** Builds the body's content; returns what to dispose of when it closes. */
   fill: (reveal: boolean) => (() => void)[];
   dispose: (() => void)[];
+  /** The step's inspector while open (Protocol), redrawn when the Annotations toggle changes. */
+  inspector?: { view: Inspector; step: number } | undefined;
 }
 
 export class PhoneSteps {
@@ -190,12 +194,14 @@ export class PhoneSteps {
       this.list.replaceChildren(this.stages());
       return;
     }
-    const { labels, scenario } = this.options;
+    const { labels, shortLabels: short, scenario } = this.options;
     const list = el('ol', { class: 'steps', 'aria-label': scenario.title });
     if (this.viewLevel === 'protocol') {
-      for (const r of eventRows(this.events, labels)) list.append(this.eventRow(r));
+      for (const r of eventRows(this.events, labels, short)) list.append(this.eventRow(r));
     } else {
-      groupRows(scenario, this.events, labels).forEach((g, i) => list.append(this.groupRow(g, i)));
+      groupRows(scenario, this.events, labels, short).forEach((g, i) =>
+        list.append(this.groupRow(g, i)),
+      );
     }
     this.list.replaceChildren(list);
     const keys = new Set(this.rows.map((r) => r.key));
@@ -283,7 +289,7 @@ export class PhoneSteps {
         row.body.querySelector<HTMLElement>('.message')?.focus({ preventScroll: true });
       });
       (before[0] as HTMLElement).append(show);
-      row.body.replaceChildren(...before);
+      row.body.replaceChildren(...fullLine(r), ...before);
       return [];
     }
     const holder = el('div');
@@ -294,15 +300,17 @@ export class PhoneSteps {
       jump: (k) => this.jump(k),
       travel: this.options.travel,
       toggles: this.toggles,
+      onAnnotations: () => this.redrawInspectors(view),
       id: `step-${r.step}-inspector`,
       name: `Step ${r.step} details`,
       route: false,
     });
     view.update({ events: this.events, cursor: r.step });
+    row.inspector = { view, step: r.step };
     // The message can take focus after "Show the step", so the reader continues there.
     holder.querySelector('.message')?.setAttribute('tabindex', '-1');
     const panels = this.panelsAt(row, r);
-    row.body.replaceChildren(...before, holder, ...panels.map((p) => p.root));
+    row.body.replaceChildren(...fullLine(r), ...before, holder, ...panels.map((p) => p.root));
     return panels.flatMap((p) => (p.destroy ? [p.destroy] : []));
   }
 
@@ -351,6 +359,7 @@ export class PhoneSteps {
   private close(row: Row): void {
     for (const d of row.dispose) d();
     row.dispose = [];
+    row.inspector = undefined;
     setOpen(row, false);
     row.body.replaceChildren();
   }
@@ -359,6 +368,7 @@ export class PhoneSteps {
   private openAll(): void {
     for (const row of this.rows) {
       this.open.add(row.key);
+      this.revealed.add(row.key);
       if (!row.body.hidden && row.body.querySelector('.prediction button')) this.close(row);
       this.show(row, true);
     }
@@ -388,7 +398,11 @@ export class PhoneSteps {
     if (row) {
       this.open.add(row.key);
       this.show(row);
-      if (scroll) row.button.scrollIntoView({ block: 'start', behavior: 'instant' });
+      // 48 px below the top (scroll-margin-top in phone.css), focus on the row (phone_steps.address).
+      if (scroll) {
+        row.button.scrollIntoView({ block: 'start', behavior: 'instant' });
+        row.button.focus({ preventScroll: true });
+      }
     }
     this.options.onChange();
   }
@@ -397,6 +411,13 @@ export class PhoneSteps {
   private jump(step: number): void {
     this.options.player.jump(step);
     this.openAt(step, true);
-    this.rowAt(step)?.button.focus({ preventScroll: true });
+  }
+
+  /** The Annotations toggle is shared: every other open row shows the new state at once. */
+  private redrawInspectors(changed: Inspector): void {
+    for (const row of this.rows) {
+      const i = row.inspector;
+      if (i && i.view !== changed) i.view.update({ events: this.events, cursor: i.step }, true);
+    }
   }
 }

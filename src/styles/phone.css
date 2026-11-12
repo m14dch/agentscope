@@ -234,6 +234,32 @@
     grid-column: 2;
   }
 
+  /* A row named by the address stops 48 px below the top (phone_steps.address). */
+  .step-row {
+    scroll-margin-top: var(--space-6);
+  }
+
+  /* A prediction waiting for "Show the step" ends the body without a rule or gap below. */
+  .step-body > .prediction:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .inspect-link,
+  .full-participants {
+    display: flex;
+    align-items: center;
+  }
+
+  .inspect-link {
+    min-height: 44px;
+  }
+
+  .full-participants {
+    margin: 0 0 var(--space-1);
+  }
+
   .step-row[aria-expanded='true'] .step-title {
     font-weight: var(--weight-strong);
   }

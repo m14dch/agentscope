@@ -14,7 +14,7 @@ export type Direction = 'request' | 'response' | 'local';
 export const GLYPHS: Readonly<Record<Direction, string>> = {
   request: '→',
   response: '←',
-  local: '±',
+  local: '↻',
 };
 
 /** What assistive technology hears in place of the glyph. */
@@ -56,7 +56,10 @@ export interface EventRow {
   event: ScenarioEvent;
   direction: Direction;
   label: string;
+  /** By short label (01 participants short_label), for the row. */
   participants: string;
+  /** By full label, for the opened body. */
+  fullParticipants: string;
 }
 
 /** An Architecture row: a consecutive run of one phase's events. */
@@ -85,6 +88,7 @@ export function eventRow(
   event: ScenarioEvent,
   index: number,
   labels: Readonly<Record<string, string>>,
+  short: Readonly<Record<string, string>> = labels,
 ): EventRow {
   return {
     key: event.id,
@@ -93,7 +97,8 @@ export function eventRow(
     event,
     direction: direction(event),
     label: operationLabel(event),
-    participants: participantsLine(event, labels),
+    participants: participantsLine(event, short),
+    fullParticipants: participantsLine(event, labels),
   };
 }
 
@@ -101,8 +106,9 @@ export function eventRow(
 export function eventRows(
   events: readonly ScenarioEvent[],
   labels: Readonly<Record<string, string>>,
+  short: Readonly<Record<string, string>> = labels,
 ): EventRow[] {
-  return events.map((e, i) => eventRow(e, i, labels));
+  return events.map((e, i) => eventRow(e, i, labels, short));
 }
 
 /** One row per group of 02 zoom_levels.architecture_groups, over the events as played. */
@@ -110,6 +116,7 @@ export function groupRows(
   scenario: Scenario,
   events: readonly ScenarioEvent[],
   labels: Readonly<Record<string, string>>,
+  short: Readonly<Record<string, string>> = labels,
 ): GroupRow[] {
   return groupRuns({ ...scenario, events: [...events] }).map((run) => {
     const steps = run.members.length === 1 ? '1 step' : `${run.members.length} steps`;
@@ -118,7 +125,7 @@ export function groupRows(
       key: run.key,
       title: run.continued ? name : run.phase.takeaway,
       caption: run.continued ? steps : `${name} · ${steps}`,
-      events: run.members.map(([e, i]) => eventRow(e, i, labels)),
+      events: run.members.map(([e, i]) => eventRow(e, i, labels, short)),
     };
   });
 }

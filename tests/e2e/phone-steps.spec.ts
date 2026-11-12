@@ -74,7 +74,8 @@ function smallTargets(page: Page): Promise<string[]> {
         c.closest('.json, .annotated, .visually-hidden')
       )
         continue;
-      if (c.closest('p, li.source-line, .travel, .callout')) continue;
+      // Links inside a sentence: step links in annotation bullets, sources, pair links.
+      if (c.closest('.travel, .callout, li.source-line, .message, .notes')) continue;
       const box = c.getBoundingClientRect();
       if (!box.width && !box.height) continue;
       if (box.width < 44 || box.height < 43.5)
@@ -136,13 +137,19 @@ test.describe('at 390 × 844', () => {
     const call = rows(page).nth(13);
     await expect(call).toHaveAttribute('aria-expanded', 'false');
     await expect(call).toHaveAccessibleName(
-      'Step 14 MCP · tools/call (request) MCP client → Example Bank MCP server',
+      'Step 14 MCP · tools/call (request) MCP client → MCP server',
+    );
+    // Rows use the short labels; the opened body names the full ones (01 short_label).
+    await rows(page).nth(12).click();
+    await expect(rows(page).nth(12)).toContainText('Agent → MCP client');
+    await expect(page.locator('#step-13 .full-participants')).toHaveText(
+      'Agent (host application / RAG orchestrator) → MCP client',
     );
     // The glyph is hidden from assistive technology; the participants line states the direction.
     await expect(call.locator('.step-glyph')).toHaveAttribute('aria-hidden', 'true');
     await expect(call.locator('.step-glyph')).toHaveText('→');
-    await expect(rows(page).nth(14).locator('.step-glyph')).toHaveText('±');
-    await expect(rows(page).nth(14)).toContainText('Example Bank MCP server · nothing sent');
+    await expect(rows(page).nth(14).locator('.step-glyph')).toHaveText('↻');
+    await expect(rows(page).nth(14)).toContainText('MCP server · nothing sent');
     await expect(rows(page).nth(14)).toHaveAccessibleName(/\(nothing sent\)/);
     await expect(rows(page).nth(19).locator('.step-glyph')).toHaveText('←');
     await expect(rows(page).nth(19)).toHaveAccessibleName(/\(response\) Core ledger → /);
@@ -198,7 +205,9 @@ test.describe('at 390 × 844', () => {
     const get = rows(page).nth(16);
     await expect(get).toHaveAttribute('aria-expanded', 'true');
     await expect(get).toContainText('HTTP · GET');
-    expect(Math.abs((await get.boundingBox())?.y ?? 99)).toBeLessThan(2);
+    // 48 px below the top, focused (phone_steps.address).
+    expect(Math.abs(((await get.boundingBox())?.y ?? 99) - 48)).toBeLessThan(2);
+    await expect(get).toBeFocused();
     const scroll = await page.evaluate(() => window.scrollY);
     const zoom = page.getByRole('group', { name: 'Zoom' });
     await zoom.getByRole('button', { name: 'Architecture' }).click();
@@ -233,6 +242,11 @@ test.describe('at 390 × 844', () => {
     await expect(last.locator('.prompt')).toBeVisible();
     await expect(last.getByRole('tablist')).toBeVisible();
     await expect(last.getByRole('button', { name: 'Show the step' })).toHaveCount(0);
+    // Open all counted as revealing: a row opened alone later opens in full.
+    await page.getByRole('button', { name: 'Close all' }).click();
+    await call.click();
+    await expect(body.getByRole('button', { name: 'Show the step' })).toHaveCount(0);
+    await expect(body.getByRole('tablist')).toBeVisible();
   });
 
   test('panels sit in the rows of their steps; the projection takes its compact form', async ({
@@ -305,6 +319,42 @@ test.describe('at 390 × 844', () => {
     await expect(row(page, 'Keyword search')).toHaveCount(1);
   });
 
+  test('the Annotations toggle is shared by the open rows and never flips against what it shows', async ({
+    page,
+  }) => {
+    await open(page, 'mcp/mcp-balance/0/protocol');
+    await page.getByRole('button', { name: 'Open all' }).click();
+    const toggles = page.getByRole('button', { name: 'Annotations' });
+    expect(await toggles.count()).toBeGreaterThan(2);
+    const states = () =>
+      toggles.evaluateAll((all) => [...new Set(all.map((t) => t.getAttribute('aria-expanded')))]);
+    await toggles.nth(0).click();
+    await expect.poll(states).toEqual(['true']);
+    await toggles.nth(1).click();
+    await expect.poll(states).toEqual(['false']);
+    await toggles.nth(2).click();
+    await expect.poll(states).toEqual(['true']);
+    await expect(toggles.nth(2)).toBeFocused();
+    expect(await page.locator('.annotated').count()).toBe(await toggles.count());
+  });
+
+  test('the RAG scenario list stays open on a tap elsewhere, which lands where it was aimed', async ({
+    page,
+  }) => {
+    await open(page, 'rag/rag-query/0');
+    await page.locator('.picker summary').click();
+    await expect(page.locator('.picker')).toHaveAttribute('open', '');
+    await page.getByRole('button', { name: 'Protocol' }).click();
+    await expect(page.getByRole('button', { name: 'Protocol' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.locator('.picker')).toHaveAttribute('open', '');
+    await page.getByRole('link', { name: 'Ingest and index documents' }).click();
+    await expect(page).toHaveURL(/#\/rag\/rag-index\/0/);
+    await expect(page.locator('.picker')).not.toHaveAttribute('open', '');
+  });
+
   test('every control outside running text is at least 44 × 44 px', async ({ page }) => {
     for (const hash of [
       'mcp/mcp-balance/0/protocol',
@@ -366,6 +416,8 @@ test('from 48rem the diagram and the control row are unchanged; crossing it lays
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(rows(page)).toHaveCount(28);
   await expect(rows(page).nth(13)).toHaveAttribute('aria-expanded', 'true');
+  // As after a change of page, focus starts at the heading (layout.phone.breakpoint).
+  await expect(page.locator('h2')).toBeFocused();
   await expect(page.locator('svg.diagram')).toHaveCount(0);
   await page.setViewportSize({ width: 768, height: 1000 });
   await page.locator('[data-measured] svg.diagram').waitFor();

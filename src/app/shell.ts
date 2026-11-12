@@ -32,7 +32,12 @@ import {
   thresholdLabel,
 } from '../inspector/retrieval.ts';
 import { DiagramView } from '../diagram/view.ts';
-import { loadRegistry, participantLabels, specSources } from '../scenarios/registry.ts';
+import {
+  loadRegistry,
+  participantLabels,
+  participantShortLabels,
+  specSources,
+} from '../scenarios/registry.ts';
 import { createPlayback, ragDerivation } from '../rag/bundled.ts';
 import type { Chunk, RagFixtures } from '../rag/engine.ts';
 import type { Json, ParameterSpec, Scenario, ScenarioEvent } from '../scenarios/types.ts';
@@ -183,6 +188,7 @@ export class Shell {
   private readonly registry = loadRegistry();
   private readonly sources = specSources();
   private readonly labels = participantLabels();
+  private readonly shortLabels = participantShortLabels();
   private readonly tabs = tabScenarios(this.sources);
   private readonly root: HTMLElement;
   private readonly header: HTMLElement;
@@ -205,6 +211,8 @@ export class Shell {
   private readonly phoneChange = (): void => {
     this.leaveScenario();
     this.render(location.hash);
+    // As after a change of page, focus starts at the heading (02 layout.phone.breakpoint).
+    this.content.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
   };
 
   constructor(root: HTMLElement) {
@@ -233,7 +241,10 @@ export class Shell {
     const active = document.activeElement;
     this.render(hash);
     const lost = !active || active === document.body || !active.isConnected;
-    if (this.shown && lost) {
+    // A page that placed focus itself (a phone row named by the address) keeps it.
+    const now = document.activeElement;
+    const placed = now instanceof HTMLElement && now !== document.body && now.isConnected;
+    if (this.shown && lost && !placed) {
       this.content
         .querySelector<HTMLElement>('h2, [role="alert"] a')
         ?.focus({ preventScroll: true });
@@ -390,7 +401,9 @@ export class Shell {
     document.addEventListener(
       'pointerdown',
       (e) => {
-        if (details.open && !details.contains(e.target as Node)) details.open = false;
+        // On phones the list is in the page's flow: closing it on a tap elsewhere would move the
+        // page under the finger before the tap lands (02 layout.phone.header).
+        if (details.open && !details.contains(e.target as Node) && !isPhone()) details.open = false;
       },
       { signal: (this.headerListeners ??= new AbortController()).signal },
     );
@@ -445,6 +458,7 @@ export class Shell {
         phases: semantic_phases,
         panes: [pane(compare.left_scenario), pane(compare.right_scenario)],
         labels: this.labels,
+        shortLabels: this.shortLabels,
         level: route.level,
         onChange: (level) => {
           // The address keeps its compare step; only the level changes (phone_steps.compare).
@@ -499,6 +513,7 @@ export class Shell {
       scenario,
       player,
       labels: this.labels,
+      shortLabels: this.shortLabels,
       level: route.level,
       boundaries: this.sources.security.trust_boundaries as unknown as Boundary[],
       earlierRevision: this.sources.mcp.protocol.earlier_revision_handshake,

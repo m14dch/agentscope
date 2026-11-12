@@ -118,6 +118,16 @@ export function allButtons(openAll: () => void, closeAll: () => void): HTMLEleme
   return el('div', { class: 'open-all' }, open, close);
 }
 
+/**
+ * The participants by their full labels, where the row names them by short labels that differ
+ * (02 phone_steps.rows.protocol); nothing otherwise.
+ */
+export function fullLine(row: EventRow): HTMLElement[] {
+  return row.fullParticipants === row.participants
+    ? []
+    : [el('p', { class: 'small muted full-participants' }, row.fullParticipants)];
+}
+
 /** The step number in small ink-muted text, read as "Step <k>". */
 export function stepNumber(step: number): (Node | string)[] {
   return [hidden('Step '), String(step)];
@@ -142,7 +152,7 @@ export function groupEvent(
       el('span', { class: 'step-lead small muted' }, ...lead),
       el('span', { class: 'step-glyph', 'aria-hidden': 'true' }, GLYPHS[row.direction]),
       title,
-      el('span', { class: 'step-sub small muted' }, row.participants),
+      el('span', { class: 'step-sub small muted' }, row.fullParticipants),
     ),
     el('p', { class: 'message' }, row.event.explanation),
   );
