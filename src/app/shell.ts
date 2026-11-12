@@ -27,6 +27,7 @@ import {
   projection,
   RetrievalPanel,
   retrievalModel,
+  type RetrievalSection,
   type SearchedIndex,
   thresholdLabel,
 } from '../inspector/retrieval.ts';
@@ -46,7 +47,9 @@ import {
   tabScenarios,
 } from './routes.ts';
 import { offlineIndicator } from './offline.ts';
-import { isPhone, PageScroll, relocate } from './phone.ts';
+import { isPhone, phoneQuery } from './phone.ts';
+import { type InlinePanel, type PanelActions, PhoneSteps } from '../phone/steps.ts';
+import { PhoneCompare } from '../phone/compare.ts';
 import { CompareView } from '../compare/view.ts';
 import { appUrl } from '../base.ts';
 import '../styles/diagram.css';
@@ -191,22 +194,20 @@ export class Shell {
   private compare: CompareView | undefined;
   /** Removes the document listeners of the current header. */
   private headerListeners: AbortController | undefined;
-  /** The header's menu on phones (02 layout.phone.header). */
-  private menu:
-    | {
-        toggle: HTMLButtonElement;
-        body: HTMLElement;
-        /** The GitHub link until something else is in the menu; it then follows (toMenu). */
-        source?: HTMLElement | undefined;
-      }
+  /** The column of steps of a scenario on phones (02 phone_steps). */
+  private phone:
+    | { scenario: Scenario; defaults: readonly ScenarioEvent[]; player: Player; view: PhoneSteps }
     | undefined;
+  /** Compare on phones (02 phone_steps.compare). */
+  private phoneCompare: PhoneCompare | undefined;
   /** Whether a page has been shown; the first one does not take focus. */
   private shown = false;
   private route: Route | undefined;
-  /** True while a parameter changes, which never scrolls the page (02 layout.phone.stepping_area). */
-  private adjusting = false;
-  /** Tells the learner's own scrolling from the app's jumps. */
-  private readonly pageScroll = new PageScroll();
+  /** Crossing 48rem lays the page out again at the same address (02 layout.phone.breakpoint). */
+  private readonly phoneChange = (): void => {
+    this.leaveScenario();
+    this.render(location.hash);
+  };
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -215,12 +216,13 @@ export class Shell {
     this.content = el('div', { class: 'shell-content' });
     root.replaceChildren(this.header, this.content);
     window.addEventListener('keydown', this.onKey);
+    phoneQuery()?.addEventListener('change', this.phoneChange);
   }
 
   destroy(): void {
     this.leaveScenario();
     window.removeEventListener('keydown', this.onKey);
-    this.pageScroll.destroy();
+    phoneQuery()?.removeEventListener('change', this.phoneChange);
     this.headerListeners?.abort();
     this.root.replaceChildren();
     this.root.className = '';
@@ -257,11 +259,27 @@ export class Shell {
     const route = parsed.route;
     if (route.tab === 'compare') {
       if (this.compare) this.compare.follow(route.step, route.level);
-      else this.renderCompare(route);
+      else if (this.phoneCompare) {
+        this.route = route;
+        this.phoneCompare.follow(route.level);
+      } else this.renderCompare(route);
       return;
     }
     const scenario = this.registry[route.scenario];
     if (!scenario) return;
+    if (this.phone?.scenario.id === scenario.id) {
+      const p = this.phone;
+      this.route = route;
+      p.view.follow(fromDefaultStep(p.defaults, p.player.playback.events, route.step), route.level);
+      return;
+    }
+    if (isPhone()) {
+      this.leaveScenario();
+      this.route = route;
+      this.renderHeader(route.tab, scenario);
+      this.renderPhoneScenario(scenario, route);
+      return;
+    }
     if (this.current?.scenario.id === scenario.id) {
       // Same scenario: follow the step and level in the link.
       const c = this.current;
@@ -290,6 +308,11 @@ export class Shell {
     this.current = undefined;
     this.compare?.dispose();
     this.compare = undefined;
+    this.phone?.view.dispose();
+    this.phone?.player.dispose();
+    this.phone = undefined;
+    this.phoneCompare?.dispose();
+    this.phoneCompare = undefined;
   }
 
   /** Writes the current position into the address without adding a history entry. */
@@ -321,119 +344,20 @@ export class Shell {
     });
     const brand = el('h1', { class: 'brand' }, el('a', { href: '#/' }, wordmark));
     const row = el('div', { class: 'shell-bar' }, brand, nav);
-    this.menu = this.phoneMenu(row);
-    // The GitHub link ends the header row (02 layout.source_link); its slot keeps it last
-    // when controls join the row later. On phones it joins the menu, last, once something
-    // else is in it; alone it stays at the end of the wordmark row (toMenu).
-    const source = el('a', { class: 'source-link', href: SOURCE_URL }, 'GitHub');
-    row.append(el('span', { class: 'source-slot' }, source));
-    this.menu.source = source;
-    if (scenario && this.tabs[tab].length > 1) {
-      const picker = this.picker(tab, scenario);
-      row.append(picker);
-      // On phones the picker's own list moves into the menu, shown in place.
-      const list = picker.querySelector('ul');
-      if (list) {
-        list.classList.add('menu-scenarios');
-        this.toMenu('Scenario', [list]).classList.add('menu-row--scenarios');
-      }
-    }
+    if (scenario && this.tabs[tab].length > 1) row.append(this.picker(tab, scenario));
+    // The GitHub link ends the header row (02 layout.source_link); on phones it ends the
+    // wordmark row (src/styles/phone.css).
+    row.append(
+      el(
+        'span',
+        { class: 'source-slot' },
+        el('a', { class: 'source-link', href: SOURCE_URL }, 'GitHub'),
+      ),
+    );
     this.header.replaceChildren(
       row,
       el('p', { class: 'small muted simulated' }, SIMULATED, offlineIndicator()),
     );
-  }
-
-  /**
-   * The menu that holds the scenario picker, the zoom control and the play speed on
-   * phones (02 layout.phone.header); hidden from 48rem, where they sit in their own places.
-   * It is shown once something is in it.
-   */
-  private phoneMenu(row: HTMLElement): { toggle: HTMLButtonElement; body: HTMLElement } {
-    const signal = (this.headerListeners ??= new AbortController()).signal;
-    const body = el('div', { id: 'menu', class: 'menu-body', hidden: '' });
-    const toggle = button(
-      'Menu',
-      () => {
-        const open = toggle.getAttribute('aria-expanded') !== 'true';
-        toggle.setAttribute('aria-expanded', String(open));
-        body.hidden = !open;
-      },
-      { class: 'menu-toggle', 'aria-expanded': 'false', 'aria-controls': 'menu', hidden: '' },
-    );
-    const close = (focus: boolean): void => {
-      toggle.setAttribute('aria-expanded', 'false');
-      body.hidden = true;
-      if (focus) toggle.focus();
-    };
-    // A scenario choice closes it; so does a change of level, with focus back on the menu.
-    body.addEventListener('click', (e) => {
-      const target = e.target as Element;
-      if (target.closest('a')) close(false);
-      else if (target.closest('[data-level]')) close(true);
-    });
-    // Escape anywhere on the page closes the open menu, and does nothing else (it does not
-    // clear a lineage selection: the window's key handler skips a handled event).
-    document.addEventListener(
-      'keydown',
-      (e) => {
-        if (e.key !== 'Escape' || body.hidden) return;
-        e.preventDefault();
-        close(true);
-      },
-      { signal },
-    );
-    document.addEventListener(
-      'pointerdown',
-      (e) => {
-        const target = e.target as Node;
-        if (!body.hidden && !body.contains(target) && !toggle.contains(target)) close(false);
-      },
-      { signal },
-    );
-    row.append(toggle, body);
-    return { toggle, body };
-  }
-
-  /** A labelled row of the menu. */
-  private menuRow(label: string | undefined, ...children: Node[]): HTMLElement {
-    return el(
-      'div',
-      { class: 'menu-row' },
-      ...(label ? [el('span', { class: 'small muted' }, label)] : []),
-      ...children,
-    );
-  }
-
-  /**
-   * Puts a control into the menu while the phone layout applies (02 layout.phone.header);
-   * `parent` is where it sits otherwise. The control moves; it is never copied.
-   */
-  private toMenu(label: string | undefined, nodes: Element[], parent?: Element): HTMLElement {
-    const row = this.menuRow(label);
-    if (!this.menu) return row;
-    // The GitHub link stays last in the header row.
-    const slot = parent?.querySelector(':scope > .source-slot');
-    if (slot) slot.before(...nodes);
-    else parent?.append(...nodes);
-    // The scenario list, the longest, comes last but for the GitHub link.
-    this.menu.body.insertBefore(
-      row,
-      this.menu.body.querySelector('.menu-row--scenarios, .menu-row--source'),
-    );
-    this.menu.toggle.hidden = false;
-    const signal = (this.headerListeners ??= new AbortController()).signal;
-    relocate(nodes, row, signal);
-    // The menu holds something now, so the GitHub link moves in too, as its last entry.
-    const source = this.menu.source;
-    if (source) {
-      this.menu.source = undefined;
-      const sourceRow = this.menuRow(undefined);
-      sourceRow.classList.add('menu-row--source');
-      this.menu.body.append(sourceRow);
-      relocate([source], sourceRow, signal);
-    }
-    return row;
   }
 
   private picker(tab: Tab, scenario: Scenario): HTMLElement {
@@ -498,15 +422,13 @@ export class Shell {
     const c = this.current;
     if (!c || level === c.view.level) return;
     const from = c.view.level;
-    this.act(() => {
-      c.prompt = undefined;
-      const target = zoomCursor(this.spans(c), c.player.cursor, from, level);
-      this.setLevel(c, level);
-      c.player.jump(target);
-      c.render();
-      c.row.announce(level, c.row.status.textContent ?? '');
-      keepFocusVisible(c.row);
-    });
+    c.prompt = undefined;
+    const target = zoomCursor(this.spans(c), c.player.cursor, from, level);
+    this.setLevel(c, level);
+    c.player.jump(target);
+    c.render();
+    c.row.announce(level, c.row.status.textContent ?? '');
+    keepFocusVisible(c.row);
   }
 
   /** The Compare tab: both scenarios side by side, in sync by semantic phase. */
@@ -518,8 +440,24 @@ export class Shell {
       const tab = TABS.find((t) => t !== 'compare' && this.tabs[t].includes(id)) ?? 'mcp';
       return { scenario: this.registry[id] as Scenario, label: TAB_LABELS[tab], tab };
     };
+    if (isPhone()) {
+      this.route = route;
+      this.phoneCompare = new PhoneCompare(this.content, {
+        compare,
+        phases: semantic_phases,
+        panes: [pane(compare.left_scenario), pane(compare.right_scenario)],
+        labels: this.labels,
+        level: route.level,
+        onChange: (level) => {
+          // The address keeps its compare step; only the level changes (phone_steps.compare).
+          this.route = { ...(this.route ?? route), level };
+          const hash = formatRoute(this.route);
+          if (location.hash !== hash) history.replaceState(null, '', hash);
+        },
+      });
+      return;
+    }
     this.compare = new CompareView(this.content, {
-      pageScroll: this.pageScroll,
       compare,
       phases: semantic_phases,
       panes: [pane(compare.left_scenario), pane(compare.right_scenario)],
@@ -532,18 +470,120 @@ export class Shell {
         if (location.hash !== hash) history.replaceState(null, '', hash);
       },
     });
-    this.toPhoneControls(this.compare.controls);
   }
 
   /**
-   * On phones the playback buttons become the bottom bar with the position line and the step
-   * slider, and the zoom control and the play speed move into the menu (02 layout.phone.controls).
+   * A scenario on phones: the column of steps (02 phone_steps). The player plays the events at
+   * the current parameters; its cursor is the address's step.
    */
-  private toPhoneControls(row: ControlRow): void {
-    const signal = (this.headerListeners ??= new AbortController()).signal;
-    relocate([row.status, row.slider], row.buttons, signal);
-    this.toMenu('Zoom', [row.zoom]);
-    this.toMenu(undefined, [row.speed]);
+  private renderPhoneScenario(scenario: Scenario, route: Route): void {
+    const player = new Player(createPlayback(scenario));
+    const defaults = player.playback.events;
+    player.jump(route.step);
+    const parameters = this.parameterControls(scenario, player, (name, value) => {
+      player.setParameters({ [name]: value });
+      parameters?.sync();
+      view.rebuild();
+      write();
+    });
+    parameters?.sync();
+    const write = (): void => {
+      if (!this.route) return;
+      // The address numbers steps as played at the defaults (02 navigation.route_steps).
+      const step = toDefaultStep(defaults, player.playback.events, player.cursor);
+      this.route = { ...this.route, step, level: view.level };
+      const hash = formatRoute(this.route);
+      if (location.hash !== hash) history.replaceState(null, '', hash);
+    };
+    // Write nothing until the view exists.
+    let ready = false;
+    const view: PhoneSteps = new PhoneSteps(this.content, {
+      scenario,
+      player,
+      labels: this.labels,
+      level: route.level,
+      boundaries: this.sources.security.trust_boundaries as unknown as Boundary[],
+      earlierRevision: this.sources.mcp.protocol.earlier_revision_handshake,
+      parameters: parameters?.root,
+      panels: this.inlinePanels(scenario, player),
+      onChange: () => {
+        if (ready) write();
+      },
+    });
+    ready = true;
+    this.phone = { scenario, defaults, player, view };
+    write();
+  }
+
+  /**
+   * The panels a step holds on phones (02 phone_steps.inline_panels), each as of that step: the
+   * model context at LLM requests, the ingestion panel at index-07, the retrieval sections at
+   * retrieve-06, retrieve-10 and retrieve-12, the Combined answer at c-08.
+   */
+  private inlinePanels(
+    scenario: Scenario,
+    player: Player,
+  ): (event: ScenarioEvent, step: number, actions: PanelActions) => InlinePanel[] {
+    const context = hasContext(scenario.initial_state);
+    const sections: Readonly<Record<string, readonly RetrievalSection[]>> = {
+      'retrieve-06': ['scores', 'projection'],
+      'retrieve-10': ['prompt'],
+      'retrieve-12': ['answer'],
+    };
+    const local = (e: ScenarioEvent): string => e.id.slice(e.id.indexOf(':') + 1);
+    return (event, step, actions) => {
+      const events = player.playback.events;
+      const panels: InlinePanel[] = [];
+      if (context && event.protocol === 'LLM_API' && event.message_type === 'REQUEST') {
+        const id = `step-${step}-context`;
+        const area = el('div', { class: 'context-area' });
+        const body = el('div', { id, class: 'context-panel', hidden: '' });
+        const toggle = button(
+          'Model context',
+          () => {
+            const open = toggle.getAttribute('aria-expanded') !== 'true';
+            toggle.setAttribute('aria-expanded', String(open));
+            body.hidden = !open;
+            const playback = player.playback;
+            body.replaceChildren(
+              ...(open
+                ? [
+                    renderContext(
+                      contextModel(events, playback.snapshot(step), playback.snapshot(step - 1)),
+                    ),
+                  ]
+                : []),
+            );
+          },
+          { 'aria-expanded': 'false', 'aria-controls': id, class: 'panel-toggle' },
+        );
+        area.append(toggle, body);
+        panels.push({ root: area });
+      }
+      const id = local(event);
+      if (id === 'index-07' && scenario.derived_events?.includes('index-05')) {
+        const ingestion = this.ingestionPanel(actions.jump, actions.leave);
+        ingestion.panel.update(ingestionModel(events, step, ingestion.sources));
+        panels.push({ root: ingestion.panel.root });
+      }
+      const wanted = sections[id];
+      if (wanted && scenario.derived_events?.includes('retrieve-12')) {
+        const retrieval = this.retrievalPanel(player, actions.jump, actions.leave, {
+          sections: wanted,
+          id: `step-${step}-retrieval`,
+        });
+        retrieval.panel.update(retrievalModel(events, step, retrieval.index()), undefined);
+        panels.push({ root: retrieval.panel.root, destroy: () => retrieval.panel.destroy() });
+      }
+      if (id === 'c-08') {
+        const combined = combinedPanel(scenario, player, actions);
+        if (combined) {
+          combined.update(step);
+          panels.push({ root: combined.root });
+        }
+      }
+      return panels;
+    };
   }
 
   private renderScenario(scenario: Scenario, route: Route): ScenarioView {
@@ -566,7 +606,7 @@ export class Shell {
       statusClass: '',
       reset: () => this.go(() => player.reset()),
       previous: () => this.go(() => player.previous()),
-      toggle: () => this.act(() => player.toggle()),
+      toggle: () => player.toggle(),
       next: () => this.next(),
       speed: (speed) => player.setSpeed(speed),
       // At the Overview the slider runs over the stages (02 zoom_levels.stepping).
@@ -576,77 +616,13 @@ export class Shell {
         ),
       zoom: (level) => this.zoom(level),
     });
-    const { slider, buttons: controls } = row;
+    const { slider } = row;
     const steps = player.playback.length;
     row.reserve(scenario.phases.map((p) => `Step ${steps} of ${steps} · ${p.label}`));
 
-    const parameterButtons: HTMLButtonElement[] = [];
-    const sliders: { input: HTMLInputElement; output: HTMLOutputElement; name: string }[] = [];
-    const offered = PARAMETER_CONTROLS.filter((c) => scenario.parameters?.[c.name]);
-    const parameters = el('div', {
-      class: 'parameters',
-      role: 'group',
-      'aria-label': 'Parameters',
-    });
-    for (const control of offered) {
-      const { name, label } = control;
-      const spec = scenario.parameters?.[name];
-      if (control.kind === 'toggle') {
-        const b = button(label, () =>
-          this.setParameter(name, player.playback.retrievalConfig[name] !== true),
-        );
-        b.dataset['parameter'] = name;
-        b.dataset['value'] = 'true';
-        parameterButtons.push(b);
-        parameters.append(el('span', { class: 'parameter' }, b));
-        continue;
-      }
-      if (control.kind === 'range') {
-        const id = `parameter-${name}`;
-        const input = el('input', {
-          id,
-          type: 'range',
-          min: String(spec?.min ?? 0),
-          max: String(spec?.max ?? 1),
-          step: String(control.step),
-          class: 'parameter-range',
-        });
-        const output = el('output', { for: id, class: 'small parameter-value' });
-        input.addEventListener('input', () => {
-          const value = Number(input.value);
-          if (Number.isFinite(value)) this.setParameter(name, value);
-        });
-        sliders.push({ input, output, name });
-        parameters.append(
-          el(
-            'span',
-            { class: 'parameter' },
-            el('label', { for: id, class: 'small muted' }, label),
-            input,
-            output,
-          ),
-        );
-        continue;
-      }
-      const { unit } = control;
-      const group = el('div', {
-        class: 'segmented',
-        role: 'group',
-        'aria-label': `${label} in ${unit}`,
-      });
-      for (const value of optionValues(spec)) {
-        const b = button(String(value), () => this.setParameter(name, value), {
-          'aria-label': `${label} ${String(value)} ${unit}`,
-        });
-        b.dataset['parameter'] = name;
-        b.dataset['value'] = JSON.stringify(value);
-        parameterButtons.push(b);
-        group.append(b);
-      }
-      parameters.append(
-        el('span', { class: 'parameter' }, el('span', { class: 'small muted' }, label), group),
-      );
-    }
+    const parameters = this.parameterControls(scenario, player, (name, value) =>
+      this.setParameter(name, value),
+    );
 
     // DiagramView names the region and states how it scrolls.
     const diagram = el('div', { class: 'diagram-pane', role: 'region' });
@@ -676,8 +652,6 @@ export class Shell {
       details,
     );
     let shownPrompt: number | undefined;
-    /** The step and prompt last rendered, to tell a change of step from other renders. */
-    let rendered: string | undefined;
     const workspace = el('div', { class: 'workspace' }, diagram, splitter, inspector);
     this.attachSplitter(workspace, splitter, inspector);
 
@@ -762,23 +736,11 @@ export class Shell {
       // The Overview shows the very basics: no headline naming the protocol, no parameters, step
       // details or panels (02 zoom_levels.overview).
       headline.hidden = overview;
-      parameters.hidden = overview;
+      if (parameters) parameters.root.hidden = overview;
       details.hidden = overview;
       if (context) context.hidden = overview;
       const shown = overview ? 0 : k;
-      const config = player.playback.retrievalConfig;
-      for (const b of parameterButtons) {
-        const current = JSON.stringify(config[b.dataset['parameter'] ?? '']);
-        b.setAttribute('aria-pressed', String(b.dataset['value'] === current));
-      }
-      for (const { input, output, name } of sliders) {
-        const value = Number(config[name]);
-        const text = thresholdLabel(value);
-        // Leave the slider alone while it already shows the value, so dragging is not disturbed.
-        if (Number(input.value) !== value) input.value = String(value);
-        input.setAttribute('aria-valuetext', text);
-        output.textContent = text;
-      }
+      parameters?.sync();
       // At the Overview each panel shows what it shows before the first step: nothing.
       ingestion?.panel.update(ingestionModel(player.playback.events, shown, ingestion.sources));
       retrieval?.panel.update(
@@ -806,13 +768,6 @@ export class Shell {
         );
       }
       this.syncUrl();
-      const position = `${k}:${promptAt ?? ''}`;
-      // An explicit step brings the stepping area back; a Play tick (or a link followed) only
-      // while the learner has not scrolled the page since (02 layout.phone.stepping_area).
-      if (rendered !== undefined && position !== rendered && !this.adjusting) {
-        if (!this.pageScroll.userScrolled) this.keepInView(diagram, inspector, controls);
-      }
-      rendered = position;
     };
 
     const unsubscribe = player.subscribe(() => {
@@ -840,19 +795,112 @@ export class Shell {
     this.content.replaceChildren(
       lesson,
       row.root,
-      ...(offered.length ? [parameters] : []),
+      ...(parameters ? [parameters.root] : []),
       workspace,
       ...(context ? [context] : []),
       ...(ingestion ? [ingestion.panel.root] : []),
       ...(retrieval ? [retrieval.panel.root] : []),
       ...(combined ? [combined.root] : []),
     );
-    this.toPhoneControls(row);
     this.setLevel(state, route.level);
     // The Overview rests at the end of the stage (02 zoom_levels.cursor_mapping).
     player.jump(zoomCursor(this.spans(state), player.cursor, 'protocol', route.level));
     state.render();
     return state;
+  }
+
+  /**
+   * The parameter controls a scenario offers (02 rag_controls), with a function that shows the
+   * player's current values; undefined when it offers none.
+   */
+  private parameterControls(
+    scenario: Scenario,
+    player: Player,
+    set: (name: string, value: Json) => void,
+  ): { root: HTMLElement; sync: () => void } | undefined {
+    const parameterButtons: HTMLButtonElement[] = [];
+    const sliders: { input: HTMLInputElement; output: HTMLOutputElement; name: string }[] = [];
+    const offered = PARAMETER_CONTROLS.filter((c) => scenario.parameters?.[c.name]);
+    const parameters = el('div', {
+      class: 'parameters',
+      role: 'group',
+      'aria-label': 'Parameters',
+    });
+    for (const control of offered) {
+      const { name, label } = control;
+      const spec = scenario.parameters?.[name];
+      if (control.kind === 'toggle') {
+        const b = button(label, () => set(name, player.playback.retrievalConfig[name] !== true));
+        b.dataset['parameter'] = name;
+        b.dataset['value'] = 'true';
+        parameterButtons.push(b);
+        parameters.append(el('span', { class: 'parameter' }, b));
+        continue;
+      }
+      if (control.kind === 'range') {
+        const id = `parameter-${name}`;
+        const input = el('input', {
+          id,
+          type: 'range',
+          min: String(spec?.min ?? 0),
+          max: String(spec?.max ?? 1),
+          step: String(control.step),
+          class: 'parameter-range',
+        });
+        const output = el('output', { for: id, class: 'small parameter-value' });
+        input.addEventListener('input', () => {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) set(name, value);
+        });
+        sliders.push({ input, output, name });
+        parameters.append(
+          el(
+            'span',
+            { class: 'parameter' },
+            el('label', { for: id, class: 'small muted' }, label),
+            input,
+            output,
+          ),
+        );
+        continue;
+      }
+      const { unit } = control;
+      const group = el('div', {
+        class: 'segmented',
+        role: 'group',
+        'aria-label': `${label} in ${unit}`,
+      });
+      for (const value of optionValues(spec)) {
+        const b = button(String(value), () => set(name, value), {
+          'aria-label': `${label} ${String(value)} ${unit}`,
+        });
+        b.dataset['parameter'] = name;
+        b.dataset['value'] = JSON.stringify(value);
+        parameterButtons.push(b);
+        group.append(b);
+      }
+      parameters.append(
+        el('span', { class: 'parameter' }, el('span', { class: 'small muted' }, label), group),
+      );
+    }
+
+    if (!offered.length) return undefined;
+    const sync = (): void => {
+      const config = player.playback.retrievalConfig;
+      for (const b of parameterButtons) {
+        const current = JSON.stringify(config[b.dataset['parameter'] ?? '']);
+        b.setAttribute('aria-pressed', String(b.dataset['value'] === current));
+      }
+      for (const { input, output, name } of sliders) {
+        const value = Number(config[name]);
+        const text = thresholdLabel(value);
+        // Leave the slider alone while it already shows the value, so dragging is not disturbed.
+        if (Number(input.value) !== value) input.value = String(value);
+        input.setAttribute('aria-valuetext', text);
+        output.textContent = text;
+      }
+    };
+    return { root: parameters, sync };
   }
 
   /** Where the Overview's cursor rests: 0 and the end of each stage. */
@@ -895,28 +943,15 @@ export class Shell {
     ];
   }
 
-  /** Runs an explicit step action of the learner (02 layout.phone.stepping_area). */
-  private act(action: () => void): void {
-    // The learner's scrolling counts until the next explicit step action.
-    this.pageScroll.reset();
-    action();
-  }
-
   /** Runs a navigation that never shows a prediction prompt. */
   private go(action: () => void): void {
-    this.act(() => {
-      if (this.current) this.current.prompt = undefined;
-      action();
-      this.current?.render();
-    });
+    if (this.current) this.current.prompt = undefined;
+    action();
+    this.current?.render();
   }
 
   /** Next: show a pending prediction first, then run the step (02 learning.prediction_rules). */
   private next(): void {
-    this.act(() => this.nextStep());
-  }
-
-  private nextStep(): void {
     const c = this.current;
     if (!c) return;
     const upcoming = c.player.playback.event(c.player.cursor + 1);
@@ -1020,6 +1055,7 @@ export class Shell {
     player: Player,
     jump: (step: number) => void,
     leave: () => void,
+    only: { sections?: readonly RetrievalSection[]; id?: string } = {},
   ): { panel: RetrievalPanel; index: () => SearchedIndex } {
     const derivation = ragDerivation();
     const { engine } = derivation;
@@ -1039,7 +1075,7 @@ export class Shell {
       }
       return { docs, chunks, project };
     };
-    const panel = new RetrievalPanel({ index, jump, leave });
+    const panel = new RetrievalPanel({ index, jump, leave, ...only });
     return { panel, index };
   }
 
@@ -1051,35 +1087,15 @@ export class Shell {
   private setParameter(name: string, value: Json): void {
     const c = this.current;
     if (!c) return;
-    this.adjusting = true;
-    try {
-      c.prompt = undefined;
-      c.player.setParameters({ [name]: value });
-      if (c.selection) {
-        const found = occurrences(c.player.playback.events, c.selection);
-        // A value no longer played (a chunk ID of other parameters) is no longer selected.
-        if (!found.length) c.selection = undefined;
-        c.view.setSelected(new Set(found));
-      }
-      c.render();
-    } finally {
-      this.adjusting = false;
+    c.prompt = undefined;
+    c.player.setParameters({ [name]: value });
+    if (c.selection) {
+      const found = occurrences(c.player.playback.events, c.selection);
+      // A value no longer played (a chunk ID of other parameters) is no longer selected.
+      if (!found.length) c.selection = undefined;
+      c.view.setSelected(new Set(found));
     }
-  }
-
-  /**
-   * On phones, after a change of step, brings the stepping area on screen: the step list's
-   * region, then the prediction prompt, the message line and the error line, above the bottom
-   * bar. If any of it is off screen, the page scrolls at once so the region starts 8 px below
-   * the top (02 layout.phone.stepping_area).
-   */
-  private keepInView(region: HTMLElement, inspector: HTMLElement, bar: HTMLElement): void {
-    if (!isPhone()) return;
-    const top = region.getBoundingClientRect().top;
-    const lines = inspector.querySelectorAll('.prediction, .message, .message ~ p');
-    const bottom = Math.max(0, ...[...lines].map((l) => l.getBoundingClientRect().bottom));
-    if (top >= 0 && bottom <= bar.getBoundingClientRect().top) return;
-    this.pageScroll.jumpBy(top - 8);
+    c.render();
   }
 
   /** Selects a lineage value or clears the selection (02 lineage_selection). */
@@ -1094,6 +1110,16 @@ export class Shell {
 
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    // On phones only + and - act: the arrow keys and Space keep their browser meaning
+    // (02 phone_steps.keyboard).
+    const phone = this.phone?.view ?? this.phoneCompare;
+    if (phone) {
+      const direction = ZOOM_KEYS.get(e.key);
+      if (!direction || keyBelongsToFocus(e.target, e.key)) return;
+      phone.zoomBy(direction);
+      e.preventDefault();
+      return;
+    }
     const compare = this.compare;
     if (compare) {
       if (keyBelongsToFocus(e.target, e.key)) return;
@@ -1119,7 +1145,7 @@ export class Shell {
     const level = direction ? zoomed(c.view.level, direction) : undefined;
     if (e.key === 'ArrowRight') this.next();
     else if (e.key === 'ArrowLeft') this.go(() => c.player.previous());
-    else if (e.key === ' ') this.act(() => c.player.toggle());
+    else if (e.key === ' ') c.player.toggle();
     else if (direction) {
       if (level) this.zoom(level);
     } else return;
@@ -1135,10 +1161,5 @@ export function keepFocusVisible(row: ControlRow): void {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || active === document.body) return;
   if (active.isConnected && !active.closest('[hidden]')) return;
-  // On phones the zoom control can sit in the closed menu: then the menu's toggle takes focus.
-  const pressed = row.zoom.querySelector<HTMLElement>('[aria-pressed="true"]');
-  const target = pressed?.closest('[hidden]')
-    ? document.querySelector<HTMLElement>('.menu-toggle')
-    : pressed;
-  target?.focus({ preventScroll: true });
+  row.zoom.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus({ preventScroll: true });
 }

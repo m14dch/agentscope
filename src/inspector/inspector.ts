@@ -39,6 +39,15 @@ export interface InspectorContext {
   select: (selection: Selection | undefined) => void;
   /** 04-mcp-scenarios.yaml protocol.earlier_revision_handshake, for server/discover. */
   earlierRevision?: EarlierRevision | undefined;
+  /** Prefix of the element IDs, unique per page (several inspectors on phones); "inspector". */
+  id?: string;
+  /** The tab list's name; "Step details". */
+  name?: string;
+  /**
+   * Whether the message line names sender → receiver and operation; false in a phone row,
+   * which already shows them (02 phone_steps.body).
+   */
+  route?: boolean;
 }
 
 /** Whether a step offers the earlier-revision comparison (02 inspector.earlier_revision). */
@@ -194,8 +203,6 @@ export class Inspector {
   private readonly root: HTMLElement;
   private readonly context: InspectorContext;
   private chosen: TabId = 'payload';
-  /** Phones fold the tabs behind "Step details" (02 layout.phone.inspector); kept while stepping. */
-  private collapsed = true;
   /** The step last rendered, so unrelated player changes keep folds and focus. */
   private rendered: InspectorStep | undefined;
 
@@ -252,17 +259,18 @@ export class Inspector {
     const shown: TabId = panels.has(this.chosen) ? this.chosen : (available[0] as TabId);
     const tablist = el('div', 'tabs-bar');
     tablist.setAttribute('role', 'tablist');
-    tablist.setAttribute('aria-label', 'Step details');
+    tablist.setAttribute('aria-label', this.context.name ?? 'Step details');
+    const prefix = this.context.id ?? 'inspector';
     const panel = el('div', 'tab-panel');
     panel.setAttribute('role', 'tabpanel');
-    panel.id = 'inspector-panel';
+    panel.id = `${prefix}-panel`;
     // Reachable by keyboard even when it holds nothing focusable (Security, Lineage).
     panel.tabIndex = 0;
     focusKey(panel, 'panel');
     for (const id of available) {
       const tab = focusKey(el('button', 'tab', TAB_LABELS[id]), `tab:${id}`);
       tab.type = 'button';
-      tab.id = `inspector-tab-${id}`;
+      tab.id = `${prefix}-tab-${id}`;
       tab.dataset['tab'] = id;
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-selected', String(id === shown));
@@ -272,24 +280,10 @@ export class Inspector {
       tab.addEventListener('keydown', (e) => this.onTabKey(e, available, step));
       tablist.append(tab);
     }
-    panel.setAttribute('aria-labelledby', `inspector-tab-${shown}`);
+    panel.setAttribute('aria-labelledby', `${prefix}-tab-${shown}`);
     panel.replaceChildren(...(panels.get(shown)?.() ?? []));
-    // From 48rem the toggle is not shown and the tabs always are (src/styles/inspector.css).
     const details = el('div', 'inspector-details', tablist, panel);
-    details.id = 'inspector-details';
-    const toggle = focusKey(el('button', 'details-toggle', 'Step details'), 'details-toggle');
-    toggle.type = 'button';
-    toggle.setAttribute('aria-controls', details.id);
-    const fold = (): void => {
-      toggle.setAttribute('aria-expanded', String(!this.collapsed));
-      details.toggleAttribute('data-collapsed', this.collapsed);
-    };
-    fold();
-    toggle.addEventListener('click', () => {
-      this.collapsed = !this.collapsed;
-      fold();
-    });
-    this.root.replaceChildren(...message, toggle, details);
+    this.root.replaceChildren(...message, details);
   }
 
   private choose(id: TabId, step: InspectorStep, focus = false): void {
@@ -318,10 +312,9 @@ export class Inspector {
   private message(event: ScenarioEvent): Node[] {
     const from = this.context.labels[event.sender] ?? event.sender;
     const to = this.context.labels[event.receiver] ?? event.receiver;
-    return [
-      el('p', 'message', event.explanation),
-      el('p', 'small muted', `${from} → ${to} · ${operationLabel(event)}`),
-    ];
+    const message = el('p', 'message', event.explanation);
+    if (this.context.route === false) return [message];
+    return [message, el('p', 'small muted', `${from} → ${to} · ${operationLabel(event)}`)];
   }
 
   private notes(event: ScenarioEvent): Node[] {

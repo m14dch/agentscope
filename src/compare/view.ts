@@ -26,7 +26,6 @@ import {
   type PaneInput,
   stageInput,
 } from './timeline.ts';
-import { isPhone, type PageScroll, stepDelta } from '../app/phone.ts';
 import '../styles/compare.css';
 
 /** One side of the comparison. */
@@ -49,8 +48,6 @@ export interface CompareOptions {
   /** Called after every change of position or level, to write the address. */
   onChange: (step: number, level: Level) => void;
   clock?: Clock;
-  /** Tells the learner's scrolling from the app's jumps (02 layout.phone.stepping_area). */
-  pageScroll?: PageScroll;
 }
 
 const browserClock: Clock = {
@@ -93,7 +90,7 @@ export class CompareView {
   private readonly events: CompareTimeline;
   /** The timeline of stages, for the Overview (02 compare_view.timeline). */
   private readonly stages: CompareTimeline;
-  /** The shared control row, which the shell rearranges on phones (02 layout.phone.controls). */
+  /** The shared control row. */
   readonly controls: ControlRow;
   private readonly options: CompareOptions;
   private readonly clock: Clock;
@@ -111,10 +108,6 @@ export class CompareView {
    * position was already announced stays quiet.
    */
   private announced: number;
-  /** The bottom bar on phones: the shared controls. */
-  private readonly bar: HTMLElement;
-  /** Each pane's cursor at the last render, to tell which pane's step changed. */
-  private cursors: [number, number] | undefined;
   /** The heading: the headline, or at the Overview the plain one (02 compare_view.layout). */
   private readonly heading: HTMLElement;
   /** Where RAG and MCP differ; shown from Architecture on. */
@@ -147,7 +140,7 @@ export class CompareView {
       toggle: () => this.toggle(),
       next: () => this.next(),
       speed: (speed) => this.setSpeed(speed),
-      jump: (step) => this.act(() => this.navigate(step)),
+      jump: (step) => this.navigate(step),
       zoom: (level) => this.setLevel(level),
     });
     const steps = this.events.length;
@@ -159,7 +152,6 @@ export class CompareView {
       ...ranges,
     ]);
     for (const pane of this.panes) pane.view.setLevel(this.level);
-    this.bar = this.controls.buttons;
     const phaseList = el('ol', { class: 'compare-phases small', 'aria-label': 'Semantic phases' });
     for (const phase of phases) {
       const item = el('li', {}, phase.label);
@@ -280,73 +272,33 @@ export class CompareView {
   }
 
   next(): void {
-    this.act(() => this.navigate(this.position + 1));
+    this.navigate(this.position + 1);
   }
 
   previous(): void {
-    this.act(() => this.navigate(this.position - 1));
+    this.navigate(this.position - 1);
   }
 
   /** Moves one pane to its own step; the other follows to the same phase. */
   stepPane(side: 0 | 1, cursor: number): void {
-    this.act(() => this.navigate(this.timeline.stepOf(side, cursor)));
+    this.navigate(this.timeline.stepOf(side, cursor));
   }
 
   /** Return to the initial state before any step and pause (02 controls.action_rules). */
   reset(): void {
-    this.act(() => {
-      this.stop();
-      this.position = 0;
-      this.render();
-    });
+    this.stop();
+    this.position = 0;
+    this.render();
   }
 
   toggle(): void {
-    this.act(() => {
-      if (this.playing) {
-        this.stop();
-      } else if (this.position < this.timeline.length) {
-        this.playing = true;
-        this.schedule();
-      }
-      this.render();
-    });
-  }
-
-  /** Runs an explicit step action of the learner (02 layout.phone.stepping_area). */
-  private act(action: () => void): void {
-    // The learner's scrolling counts until the next explicit step action.
-    this.options.pageScroll?.reset();
-    action();
-  }
-
-  /**
-   * On phones, after a compare step, brings the panes whose step changed on screen above the
-   * bar (02 layout.phone.stepping_area): both current rows when they fit together, else the
-   * lower changed pane's message and current row.
-   */
-  private keepInView(changed: readonly Pane[]): void {
-    const scroll = this.options.pageScroll;
-    if (!scroll || !changed.length || !isPhone()) return;
-    const current = (pane: Pane): Element | undefined => {
-      const all = pane.root.querySelectorAll('.diagram-pane [data-current]');
-      return all[all.length - 1];
-    };
-    const limit = this.bar.getBoundingClientRect().top;
-    const rows = changed.flatMap((p) => {
-      const row = current(p);
-      return row ? [row.getBoundingClientRect()] : [];
-    });
-    const last = changed[changed.length - 1] as Pane;
-    const lastRow = current(last)?.getBoundingClientRect();
-    if (!lastRow) return;
-    const both = { top: Math.min(...rows.map((r) => r.top)), bottom: lastRow.bottom };
-    const span =
-      rows.length > 1 && both.bottom - both.top <= limit - 16
-        ? both
-        : { top: last.message.getBoundingClientRect().top, bottom: lastRow.bottom };
-    const delta = stepDelta(span, limit);
-    if (delta) scroll.jumpBy(delta);
+    if (this.playing) {
+      this.stop();
+    } else if (this.position < this.timeline.length) {
+      this.playing = true;
+      this.schedule();
+    }
+    this.render();
   }
 
   setSpeed(speed: Speed): void {
@@ -362,33 +314,31 @@ export class CompareView {
   setLevel(level: Level): void {
     if (level === this.level) return;
     const from = this.level;
-    this.act(() => {
-      const step = this.timeline.at(this.position);
-      const side = this.leading(step);
-      this.level = level;
-      for (const pane of this.panes) pane.view.setLevel(level);
-      if (side !== undefined) {
-        const pane = this.panes[side];
-        const cursor = zoomCursor(
-          pane.spans,
-          this.cursorOf(pane, from, step.panes[side].cursor),
-          from,
-          level,
-        );
-        // On the stage timeline a pane's cursor counts stages.
-        const at = level === 'overview' ? pane.stops.indexOf(cursor) : cursor;
-        this.position = this.timeline.stepOf(side, at);
-      } else this.position = 0;
-      if (this.playing) {
-        if (this.position >= this.timeline.length) this.stop();
-        else this.schedule();
-      }
-      // The control row announces the change of level; the phase line stays quiet.
-      this.announced = this.position;
-      this.render();
-      const where = this.controls.status.textContent ?? '';
-      this.controls.announce(level, where);
-    });
+    const step = this.timeline.at(this.position);
+    const side = this.leading(step);
+    this.level = level;
+    for (const pane of this.panes) pane.view.setLevel(level);
+    if (side !== undefined) {
+      const pane = this.panes[side];
+      const cursor = zoomCursor(
+        pane.spans,
+        this.cursorOf(pane, from, step.panes[side].cursor),
+        from,
+        level,
+      );
+      // On the stage timeline a pane's cursor counts stages.
+      const at = level === 'overview' ? pane.stops.indexOf(cursor) : cursor;
+      this.position = this.timeline.stepOf(side, at);
+    } else this.position = 0;
+    if (this.playing) {
+      if (this.position >= this.timeline.length) this.stop();
+      else this.schedule();
+    }
+    // The control row announces the change of level; the phase line stays quiet.
+    this.announced = this.position;
+    this.render();
+    const where = this.controls.status.textContent ?? '';
+    this.controls.announce(level, where);
   }
 
   /** A pane's event cursor for its position on the timeline of `level`. */
@@ -614,17 +564,6 @@ export class CompareView {
         phase ? `${phase}.` : 'Before the first step.',
         ...announcements,
       ].join(' ');
-    }
-    // An explicit step brings the panes back; a Play tick or a followed link only while the
-    // learner has not scrolled the page since (02 layout.phone.stepping_area).
-    const cursors: [number, number] = [step.panes[0].cursor, step.panes[1].cursor];
-    const before = this.cursors;
-    this.cursors = cursors;
-    if (before) {
-      const changed = this.panes.filter((_, i) => cursors[i] !== before[i]);
-      if (changed.length) {
-        if (!this.options.pageScroll?.userScrolled) this.keepInView(changed);
-      }
     }
     this.options.onChange(this.addressStep(), this.level);
   }

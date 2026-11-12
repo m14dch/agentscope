@@ -726,7 +726,24 @@ export interface RetrievalContext {
   jump: (step: number) => void;
   /** Takes focus when the panel disappears while holding it. */
   leave: () => void;
+  /**
+   * The sections shown, all by default; a phone row shows those of its step
+   * (02 phone_steps.inline_panels).
+   */
+  sections?: readonly RetrievalSection[];
+  /** Prefix of the element IDs, unique per page; "retrieval". */
+  id?: string;
 }
+
+export type RetrievalSection = 'scores' | 'projection' | 'prompt' | 'answer';
+
+/** Each section's heading, which names the panel when it shows without the scores. */
+const SECTION_TITLES: Readonly<Record<RetrievalSection, string>> = {
+  scores: 'Scores',
+  projection: 'Projection',
+  prompt: 'Prompt before and after retrieval',
+  answer: 'Answer',
+};
 
 /** The panel; rebuilt only when what it shows changes, keeping focus on the same control. */
 export class RetrievalPanel {
@@ -746,7 +763,11 @@ export class RetrievalPanel {
   constructor(context: RetrievalContext) {
     this.context = context;
     this.root = el('section', 'retrieval');
-    this.root.setAttribute('aria-labelledby', 'retrieval-title');
+    if (this.shows('scores')) this.root.setAttribute('aria-labelledby', `${this.prefix}-title`);
+    else {
+      const first = context.sections?.[0];
+      this.root.setAttribute('aria-label', first ? SECTION_TITLES[first] : 'Retrieval');
+    }
     this.root.hidden = true;
     this.observer =
       typeof ResizeObserver === 'undefined'
@@ -759,6 +780,14 @@ export class RetrievalPanel {
 
   destroy(): void {
     this.observer?.disconnect();
+  }
+
+  private get prefix(): string {
+    return this.context.id ?? 'retrieval';
+  }
+
+  private shows(section: RetrievalSection): boolean {
+    return !this.context.sections || this.context.sections.includes(section);
   }
 
   update(model: RetrievalModel | undefined, selection: Selection | undefined): void {
@@ -785,15 +814,20 @@ export class RetrievalPanel {
       return;
     }
     const index = this.context.index();
+    const scores = this.shows('scores')
+      ? [
+          Object.assign(el('h3', undefined, 'Why each chunk was kept or dropped'), {
+            id: `${this.prefix}-title`,
+            tabIndex: -1,
+          }),
+          this.scores(model),
+        ]
+      : [];
     this.root.replaceChildren(
-      Object.assign(el('h3', undefined, 'Why each chunk was kept or dropped'), {
-        id: 'retrieval-title',
-        tabIndex: -1,
-      }),
-      this.scores(model),
-      this.projection(model),
-      ...(model.prompt ? [this.prompt(model.prompt)] : []),
-      ...(model.answer ? [this.answer(model.answer, index)] : []),
+      ...scores,
+      ...(this.shows('projection') ? [this.projection(model)] : []),
+      ...(model.prompt && this.shows('prompt') ? [this.prompt(model.prompt)] : []),
+      ...(model.answer && this.shows('answer') ? [this.answer(model.answer, index)] : []),
     );
     // Draw once attached, so the plot knows its width.
     const plot = this.plot as RetrievalPanel['plot'];
@@ -806,7 +840,7 @@ export class RetrievalPanel {
       const target =
         (restore &&
           this.root.querySelector<HTMLElement>(`[data-focus="${CSS.escape(restore)}"]`)) ||
-        this.root.querySelector<HTMLElement>('#retrieval-title');
+        this.root.querySelector<HTMLElement>(`#${this.prefix}-title`);
       target?.focus({ preventScroll: true });
     }
   }
@@ -892,7 +926,13 @@ export class RetrievalPanel {
           `With reranking, the ${sel.topK === 1 ? 'best chunk' : `${sel.topK} best chunks`} by reranker score ${sel.topK === 1 ? 'is' : 'are'} retained, so a retained chunk can have a lower cosine score than a dropped one.`,
         ),
       );
-    return el('div', 'retrieval-scores', el('h4', undefined, 'Scores'), plot, ...notes);
+    return el(
+      'div',
+      'retrieval-scores',
+      el('h4', undefined, SECTION_TITLES.scores),
+      plot,
+      ...notes,
+    );
   }
 
   private projection(model: RetrievalModel): HTMLElement {
@@ -900,7 +940,7 @@ export class RetrievalPanel {
     const figure = el(
       'figure',
       'retrieval-projection',
-      el('h4', undefined, 'Projection'),
+      el('h4', undefined, SECTION_TITLES.projection),
       node,
       el(
         'figcaption',
@@ -1090,7 +1130,7 @@ export class RetrievalPanel {
     return el(
       'div',
       'retrieval-prompt',
-      el('h4', undefined, 'Prompt before and after retrieval'),
+      el('h4', undefined, SECTION_TITLES.prompt),
       status,
       el(
         'div',
@@ -1125,7 +1165,7 @@ export class RetrievalPanel {
     const sources = new Map(answer.sources.map((s) => [s.citation, s]));
     const text = el('p', 'answer-text');
     appendCited(text, answer.text, new Map(), (n, nth) =>
-      citationButton(n, nth, sources.get(n), this.open === n, 'retrieval-evidence', () => {
+      citationButton(n, nth, sources.get(n), this.open === n, `${this.prefix}-evidence`, () => {
         this.open = this.open === n ? undefined : n;
         this.update(this.model, this.selection);
       }),
@@ -1136,12 +1176,12 @@ export class RetrievalPanel {
     const open = this.open === undefined ? undefined : sources.get(this.open);
     const view = open ? evidence(open, index) : undefined;
     const holder = el('div', 'evidence');
-    holder.id = 'retrieval-evidence';
+    holder.id = `${this.prefix}-evidence`;
     if (view) holder.append(renderEvidence(view));
     return el(
       'div',
       'retrieval-answer',
-      el('h4', undefined, 'Answer'),
+      el('h4', undefined, SECTION_TITLES.answer),
       el('p', 'small muted', 'Simulated model output, shown to the user with its sources.'),
       text,
       lines,

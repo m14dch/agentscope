@@ -11,7 +11,6 @@ import {
 } from '../../src/diagram/zoom.ts';
 import { layout } from '../../src/diagram/model.ts';
 import { renderSvg } from '../../src/diagram/render.ts';
-import { renderList } from '../../src/diagram/list.ts';
 import { loadRegistry, participantLabels, specSources } from '../../src/scenarios/registry.ts';
 import { createPlayback } from '../../src/rag/bundled.ts';
 import { Player } from '../../src/engine/player.ts';
@@ -158,20 +157,16 @@ describe('Overview layout (02 zoom_levels.overview)', () => {
     expect(gaps(1400)).toEqual([360, 360]);
   });
 
-  it('names no protocol and no operation, in the SVG and in the step list', () => {
+  it('names no protocol and no operation', () => {
     const model = at(14);
-    const svg = renderSvg(model, 'Overview', 'o', labels);
-    const list = renderList(model, 'Overview', labels);
-    for (const html of [svg, list]) {
-      expect(html).not.toMatch(/\b(MCP|HTTP|JSON-RPC|LLM|REST|tools\/call)\b/);
-      expect(html).toContain('aria-current="step"');
-      expect(html).toContain('Stage 3 of 4');
-      expect(html).not.toMatch(
-        /\b(tool|server|vector|embedding|chunk|prompt|token|schema|model)s?\b/i,
-      );
-    }
-    expect(list).toContain('Assistant · Bank systems');
-    expect(renderSvg(model, 'Overview', 'o', labels)).toContain('aria-label="Parties"');
+    const html = renderSvg(model, 'Overview', 'o', labels);
+    expect(html).not.toMatch(/\b(MCP|HTTP|JSON-RPC|LLM|REST|tools\/call)\b/);
+    expect(html).toContain('aria-current="step"');
+    expect(html).toContain('Stage 3 of 4');
+    expect(html).not.toMatch(
+      /\b(tool|server|vector|embedding|chunk|prompt|token|schema|model)s?\b/i,
+    );
+    expect(html).toContain('aria-label="Parties"');
   });
 
   it('a waiting Compare pane marks no stage', () => {
