@@ -144,26 +144,9 @@
   stroke-width: var(--line-focus);
 }
 
-/* The selected lineage value (02 lineage_selection.diagram): selection background and an
-   ink underline, never the accent. */
-.label-mark {
-  fill: var(--color-selection);
-}
-
-.arrow-label--selected {
-  text-decoration: underline;
-  text-decoration-color: var(--color-ink);
-  stroke: none;
-}
-
 /* A group folds or expands: dotted ink-muted underline (02 design). */
 .group-label {
   text-decoration: underline dotted var(--color-ink-muted);
-}
-
-/* A selected caption is a value mark, not a fold control: solid ink underline. */
-.group-label.arrow-label--selected {
-  text-decoration: underline solid var(--color-ink);
 }
 
 /* The step list of phones (02 diagram.phone_list): one row per reached step, naming its
@@ -264,13 +247,6 @@
   stroke-width: var(--line-hair);
 }
 
-/* The selected lineage value: selection background and an ink underline. */
-.row-label--selected {
-  background: var(--color-selection);
-  text-decoration: underline solid var(--color-ink);
-  text-underline-offset: 0.2em;
-}
-
 /* Architecture: flat sections stacked in order, no frames. */
 .phase {
   border-left: 3px solid transparent;
@@ -311,10 +287,6 @@
   line-height: var(--leading-small);
   text-decoration: underline dotted var(--color-ink-muted);
   text-underline-offset: 0.25em;
-}
-
-.phase-caption .row-label--selected {
-  color: var(--color-ink);
 }
 
 .phase .rows {

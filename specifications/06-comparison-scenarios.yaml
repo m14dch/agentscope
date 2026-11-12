@@ -346,6 +346,37 @@ combined:
         action: set
         value_ref: payload
         description: Question, account context, retrieved evidence and tools become model-visible
+      carries:
+      - the system prompt, with the customer ID and account type
+      - the question and the retrieved document blocks
+      - the two tool definitions
+      annotations:
+      - heading: System prompt
+        sentence: The system prompt joins the tool rules of the MCP scenario and the grounding rules of
+          the RAG scenario.
+        paths:
+        - messages.0
+        values:
+          messages.0.role: 'system: written by the agent, not by the user'
+          messages.0.content: includes customer ID 123 and the account type from the session
+      - heading: Question and documents
+        sentence: The question and the retrieved chunks travel together in one user message, each chunk
+          in a document block that names its source.
+        paths:
+        - messages.1
+        values:
+          messages.1.role: 'user: the question and its evidence'
+          messages.1.content: the question, then one document block per retained chunk
+      - heading: Tool definitions
+        sentence: The model can only ask for the tools listed here, and it sees only their name, description
+          and input schema.
+        paths:
+        - tools
+        values:
+          tools.0.name: a tool for the customer's profile
+          tools.1.name: a tool for the account balance
+          tools.1.description: what the model reads to decide whether to use the tool
+          tools.1.parameters: 'JSON Schema the arguments must match: one customerId string'
     - id: c-05
       phase: planning
       sender: llm
@@ -369,6 +400,27 @@ combined:
         came from retrieval, not from a tool.'
       tracked_values:
         customerId: '123'
+      carries:
+      - a request to run get_customer_balance, not an answer
+      - 'the arguments the model filled in: customer ID 123'
+      - a call id that the tool result must refer to
+      annotations:
+      - heading: Tool call
+        sentence: Instead of text, the model returns a request that the agent run one of the offered tools.
+        paths:
+        - message
+        values:
+          message.role: 'assistant: the model''s turn'
+          message.tool_calls.0.id: call id; the tool message with the result must repeat it
+          message.tool_calls.0.name: the tool the model chose from the definitions
+          message.tool_calls.0.arguments.customerId: copied from the system prompt; the agent checks it
+            against the signed-in customer
+      - heading: Stop reason
+        sentence: The stop reason tells the agent why the model stopped and what it expects next.
+        paths:
+        - stop_reason
+        values:
+          stop_reason: 'tool_use: the model waits for the tool''s result'
   - copy:
       scenario: mcp-balance
       from: mcp-12
@@ -465,6 +517,51 @@ combined:
         action: set
         value_ref: payload
         description: Tool result becomes model-visible next to the retained evidence
+      carries:
+      - 'the whole conversation again: system prompt, question with documents, tool call'
+      - the tool result with the balance, seen by the model for the first time
+      - the same tool definitions
+      annotations:
+      - heading: System prompt
+        sentence: The same system prompt is sent again, because the model API keeps no memory between requests.
+        paths:
+        - messages.0
+        values:
+          messages.0.content: includes customer ID 123 and the account type
+      - heading: Question and documents
+        sentence: The question and its document blocks are sent again unchanged.
+        paths:
+        - messages.1
+        values:
+          messages.1.content: the question, then one document block per retained chunk
+      - heading: Earlier tool call
+        sentence: The model's own tool call is sent back, because the model API keeps no memory between
+          requests.
+        paths:
+        - messages.2
+        values:
+          messages.2.role: 'assistant: the model''s earlier turn'
+          messages.2.tool_calls.0.id: the call id the tool message below refers to
+          messages.2.tool_calls.0.arguments.customerId: the customer the tool was called for
+      - heading: Tool result
+        sentence: The tool's result reaches the model only now, as a tool message that names the call it
+          answers.
+        paths:
+        - messages.3
+        values:
+          messages.3.role: 'tool: a result the agent adds, not words of the user'
+          messages.3.tool_call_id: matches the id of the tool call above
+          messages.3.content: the text content of the tools/call result, with the balance
+      - heading: Tool definitions
+        sentence: The model can only ask for the tools listed here, and it sees only their name, description
+          and input schema.
+        paths:
+        - tools
+        values:
+          tools.0.name: a tool for the customer's profile
+          tools.1.name: a tool for the account balance
+          tools.1.description: what the model reads to decide whether to use the tool
+          tools.1.parameters: 'JSON Schema the arguments must match: one customerId string'
     - id: c-07
       phase: generation
       sender: llm
@@ -502,6 +599,23 @@ combined:
         - everyday-account@1.2-c50o10-001
         - account-opening@1.2-c50o10-002
         - savings-account@1.2-c50o10-001
+      carries:
+      - 'the answer: the balance from the tool and cited account terms'
+      - numbered citations of the document blocks
+      annotations:
+      - heading: Answer
+        sentence: The model's last turn combines the balance from the tool with the cited documents.
+        paths:
+        - message
+        values:
+          message.role: 'assistant: the model''s turn'
+          message.content: the balance, the account comparison with citations, and a source list; simulated
+      - heading: Stop reason
+        sentence: The stop reason tells the agent why the model stopped and what it expects next.
+        paths:
+        - stop_reason
+        values:
+          stop_reason: 'end_turn: the model is done and asks for nothing more'
     - id: c-08
       phase: answer
       sender: agent

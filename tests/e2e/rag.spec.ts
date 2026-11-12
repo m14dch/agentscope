@@ -249,20 +249,9 @@ test.describe('rag-walkthrough', () => {
     await expect(page.getByRole('slider', { name: 'Step' })).toBeFocused();
   });
 
-  test('a selected chunk ID that the new parameters no longer play is cleared', async ({
-    page,
-  }) => {
+  test('the payload marks the tracked chunk IDs of the current parameters', async ({ page }) => {
     await open(page, '#/rag/rag-index/5/protocol');
-    await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
-    await page
-      .getByRole('button', { name: 'Select chunkId "everyday-account@1.2-c50o10-001"' })
-      .click();
-    await expect(page.locator('.step .label-mark')).toHaveCount(1);
     await page.getByRole('button', { name: 'Chunk size 25 words' }).click();
-    await expect(page.locator('.step .label-mark')).toHaveCount(0);
-    await expect(page.locator('.select-value[aria-pressed="true"]')).toHaveCount(0);
-    // Payload highlights show again: every tracked chunk ID of the step is marked.
-    await page.getByRole('tab', { name: 'Payload', exact: true }).click();
     await expect(
       page.locator('.tab-panel .json-mark').filter({ hasText: 'c25o10-001' }).first(),
     ).toBeVisible();
@@ -442,30 +431,6 @@ test.describe('rag-walkthrough', () => {
     await expect(page.locator('.status')).toHaveText('Step 4 of 10 · Search and filter');
     await expect(retrieval(page)).toBeHidden();
     await expect(page.getByRole('slider', { name: 'Step' })).toBeFocused();
-  });
-
-  test('a selected chunk ID marks its label in both plots, never its accent dot', async ({
-    page,
-  }) => {
-    await open(page, '#/rag/rag-query/6/protocol');
-    await page.getByRole('tab', { name: 'Lineage', exact: true }).click();
-    await page
-      .getByRole('button', { name: 'Select chunkId "everyday-account@1.2-c50o10-002"' })
-      .click();
-    const row = scoreRow(page, 'everyday-account@1.2-c50o10-002');
-    await expect(row.locator('.name.chunk-mark')).toHaveCount(1);
-    await expect(row.locator('.dot.chunk-mark')).toHaveCount(0);
-    await expect(retrieval(page).locator('.dotplot .chunk-mark')).toHaveCount(1);
-    const point = retrieval(page).locator(
-      '.projection-plot [data-chunk="everyday-account@1.2-c50o10-002"]',
-    );
-    await expect(point.locator('.label-mark')).toHaveCount(1);
-    // The selection background always comes with an ink underline (02 design.colour.use).
-    await expect(point.locator('.label-underline')).toHaveCount(1);
-    await expect(point.locator('.label-underline')).toHaveCSS('stroke', 'rgb(37, 49, 34)');
-    await expect(retrieval(page).locator('.projection-plot .label-mark')).toHaveCount(1);
-    await page.keyboard.press('Escape');
-    await expect(retrieval(page).locator('.chunk-mark, .label-mark')).toHaveCount(0);
   });
 });
 

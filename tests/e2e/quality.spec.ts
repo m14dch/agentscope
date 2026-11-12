@@ -88,11 +88,12 @@ test(`at least ${gates.min_supported_events} events play smoothly, one key per s
   expect(p95).toBeLessThan(100);
 });
 
+// Each step before the route's step has at least two inspector tabs, so the tab keys can move.
 const TABS = [
-  ['MCP', 'mcp/mcp-balance/12'],
-  ['RAG', 'rag/rag-query/10'],
+  ['MCP', 'mcp/mcp-balance/15'],
+  ['RAG', 'rag/rag-query/9'],
   ['Compare', 'compare/compare-rag-mcp/16'],
-  ['Combined', 'combined/combined-balance-explanation/35'],
+  ['Combined', 'combined/combined-balance-explanation/34'],
 ] as const;
 
 type Stop = { what: string; index: number; visible: boolean; onScreen: boolean };

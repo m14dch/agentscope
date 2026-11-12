@@ -30,8 +30,9 @@ Three zoom levels show the same place at three altitudes: the **Overview** tells
 five plain sentences between a few parties (You, Assistant, Bank systems), without protocol names;
 **Architecture** groups each phase under its takeaway; **Protocol** shows every event. The zoom control
 (or the keys + and -) keeps the learner's place, and the level is part of the address
-(`#/mcp/mcp-balance/14/protocol`; no suffix is the Overview). The inspector holds Payload, Transport, Security and Lineage; the **Model
-context** panel puts the agent's state beside what the model has actually seen. On a phone the diagram
+(`#/mcp/mcp-balance/14/protocol`; no suffix is the Overview). The inspector says what each message carries and holds Payload, Transport and
+Security; **Annotations** split the payload into groups that explain every field in place, including
+where the customer ID and the balance come from and go. The **Model context** panel puts the agent's state beside what the model has actually seen. On a phone the diagram
 becomes a step list and the controls move to a bar at the bottom of the screen. After the first visit the
 site works offline.
 

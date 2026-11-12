@@ -597,6 +597,19 @@ scenarios:
       - release-notes.md
       format: text/markdown
     explanation: Strip Markdown heading markers and join lines; keep document ID and version as metadata.
+    carries:
+    - the six document IDs
+    - their format, Markdown
+    annotations:
+    - heading: Parse request
+      sentence: The pipeline tells the parser which documents to read and in which format, so it can strip
+        the markup.
+      paths:
+      - documents
+      - format
+      values:
+        documents: document IDs, which are file names
+        format: Markdown
   - id: index-03
     scenario_id: rag-index
     phase: parse
@@ -652,6 +665,20 @@ scenarios:
       - authentication.md
       - balance-api.md
       - release-notes.md
+    carries:
+    - each document's ID and version, for citations later
+    - its visibility, which retrieval filters on
+    - its title and word count
+    annotations:
+    - heading: Documents and metadata
+      sentence: Each document keeps its ID, version and visibility, so every chunk cut from it can point
+        back to its source.
+      paths:
+      - documents
+      values:
+        documents.0.documentId: the document's ID; citations name it
+        documents.0.version: the version; a citation names it too
+        documents.0.visibility: 'public: anyone may read it, and searches filter on this'
   - id: index-04
     scenario_id: rag-index
     phase: chunk
@@ -669,6 +696,21 @@ scenarios:
       overlap_words: 10
       algorithm: whitespace word windows
     explanation: Split each document into overlapping word windows.
+    carries:
+    - the chunk size in words
+    - the overlap between neighbouring chunks
+    annotations:
+    - heading: Chunking settings
+      sentence: The chunker cuts each document into windows of words, and these settings decide their
+        size and how much neighbours share.
+      paths:
+      - chunk_size_words
+      - overlap_words
+      - algorithm
+      values:
+        chunk_size_words: words per chunk; set with the Chunk size control
+        overlap_words: words each chunk repeats from the one before it
+        algorithm: plain word windows; real pipelines often split by headings or sentences
   - id: index-05
     scenario_id: rag-index
     phase: chunk
@@ -782,6 +824,17 @@ scenarios:
       - balance-api@1.2-c50o10-002
       - release-notes@1.2-c50o10-001
       - release-notes@1.2-c50o10-002
+    carries:
+    - every chunk's ID and text
+    - the document, version and first word each chunk comes from
+    annotations:
+    - heading: Chunks
+      sentence: Each chunk carries its text and a pointer back to its document, version and first word,
+        which citations use later.
+      paths:
+      - chunks
+      values:
+        chunks: one entry per chunk; how many depends on the chunk size and overlap
   - id: index-06
     scenario_id: rag-index
     phase: embed
@@ -810,6 +863,18 @@ scenarios:
       - release-notes@1.2-c50o10-001
       - release-notes@1.2-c50o10-002
     explanation: Send every chunk text to the embedding model.
+    carries:
+    - the embedding model's name
+    - the chunks to embed
+    annotations:
+    - heading: Embedding request
+      sentence: The pipeline asks the embedding model for one vector per chunk text.
+      paths:
+      - model
+      - inputs
+      values:
+        model: the demo embedding model; the question must use the same one
+        inputs: the chunk texts to embed, shown by chunk ID
   - id: index-07
     scenario_id: rag-index
     phase: embed
@@ -901,6 +966,21 @@ scenarios:
     explanation: One normalized 4-dimensional vector per chunk.
     technical_notes:
     - Embeddings do not change the language model's weights; they are only used for search.
+    carries:
+    - one vector per chunk
+    - the number of dimensions
+    annotations:
+    - heading: Vectors
+      sentence: Each chunk gets a vector, and chunks with similar meaning get vectors that point in similar
+        directions.
+      paths:
+      - model
+      - dimensions
+      - embeddings
+      values:
+        model: the model that made the vectors
+        dimensions: four numbers per vector; real models use hundreds to thousands
+        embeddings: one vector per chunk ID
   - id: index-08
     scenario_id: rag-index
     phase: store
@@ -922,6 +1002,22 @@ scenarios:
       - visibility
       - startWord
     explanation: Store each vector with its text and metadata, including the access label.
+    carries:
+    - the collection name
+    - the number of records
+    - the metadata stored with each vector
+    annotations:
+    - heading: Upsert
+      sentence: The vector database stores each vector with its text and metadata, so a search can return
+        the source along with the score.
+      paths:
+      - collection
+      - records
+      - metadata_fields
+      values:
+        collection: where the vectors are stored
+        records: one record per chunk
+        metadata_fields: stored next to each vector; visibility drives the access filter
   - id: index-09
     scenario_id: rag-index
     phase: store
@@ -942,6 +1038,16 @@ scenarios:
     - path: rag_index.indexed_chunks
       op: set
       value_ref: payload.upserted
+    carries:
+    - the number of records stored
+    annotations:
+    - heading: Confirmation
+      sentence: The database confirms how many records it stored, which should equal the number of chunks.
+      paths:
+      - collection
+      - upserted
+      values:
+        upserted: records written or replaced
   - id: index-10
     scenario_id: rag-index
     phase: store
@@ -1099,6 +1205,18 @@ scenarios:
       model: demo-embedding-4d
       input: What are the conditions for opening and maintaining a bank account?
     explanation: Embed the question with the same model used for the chunks.
+    carries:
+    - the question's text
+    - the embedding model, the same as for the chunks
+    annotations:
+    - heading: Embedding request
+      sentence: The question is embedded with the same model as the chunks, so their vectors can be compared.
+      paths:
+      - model
+      - input
+      values:
+        model: the same model that embedded the chunks
+        input: the text to embed
   - id: retrieve-03
     scenario_id: rag-query
     phase: embedding
@@ -1120,6 +1238,17 @@ scenarios:
       dimensions: 4
     explanation: 'The query vector points mostly along the rules dimension: opening and maintaining are
       rules.'
+    carries:
+    - the query vector
+    annotations:
+    - heading: Query vector
+      sentence: The question becomes a vector in the same space as the chunks.
+      paths:
+      - embedding
+      - dimensions
+      values:
+        embedding: four numbers; the largest is the rules dimension
+        dimensions: the same four dimensions as the chunk vectors
   - id: retrieve-04
     scenario_id: rag-query
     phase: retrieval
@@ -1152,6 +1281,28 @@ scenarios:
       near-identical).'
     security_boundaries:
     - vector-search
+    carries:
+    - the query vector
+    - the similarity measure, cosine
+    - 'an access filter: public documents only'
+    annotations:
+    - heading: Search
+      sentence: The search compares the query vector by cosine similarity with every stored vector the
+        access filter lets through.
+      paths:
+      - collection
+      - vector
+      - metric
+      values:
+        collection: the collection the index run filled
+        vector: the query vector from the embedding model
+        metric: 'cosine: compares directions, not lengths'
+    - heading: Access filter
+      sentence: The filter limits the search to documents this user may read, so no other vector is scored.
+      paths:
+      - filter
+      values:
+        filter.visibility: 'public: only public documents are searched'
   - id: retrieve-05
     scenario_id: rag-query
     phase: retrieval
@@ -1234,6 +1385,16 @@ scenarios:
       - balance-api@1.2-c50o10-001
       - authentication@1.2-c50o10-002
       - authentication@1.2-c50o10-001
+    carries:
+    - every candidate chunk with its cosine score
+    - each chunk's document and version
+    annotations:
+    - heading: Ranked matches
+      sentence: Every candidate chunk comes back with its source and a cosine score, best first.
+      paths:
+      - matches
+      values:
+        matches: all searched chunks, best score first; scores are not probabilities
   - id: hybrid-01
     scenario_id: rag-query
     phase: retrieval
@@ -1259,6 +1420,22 @@ scenarios:
       chunk, so the hits change the selection only through the reranker.
     security_boundaries:
     - vector-search
+    carries:
+    - the question's words
+    - the same access filter
+    annotations:
+    - heading: Search terms
+      sentence: Keyword search looks for the question's exact words, which vectors can blur.
+      paths:
+      - terms
+      values:
+        terms: the question's words, without stop words
+    - heading: Access filter
+      sentence: The filter limits the search to documents this user may read.
+      paths:
+      - filter
+      values:
+        filter.visibility: 'public: only public documents are searched'
   - id: hybrid-02
     scenario_id: rag-query
     phase: retrieval
@@ -1305,6 +1482,16 @@ scenarios:
         score: 0.8938
     explanation: 'Exact-term hits. 4 hits score below the similarity threshold of 0.7: lexical false positives
       that the threshold later removes, such as authentication@1.2-c50o10-001, which matches only ''bank''.'
+    carries:
+    - each hit's keyword score
+    - its cosine score from the vector search
+    annotations:
+    - heading: Keyword hits
+      sentence: Each hit says what share of the query terms a chunk contains, next to its cosine score.
+      paths:
+      - hits
+      values:
+        hits: chunks with at least one query term, by chunk ID
   - id: hybrid-03
     scenario_id: rag-query
     phase: retrieval
@@ -1428,6 +1615,15 @@ scenarios:
     explanation: 'Only when fetch_full_documents is on: fetch the whole document version of each retained
       chunk (the parent-document pattern). The prompt then carries these documents instead of the chunks.
       Off by default.'
+    carries:
+    - the document and version behind each retained chunk
+    annotations:
+    - heading: Documents to fetch
+      sentence: The agent asks for the whole document behind each retained chunk, by ID and version.
+      paths:
+      - documents
+      values:
+        documents: one entry per document, in the order of its first retained chunk
   - id: retrieve-08
     scenario_id: rag-query
     phase: retrieval
@@ -1470,6 +1666,17 @@ scenarios:
           need access to their savings.'
     explanation: Full documents with their versions and normalized text, in the order of their first retained
       chunk. With fetch_full_documents on they replace the chunks in the prompt.
+    carries:
+    - each whole document's text
+    - its version, the same as its chunks'
+    annotations:
+    - heading: Full documents
+      sentence: The whole documents replace the chunks in the prompt, each with the version its chunks
+        came from.
+      paths:
+      - documents
+      values:
+        documents: ID, version, word count and text of each document
   - id: retrieve-09
     scenario_id: rag-query
     phase: context
@@ -1623,6 +1830,28 @@ scenarios:
       action: set
       value_ref: payload
       description: Grounded prompt becomes model-visible
+    carries:
+    - grounding rules in the system prompt
+    - the question
+    - any retrieved evidence as document blocks with source and trust level
+    annotations:
+    - heading: System prompt
+      sentence: The system prompt tells the model to answer only from the documents, to cite them and
+        to treat them as data.
+      paths:
+      - messages.0
+      values:
+        messages.0.role: 'system: written by the agent, not by the user'
+        messages.0.content: grounding rules and the citation format
+    - heading: Question and documents
+      sentence: The question and any retrieved evidence travel together in one user message, each piece
+        in a document block that names its source.
+      paths:
+      - messages.1
+      values:
+        messages.1.role: 'user: the question and its evidence'
+        messages.1.content: the question, then one document block per piece of evidence, or the word
+          (none) when nothing was retrieved
   - id: retrieve-11
     scenario_id: rag-query
     phase: generation
@@ -1660,6 +1889,25 @@ scenarios:
       - everyday-account@1.2-c50o10-001
       - account-opening@1.2-c50o10-002
       - savings-account@1.2-c50o10-001
+    carries:
+    - an answer written only from the documents provided
+    - citations by number with a source list, or a statement that nothing relevant was found
+    annotations:
+    - heading: Answer
+      sentence: The simulated model answers in text and cites the evidence by number, or says it found
+        none.
+      paths:
+      - message
+      values:
+        message.role: 'assistant: the model''s turn'
+        message.content: the answer and its numbered sources, or a statement that nothing relevant was
+          found
+    - heading: Stop reason
+      sentence: The stop reason tells the agent why the model stopped and what it expects next.
+      paths:
+      - stop_reason
+      values:
+        stop_reason: 'end_turn: the model is done and asks for nothing more'
   - id: retrieve-12
     scenario_id: rag-query
     phase: answer
