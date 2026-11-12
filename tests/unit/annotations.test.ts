@@ -7,8 +7,10 @@ import {
   jsonLines,
   lineText,
   parsePath,
+  resolvePath,
   splitPayload,
 } from '../../src/scenarios/annotations.ts';
+import specs from 'virtual:agentscope-specs';
 import { loadRegistry } from '../../src/scenarios/registry.ts';
 import { ragDerivation } from '../../src/rag/bundled.ts';
 import { travel, valueLabel } from '../../src/inspector/annotated.ts';
@@ -174,30 +176,114 @@ describe('bundled annotations', () => {
 });
 
 describe('annotation bullets', () => {
-  const events = loadRegistry()['mcp-balance']?.events ?? [];
+  const registry = loadRegistry();
+  const scn = registry['mcp-balance'];
+  const events = scn?.events ?? [];
   const at = (id: string): number => events.findIndex((e) => e.id === id);
+  const origins = specs.engine.lineage.origins ?? {};
+  const sources = { initialState: scn?.initial_state ?? {}, origins };
 
   it('show a value in the code face, long strings cut and containers summarised', () => {
     expect(valueLabel('123')).toBe('"123"');
     expect(valueLabel('x'.repeat(41))).toBe(`"${'x'.repeat(36)}…"`);
     expect(valueLabel([1, 2])).toBe('[…] 2 items');
-    expect(valueLabel({})).toBe('{…} 0 members');
+    expect(valueLabel({ a: 1 })).toBe('{…} 1 member');
+    expect(valueLabel({})).toBe('{}');
+    expect(valueLabel([])).toBe('[]');
   });
 
-  it('say where a tracked value comes from, where it is sent and when it reaches the model', () => {
-    // The balance comes from the core ledger and reaches the model with the tool result.
-    expect(travel(events, at('mcp-23'), 12500.75)).toEqual({
-      first: at('mcp-20'),
-      model: at('mcp-26'),
-      tool: at('mcp-21'),
+  it('say where a tracked value comes from and the steps that matter after it', () => {
+    // The customer ID comes from the signed-in session; the model writes it into its tool
+    // call, the agent checks it, and the MCP client sends it.
+    expect(travel(events, at('mcp-14'), '123', sources)).toEqual({
+      origin: { label: 'the signed-in session' },
+      hops: [
+        { index: at('mcp-10'), kind: 'model' },
+        { index: at('mcp-11'), kind: 'writes' },
+        { index: at('mcp-12'), kind: 'checks' },
+        { index: at('mcp-14'), kind: 'sent' },
+      ],
     });
-    // The customer ID first appears in the request to the model: the model is not named again.
-    expect(travel(events, at('mcp-14'), '123')).toEqual({
-      first: at('mcp-10'),
-      tool: at('mcp-14'),
+    // The balance comes from the core ledger. Step 26 asks a prediction, so step 23 does not
+    // name it; step 27 does.
+    expect(travel(events, at('mcp-23'), 12500.75, sources)).toEqual({
+      origin: { index: at('mcp-20') },
+      hops: [
+        { index: at('mcp-21'), kind: 'sent' },
+        { index: at('mcp-27'), kind: 'writes' },
+      ],
+    });
+    expect(travel(events, at('mcp-27'), 12500.75, sources)?.hops).toContainEqual({
+      index: at('mcp-26'),
+      kind: 'model',
     });
     // Untracked values and values inside longer strings get no travel line.
-    expect(travel(events, at('mcp-14'), 'tools/call')).toBeUndefined();
-    expect(travel(events, at('mcp-23'), '{"customerId":"123"}')).toBeUndefined();
+    expect(travel(events, at('mcp-14'), 'tools/call', sources)).toBeUndefined();
+    expect(travel(events, at('mcp-23'), '{"customerId":"123"}', sources)).toBeUndefined();
+  });
+
+  it("never link from a step before a prediction to that prediction's step", () => {
+    let lines = 0;
+    for (const s of Object.values(registry)) {
+      const src = { initialState: s.initial_state, origins };
+      s.events.forEach((e, index) => {
+        for (const group of e.annotations ?? []) {
+          for (const path of Object.keys(group.values ?? {})) {
+            const value = resolvePath(e.payload ?? null, parsePath(path) ?? [])?.value ?? null;
+            const where = travel(s.events, index, value, src);
+            if (!where) continue;
+            lines += 1;
+            const linked = [
+              ...('index' in where.origin ? [where.origin.index] : []),
+              ...where.hops.map((h) => h.index),
+            ];
+            for (const i of linked)
+              expect(i > index && !!s.events[i]?.prediction, `${e.id} links to ${i + 1}`).toBe(
+                false,
+              );
+          }
+        }
+      });
+    }
+    expect(lines).toBeGreaterThan(5);
+  });
+});
+
+describe('derived wording', () => {
+  // 03 annotation_rules.derived_events: parameter-neutral wording, checked at the extremes
+  // where it could break: no evidence at all, and whole documents instead of chunks.
+  const scn = loadRegistry()['rag-query'];
+  const derive = ragDerivation().deriveEvents;
+  const extremes: Record<string, Json>[] = [
+    { similarity_threshold: 1 },
+    { fetch_full_documents: true },
+  ];
+  const promises = [
+    /\bthe retained chunks\b/,
+    /\bcites each\b/,
+    /^(the answer )?with numbered citations/,
+    /\b\d+ (chunks|documents|citations|items)\b/,
+  ];
+
+  it('holds where nothing is retained and where whole documents replace the chunks', () => {
+    if (!scn) throw new Error('no rag-query');
+    for (const config of extremes) {
+      const events = derive(scn, config);
+      for (const id of scn.derived_events ?? []) {
+        const e = events.find((x) => x.id === id);
+        const texts = [
+          ...(e?.carries ?? []),
+          ...(e?.annotations ?? []).flatMap((g) => [g.sentence, ...Object.values(g.values ?? {})]),
+        ];
+        for (const text of texts)
+          for (const promise of promises)
+            expect(promise.test(text), `${id} at ${JSON.stringify(config)}: ${text}`).toBe(false);
+      }
+    }
+    // The extremes are real: no citation at a threshold of 1, whole documents when fetching.
+    const none = derive(scn, extremes[0] ?? {}).find((e) => e.id === 'retrieve-11');
+    expect(JSON.stringify(none?.payload)).not.toContain('[1]');
+    const whole = derive(scn, extremes[1] ?? {}).find((e) => e.id === 'retrieve-10');
+    expect(JSON.stringify(whole?.payload)).not.toContain('chunk=');
   });
 });

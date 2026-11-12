@@ -621,6 +621,10 @@ export class Shell {
       labels: this.labels,
       boundaries: this.sources.security.trust_boundaries as unknown as Boundary[],
       jump: (k) => this.go(() => player.jump(k)),
+      travel: {
+        initialState: scenario.initial_state,
+        origins: this.sources.engine.lineage.origins ?? {},
+      },
       earlierRevision: this.sources.mcp.protocol.earlier_revision_handshake,
     });
     const inspector = el(

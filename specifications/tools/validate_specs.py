@@ -168,7 +168,20 @@ def _members(value):
 
 def _one_sentence(s):
     t = s.strip()
-    return t.endswith(".") and not re.search(r"[.!?]\s+[A-Z]", t)
+    return t.endswith(".") and not re.search(r"[.!?]\s+\S", t)
+
+
+_GROUP_KEYS = ("heading", "sentence", "paths", "values")
+
+
+def _document_order(payload, a, b):
+    """Negative when path a comes before path b in the payload's text."""
+    for i in range(min(len(a), len(b))):
+        if a[i] == b[i]:
+            continue
+        keys = [k for k, _ in _members(resolve_path(payload, a[:i])[1])]
+        return keys.index(a[i]) - keys.index(b[i])
+    return len(a) - len(b)
 
 
 def _q(text):
@@ -193,6 +206,9 @@ def annotation_problems(payload, annotations):
         if not isinstance(raw, dict):
             problems.append(f"{at} must be a group {{heading, sentence, paths, values}}")
             continue
+        for key in raw:
+            if key not in _GROUP_KEYS:
+                problems.append(f"{at} has unknown key {_q(key)}")
         heading = raw.get("heading")
         if not isinstance(heading, str) or not heading.strip() or len(heading) > 40:
             problems.append(f"{at} heading must be a phrase of 1 to 40 characters")
@@ -219,6 +235,7 @@ def annotation_problems(payload, annotations):
         if not isinstance(values, dict):
             problems.append(f"{at} values must map paths to meanings")
             continue
+        previous = None
         for text, meaning in values.items():
             segments = parse_path(text)
             if segments is None:
@@ -227,6 +244,10 @@ def annotation_problems(payload, annotations):
                 problems.append(f"{at} value path {_q(text)} does not exist in the payload")
             elif not any(_starts_with(segments, p) for p in own):
                 problems.append(f"{at} value path {_q(text)} lies outside the group's paths")
+            else:
+                if previous is not None and _document_order(payload, previous, segments) > 0:
+                    problems.append(f"{at} value path {_q(text)} comes before the value above it in the payload")
+                previous = segments
             if not isinstance(meaning, str) or not meaning.strip():
                 problems.append(f"{at} value {_q(text)} needs a meaning")
     for i, (ga, ta, sa) in enumerate(paths):
@@ -952,6 +973,15 @@ def main():
     if "DiscoverRequest" not in ctx["schema"].get("$defs", {}):
         err("--mcp-schema", "schema lacks DiscoverRequest; it is not revision 2026-07-28 or later")
 
+    # Origins in the initial state (03 lineage.origins); mirrors src/scenarios/validate.ts.
+    for key, origin in engine["lineage"].get("origins", {}).items():
+        if key == "description":
+            continue
+        if key not in engine["lineage"]["tracked"]:
+            err("03 lineage.origins", f"{key} is not a tracked key")
+        o = origin if isinstance(origin, dict) else {}
+        if not str(o.get("state") or "").strip() or not str(o.get("label") or "").strip():
+            err("03 lineage.origins", f"{key} needs a state and a label")
     # One scenario per use case (03 scenario_format.one_scenario_per_use_case): no variants.
     for where, doc in (("04", mcp), ("05", rag), ("06 combined", cmp_["combined"])):
         if "variants" in doc:

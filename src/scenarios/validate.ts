@@ -308,6 +308,15 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
   const { registry, problems } = buildRegistry(sources);
   problems.push(...validateRegistry(registry, contextFrom(sources)));
   const err = (where: string, msg: string): void => void problems.push(`${where}: ${msg}`);
+  // Origins in the initial state (03 lineage.origins); mirrors validate_specs.py.
+  const { tracked, origins = {} } = sources.engine.lineage;
+  for (const [key, origin] of Object.entries(origins)) {
+    if (key === 'description') continue;
+    if (!tracked.includes(key)) err('03 lineage.origins', `${key} is not a tracked key`);
+    const o = obj(origin);
+    if (!text(o['state']).trim() || !text(o['label']).trim())
+      err('03 lineage.origins', `${key} needs a state and a label`);
+  }
   // One scenario per use case (03 scenario_format.one_scenario_per_use_case): no variants.
   for (const [where, doc] of [
     ['04', sources.mcp],

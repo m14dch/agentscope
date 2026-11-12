@@ -19,7 +19,7 @@ import type {
   Json,
   ScenarioEvent,
 } from '../scenarios/types.ts';
-import { type Travel, travel, valueLabel } from './annotated.ts';
+import { type Travel, travel, type TravelSources, valueLabel } from './annotated.ts';
 import { jsonTree, mcpBoilerplate, newInRequest, type TreeNode, trackedValues } from './json.ts';
 
 export type TabId = 'payload' | 'transport' | 'security';
@@ -42,6 +42,8 @@ export interface InspectorContext {
   boundaries: readonly Boundary[];
   /** Moves the cursor to a step (1-based). */
   jump: (step: number) => void;
+  /** The initial state and 03 lineage.origins, for the travel lines' origins. */
+  travel?: TravelSources | undefined;
   /** 04-mcp-scenarios.yaml protocol.earlier_revision_handshake, for server/discover. */
   earlierRevision?: EarlierRevision | undefined;
 }
@@ -457,7 +459,7 @@ export class Inspector {
         el('code', 'annotation-value', valueLabel(value)),
         ` – ${meaning}`,
       );
-      const where = travel(step.events, step.cursor - 1, value);
+      const where = travel(step.events, step.cursor - 1, value, this.context.travel);
       if (where) item.append(this.travelLine(where, step.cursor - 1, step, `${index}:${n}`));
       return item;
     });
@@ -472,8 +474,8 @@ export class Inspector {
   }
 
   /**
-   * "First seen at step k (A → B) · sent to C at step t · reaches the model at step m"
-   * (02 inspector.annotations.travel).
+   * "From the signed-in session · reaches the model at step m · the model writes it at step w
+   * · the agent checks it at step c · sent to C at step t" (02 inspector.annotations.travel).
    */
   private travelLine(
     where: Travel,
@@ -486,23 +488,31 @@ export class Inspector {
       i === current
         ? ['here']
         : ['at ', this.stepLink(i + 1, `step ${i + 1}`, `travel:${key}:${what}`)];
-    line.append('First seen ', ...at(where.first, 'first'));
     // Registry labels without their parenthetical: "Agent", not "Agent (host application …)".
     const short = (id: string): string => (this.context.labels[id] ?? id).replace(/ \(.*\)$/, '');
-    const first = step.events[where.first];
-    if (first && where.first !== current) {
-      const from = short(first.sender);
-      line.append(
-        ` (${first.sender === first.receiver ? from : `${from} → ${short(first.receiver)}`})`,
-      );
+    if ('label' in where.origin) line.append(`From ${where.origin.label}`);
+    else {
+      const i = where.origin.index;
+      line.append('First seen ', ...at(i, 'first'));
+      const first = step.events[i];
+      if (first && i !== current) {
+        const from = short(first.sender);
+        line.append(
+          ` (${first.sender === first.receiver ? from : `${from} → ${short(first.receiver)}`})`,
+        );
+      }
     }
-    const later: [number, string, string][] = [];
-    if (where.model !== undefined) later.push([where.model, 'reaches the model', 'model']);
-    const tool = where.tool === undefined ? undefined : step.events[where.tool];
-    if (where.tool !== undefined && tool)
-      later.push([where.tool, `sent to ${short(tool.receiver)}`, 'tool']);
-    for (const [i, what, id] of later.sort((a, b) => a[0] - b[0]))
-      line.append(` · ${what} `, ...at(i, id));
+    for (const hop of where.hops) {
+      const what =
+        hop.kind === 'model'
+          ? 'reaches the model'
+          : hop.kind === 'writes'
+            ? 'the model writes it'
+            : hop.kind === 'checks'
+              ? 'the agent checks it'
+              : `sent to ${short(step.events[hop.index]?.receiver ?? '')}`;
+      line.append(` · ${what} `, ...at(hop.index, hop.kind));
+    }
     return line;
   }
 

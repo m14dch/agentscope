@@ -7,9 +7,13 @@ import { trackedValues } from './json.ts';
 
 /** A bullet's value in the code face: long strings cut, containers summarised. */
 export function valueLabel(value: Json): string {
-  if (Array.isArray(value)) return `[…] ${value.length} ${value.length === 1 ? 'item' : 'items'}`;
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]';
+    return `[…] ${value.length} ${value.length === 1 ? 'item' : 'items'}`;
+  }
   if (value !== null && typeof value === 'object') {
     const n = Object.keys(value).length;
+    if (!n) return '{}';
     return `{…} ${n} ${n === 1 ? 'member' : 'members'}`;
   }
   if (typeof value === 'string' && value.length > 40)
@@ -17,42 +21,84 @@ export function valueLabel(value: Json): string {
   return JSON.stringify(value);
 }
 
-/** Where a tracked value travels: event indices (0-based) in the played events. */
+/** The initial state and the tracked keys that can originate there (03 lineage.origins). */
+export interface TravelSources {
+  initialState: Readonly<Record<string, Json>>;
+  origins: Readonly<Record<string, unknown>>;
+}
+
+export type HopKind = 'model' | 'writes' | 'checks' | 'sent';
+
+/** Where a tracked value travels; indices are 0-based into the played events. */
 export interface Travel {
-  /** The first played event that tracks the value. */
-  first: number;
-  /** The first LLM request that tracks the value, when it is later than `first`. */
-  model?: number;
-  /** The first MCP or HTTP event that tracks the value, when it is later than `first`. */
-  tool?: number;
+  /** The initial state (by its label) or the first played event that tracks the value. */
+  origin: { label: string } | { index: number };
+  /** The steps that matter after the origin, in step order. */
+  hops: { index: number; kind: HopKind }[];
 }
 
 const tracks = (e: ScenarioEvent, value: string | number): boolean =>
   trackedValues(e.tracked_values).has(value);
 
+/** The label of the value's origin in the initial state, if it has one. */
+function stateOrigin(
+  event: ScenarioEvent,
+  value: string | number,
+  sources: TravelSources | undefined,
+): string | undefined {
+  for (const [key, tracked] of Object.entries(event.tracked_values ?? {})) {
+    if (!(Array.isArray(tracked) ? tracked : [tracked]).includes(value)) continue;
+    const origin = sources?.origins[key];
+    if (origin === null || typeof origin !== 'object') continue;
+    const { state, label } = origin as { state?: unknown; label?: unknown };
+    if (
+      typeof state === 'string' &&
+      typeof label === 'string' &&
+      sources?.initialState[state] === value
+    )
+      return label;
+  }
+  return undefined;
+}
+
 /**
  * The travel of `value` if the event at `index` tracks it (02 inspector.annotations.travel),
- * else undefined. Only whole values match, never a value inside a longer string.
+ * else undefined. Only whole values match, never a value inside a longer string. A later step
+ * that asks a prediction is never named, so a link does not answer it before it is asked.
  */
 export function travel(
   events: readonly ScenarioEvent[],
   index: number,
   value: Json,
+  sources?: TravelSources,
 ): Travel | undefined {
   const event = events[index];
   if (!event || (typeof value !== 'string' && typeof value !== 'number')) return undefined;
   if (!tracks(event, value)) return undefined;
-  const first = events.findIndex((e) => tracks(e, value));
-  const after = (match: (e: ScenarioEvent) => boolean): number | undefined => {
-    const i = events.findIndex((e, n) => n >= first && match(e) && tracks(e, value));
-    // A value that first appears in such an event needs no second mention of it.
-    return i > first ? i : undefined;
+  const label = stateOrigin(event, value, sources);
+  const from = label === undefined ? events.findIndex((e) => tracks(e, value)) : -1;
+  const next = (after: number, match: (e: ScenarioEvent) => boolean): number | undefined => {
+    const i = events.findIndex((e, n) => n > after && match(e) && tracks(e, value));
+    return i >= 0 ? i : undefined;
   };
-  const model = after((e) => e.protocol === 'LLM_API' && e.message_type === 'REQUEST');
-  const tool = after((e) => e.protocol === 'MCP' || e.protocol === 'HTTP');
-  return {
-    first,
-    ...(model === undefined ? {} : { model }),
-    ...(tool === undefined ? {} : { tool }),
-  };
+  const writes = next(from, (e) => e.protocol === 'LLM_API' && e.message_type === 'RESPONSE');
+  const checks =
+    writes === undefined
+      ? undefined
+      : next(
+          writes,
+          (e) => e.protocol === 'INTERNAL' && e.sender === 'agent' && e.receiver === 'agent',
+        );
+  const found: [number | undefined, HopKind][] = [
+    [next(from, (e) => e.protocol === 'LLM_API' && e.message_type === 'REQUEST'), 'model'],
+    [writes, 'writes'],
+    [checks, 'checks'],
+    [next(from, (e) => e.protocol === 'MCP' || e.protocol === 'HTTP'), 'sent'],
+  ];
+  const hops = found
+    .filter((h): h is [number, HopKind] => h[0] !== undefined)
+    .filter(([i]) => !(i > index && events[i]?.prediction))
+    .map(([i, kind]) => ({ index: i, kind }))
+    .sort((a, b) => a.index - b.index);
+  return { origin: label === undefined ? { index: from } : { label }, hops };
 }

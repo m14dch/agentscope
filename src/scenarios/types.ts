@@ -178,7 +178,7 @@ export interface SpecSources {
   engine: {
     event_schema: { required: string[]; fields: Record<string, string> };
     scenario_format: { required: string[] };
-    lineage: { tracked: string[] };
+    lineage: { tracked: string[]; origins?: Record<string, unknown> };
   } & JsonObject;
   mcp: {
     protocol: { revision: string; earlier_revision_handshake?: EarlierRevision };

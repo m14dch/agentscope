@@ -58,8 +58,21 @@ describe('annotation checks', () => {
       'none',
       [3],
       [g(['$'], { values: 'x' })],
+      [g(['jsonrpc', 'id'], { values: { id: 'x', jsonrpc: 'y' } }), g(['params'])],
+      [g(['$'], { note: 'unknown' })],
+      [g(['$'], { sentence: 'One sentence. then more.' })],
     ];
-    const carries: unknown[] = [['ok'], [], ['full stop.'], ['x'.repeat(101)], 'no', [' ']];
+    // 60 emoji are 60 code points but 120 UTF-16 units: both validators count code points.
+    const carries: unknown[] = [
+      ['ok'],
+      [],
+      ['full stop.'],
+      ['x'.repeat(101)],
+      'no',
+      [' '],
+      ['😀'.repeat(60)],
+      ['😀'.repeat(101)],
+    ];
     const cases: Case[] = annotations.map((a, i) => ({
       payload,
       annotations: a,

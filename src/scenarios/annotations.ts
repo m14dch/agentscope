@@ -78,8 +78,20 @@ function members(value: Json): [string, Json][] {
 
 const ONE_SENTENCE = (s: string): boolean => {
   const t = s.trim();
-  return t.endsWith('.') && !/[.!?]\s+[A-Z]/.test(t);
+  return t.endsWith('.') && !/[.!?]\s+\S/.test(t);
 };
+
+const GROUP_KEYS = new Set(['heading', 'sentence', 'paths', 'values']);
+
+/** Where two existing paths lie in the payload's text: negative when `a` comes first. */
+function documentOrder(payload: Json, a: Segments, b: Segments): number {
+  for (let i = 0; i < Math.min(a.length, b.length); i += 1) {
+    if (a[i] === b[i]) continue;
+    const keys = members(resolvePath(payload, a.slice(0, i))?.value ?? null).map(([k]) => k);
+    return keys.indexOf(a[i] ?? '') - keys.indexOf(b[i] ?? '');
+  }
+  return a.length - b.length;
+}
 
 /** Why `carries` is malformed, or undefined (03 annotation_rules.checks). */
 export function carriesProblem(carries: unknown): string | undefined {
@@ -88,7 +100,11 @@ export function carriesProblem(carries: unknown): string | undefined {
     carries.length > 0 &&
     carries.every(
       (c) =>
-        typeof c === 'string' && c.trim() !== '' && c.length <= 100 && !c.trimEnd().endsWith('.'),
+        typeof c === 'string' &&
+        c.trim() !== '' &&
+        // Unicode code points, as Python's len counts them.
+        [...c].length <= 100 &&
+        !c.trimEnd().endsWith('.'),
     );
   return ok
     ? undefined
@@ -108,6 +124,8 @@ export function annotationProblems(payload: Json | undefined, annotations: unkno
       problems.push(`${at} must be a group {heading, sentence, paths, values}`);
       return;
     }
+    for (const key of Object.keys(raw))
+      if (!GROUP_KEYS.has(key)) problems.push(`${at} has unknown key ${JSON.stringify(key)}`);
     const heading = raw['heading'];
     if (typeof heading !== 'string' || !heading.trim() || heading.length > 40)
       problems.push(`${at} heading must be a phrase of 1 to 40 characters`);
@@ -136,6 +154,7 @@ export function annotationProblems(payload: Json | undefined, annotations: unkno
       problems.push(`${at} values must map paths to meanings`);
       return;
     }
+    let previous: string[] | undefined;
     for (const [text, meaning] of Object.entries(values)) {
       const segments = parsePath(text);
       if (!segments) problems.push(`${at} value path ${JSON.stringify(text)} is not a JSON path`);
@@ -143,6 +162,13 @@ export function annotationProblems(payload: Json | undefined, annotations: unkno
         problems.push(`${at} value path ${JSON.stringify(text)} does not exist in the payload`);
       else if (!own.some((p) => startsWith(segments, p)))
         problems.push(`${at} value path ${JSON.stringify(text)} lies outside the group's paths`);
+      else {
+        if (previous && documentOrder(payload, previous, segments) > 0)
+          problems.push(
+            `${at} value path ${JSON.stringify(text)} comes before the value above it in the payload`,
+          );
+        previous = segments;
+      }
       if (typeof meaning !== 'string' || !meaning.trim())
         problems.push(`${at} value ${JSON.stringify(text)} needs a meaning`);
     }
