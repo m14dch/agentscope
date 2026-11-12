@@ -518,13 +518,16 @@ inspector:
       participant alone for a self-call). Then, in step order and each only when it is a later
       step than k (any step for an origin in the initial state), the steps that matter: " ·
       reaches the model at step <m>" for the first played LLM request that tracks it, " · the
-      model writes it at step <w>" for the first LLM response that tracks it, " · the agent
+      model repeats it at step <w>" for the first LLM response that tracks it (the model only
+      repeats a value it was given; it never produces one), " · the agent
       checks it at step <c>" for the first event after w that is the agent''s own action
       (INTERNAL, agent to agent) and tracks it, and " · sent to <receiver> at step <t>" for the
       first MCP or HTTP event that tracks it; "here" stands for the current step. Each step
       number is a link that jumps there. Later steps are named too, because where a value goes
-      is what the line teaches, except a later step that carries a prediction prompt: a link
-      never answers a question before it is asked. Values inside a longer string are not
+      is what the line teaches. A link never answers a prediction before it is asked: a hop
+      to a later step that carries a prediction prompt is left out, except "reaches the model",
+      which says only that the model receives the value; no prompt asks that, while "repeats",
+      "checks" and "sent to" say what such a step does (for example who sends the tool call). Values inside a longer string are not
       matched.'
     phone: 'The same on phones, inside "Step details": lines and callouts wrap and stack in
       one column, nothing scrolls sideways at 390 px or at 200% zoom, and the toggle is at

@@ -1808,7 +1808,8 @@ scenarios:
       - messages.1
       values:
         messages.1.role: 'user: the question and its evidence'
-        messages.1.content: the question, then one document block per piece of evidence, or (none)
+        messages.1.content: the question, then one document block per piece of evidence, or the word
+          (none) when nothing was retrieved
   - id: retrieve-11
     scenario_id: rag-query
     phase: generation

@@ -129,11 +129,11 @@ lineage:
   presentation: 'Tracked values are highlighted in the payload, and the annotation bullet of
     a tracked value says where it travels, with links to those steps (02 inspector.annotations.travel).
     There is no separate lineage view (issue 49).'
+  origins_rule: 'origins lists the tracked keys whose values can come from the scenario''s
+    initial state rather than from an event: {<tracked key>: {state, label}}. A value of that
+    key equal to initial_state[state] originates there, and its travel line starts "From
+    <label>". Keys must be tracked; state and label are non-empty strings.'
   origins:
-    description: 'Tracked keys whose values can come from the scenario''s initial state rather
-      than from an event: {<tracked key>: {state, label}}. A value of that key equal to
-      initial_state[state] originates there, and its travel line starts "From <label>". Keys
-      must be tracked; state and label are non-empty strings.'
     customerId:
       state: authenticated_demo_customer_id
       label: the signed-in session
