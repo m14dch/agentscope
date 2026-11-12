@@ -200,7 +200,7 @@ test('combined-walkthrough: tool data and document evidence stay apart from ques
 
 test('on narrow screens each label sits above its statement', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('./#/combined/combined-balance-explanation/35');
+  await page.goto('./#/combined/combined-balance-explanation/35/architecture');
   await page.locator('[data-measured][data-presentation="list"]').waitFor();
   for (const li of await statements(page).all()) {
     const label = await li.locator('.statement-source').boundingBox();
@@ -213,7 +213,10 @@ test('on narrow screens each label sits above its statement', async ({ page }) =
 test('a source label never breaks from its separator in context', async ({ page }) => {
   // At 820 px no separator after a label wraps onto a line of its own.
   await page.setViewportSize({ width: 820, height: 900 });
-  for (const hash of ['#/mcp/mcp-balance/26', '#/combined/combined-balance-explanation/33']) {
+  for (const hash of [
+    '#/mcp/mcp-balance/26/architecture',
+    '#/combined/combined-balance-explanation/33/architecture',
+  ]) {
     await open(page, hash);
     await page.getByRole('button', { name: 'Model context' }).click();
     const orphans = await page.locator('#context-panel').evaluate((panel) =>

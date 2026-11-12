@@ -1,10 +1,11 @@
 /**
- * Sequence diagram model (02-ui-ux.yaml diagram and modes): arrow labels and
- * geometry as pure functions of the scenario, the mode, the cursor and the expanded groups.
+ * Sequence diagram model (02-ui-ux.yaml diagram and zoom_levels): arrow labels and geometry as
+ * pure functions of the scenario, the zoom level, the cursor and the expanded groups.
  */
-import type { Phase, Scenario, ScenarioEvent } from '../scenarios/types.ts';
+import type { Phase, Scenario, ScenarioEvent, Stage } from '../scenarios/types.ts';
+import { type Level, partiesOf, stageAt, stageSpans } from './zoom.ts';
 
-export type Mode = 'architecture' | 'protocol';
+export type { Level } from './zoom.ts';
 export type LineKind = 'network' | 'in-process' | 'simulated';
 export type Visibility = 'past' | 'current' | 'future';
 
@@ -49,6 +50,14 @@ export const SIZES = {
   groupPad: 10,
   groupGap: 8,
   groupMinText: 320,
+  /** The Overview: text size 16/24 for the stage sentences, wider gaps between parties. */
+  stageFont: 16,
+  stageLine: 24,
+  stageGap: 16,
+  partySpacing: 200,
+  /** The widest gap between parties when they spread across the region. */
+  partySpacingMax: 360,
+  stageMinText: 360,
 } as const;
 
 /** Width of a text at 13 px in px; `strong` for weight 600. */
@@ -124,21 +133,42 @@ export interface Group {
   textWidth: number;
 }
 
+/** A stage of the Overview (02 zoom_levels.overview): a block holding its sentence. */
+export interface StageBlock {
+  stage: Stage;
+  /** 1-based position among the stages. */
+  number: number;
+  /** The sentence wrapped to the block's width. */
+  sentence: string[];
+  /** Labels of the parties its events touch, in order. */
+  parties: string[];
+  y: number;
+  height: number;
+  x1: number;
+  x2: number;
+  current: boolean;
+  /** Width of the widest line of the sentence, for the paper behind it. */
+  textWidth: number;
+}
+
 export interface DiagramLayout {
   width: number;
   height: number;
   top: number;
+  /** Participants, or at the Overview the parties. */
   lifelines: Lifeline[];
-  /** Protocol mode: every event up to the cursor. Architecture mode: empty. */
+  /** Protocol: every event up to the cursor. Otherwise empty. */
   arrows: Arrow[];
-  /** Architecture mode only. */
+  /** Architecture only. */
   groups: Group[];
+  /** Overview only. */
+  stages: StageBlock[];
 }
 
 export interface LayoutInput {
   scenario: Scenario;
   labels: Readonly<Record<string, string>>;
-  mode: Mode;
+  level: Level;
   /** Text measurement; defaults to a conservative estimate. */
   measure?: Measure;
   /** Indices of events whose tracked values include the selected lineage value. */
@@ -151,6 +181,8 @@ export interface LayoutInput {
    * waiting through a phase it has no events in (02 compare_view.timeline).
    */
   held?: boolean;
+  /** The diagram region's width; the Overview spreads its parties across it. */
+  available?: number;
 }
 
 /** Lifeline x positions: each gap is as wide as the labels of arrows that span only it. */
@@ -193,7 +225,7 @@ export interface GroupRun {
   members: [ScenarioEvent, number][];
 }
 
-/** One group per consecutive run of a phase's events (02 modes.architecture_groups). */
+/** One group per consecutive run of a phase's events (02 zoom_levels.architecture_groups). */
 export function groupRuns(scenario: Scenario): GroupRun[] {
   const phases = new Map(scenario.phases.map((p) => [p.id, p]));
   const runs: { phase: Phase; members: [ScenarioEvent, number][] }[] = [];
@@ -219,9 +251,97 @@ export function currentGroupKey(scenario: Scenario, cursor: number): string | un
   return groupRuns(scenario).find((r) => r.members.some(([, i]) => i === cursor - 1))?.key;
 }
 
+/** Sentence width at the Overview's text size, from a measure at 13 px. */
+function stageMeasure(measure: Measure): Measure {
+  return (text, strong) => Math.ceil((measure(text, strong) * SIZES.stageFont) / SIZES.fontSize);
+}
+
+/**
+ * The Overview (02 zoom_levels.overview): one lifeline per party, then one block per stage that
+ * spans the parties its events touch and holds its sentence; the current stage is marked.
+ */
+function overviewLayout(input: LayoutInput, measure: Measure): DiagramLayout {
+  const { scenario, cursor } = input;
+  const { overview } = scenario;
+  const big = stageMeasure(measure);
+  // The parties spread across the region, from 200 px to 360 px apart (02 zoom_levels.overview).
+  const n = overview.parties.length;
+  const room = (input.available ?? 0) - 2 * SIZES.margin - SIZES.minSpacing;
+  const gap =
+    n > 1
+      ? Math.max(SIZES.partySpacing, Math.min(SIZES.partySpacingMax, Math.floor(room / (n - 1))))
+      : SIZES.partySpacing;
+  let x = SIZES.margin + SIZES.minSpacing / 2;
+  const lines: Lifeline[] = overview.parties.map((party, i) => {
+    if (i > 0) x += gap;
+    return {
+      id: party.id,
+      x,
+      lines: wrap(party.label, gap - 8, (t) => measure(t, true)),
+    };
+  });
+  const at = new Map(lines.map((l) => [l.id, l.x]));
+  const labels = new Map(overview.parties.map((p) => [p.id, p.label]));
+  const headerLines = Math.max(1, ...lines.map((l) => l.lines.length));
+  const top = SIZES.margin + headerLines * SIZES.headerLine + SIZES.headerGap;
+  const spans = stageSpans(overview, scenario.events);
+  const current = input.held ? undefined : stageAt(spans, cursor)?.index;
+  let right = Math.max(...lines.map((l) => l.x)) + SIZES.minSpacing / 2;
+  let y = top;
+  const stages = spans.map((span): StageBlock => {
+    const events = span.first ? scenario.events.slice(span.first - 1, span.last) : [];
+    const touched = partiesOf(overview, events);
+    const xs = (touched.length ? touched : overview.parties.map((p) => p.id)).map(
+      (id) => at.get(id) ?? 0,
+    );
+    const left = Math.min(...xs) - SIZES.minSpacing / 2 + 8;
+    const spanRight = Math.max(...xs) + SIZES.minSpacing / 2 - 8;
+    const isCurrent = span.index === current;
+    const textX = left + 2 * SIZES.groupPad;
+    const strong = (t: string): number => big(t, isCurrent);
+    const sentence = wrap(
+      span.stage.sentence,
+      Math.max(SIZES.stageMinText, spanRight - textX - SIZES.groupPad),
+      // The layout reserves the bold width, so nothing moves when a stage becomes current.
+      (t) => big(t, true),
+    );
+    const textWidth = Math.max(0, ...sentence.map(strong));
+    const start = y + SIZES.stageGap;
+    const height = 2 * SIZES.groupPad + sentence.length * SIZES.stageLine;
+    const x2 = Math.max(
+      spanRight,
+      textX + Math.max(...sentence.map((t) => big(t, true))) + SIZES.groupPad,
+    );
+    right = Math.max(right, x2 + SIZES.margin);
+    y = start + height;
+    return {
+      stage: span.stage,
+      number: span.index + 1,
+      sentence,
+      parties: touched.map((id) => labels.get(id) ?? id),
+      y: start,
+      height,
+      x1: left,
+      x2,
+      current: isCurrent,
+      textWidth,
+    };
+  });
+  return {
+    width: Math.ceil(right),
+    height: Math.ceil(y + SIZES.row),
+    top,
+    lifelines: lines,
+    arrows: [],
+    groups: [],
+    stages,
+  };
+}
+
 export function layout(input: LayoutInput): DiagramLayout {
-  const { scenario, mode, cursor, expanded } = input;
+  const { scenario, level, cursor, expanded } = input;
   const measure = input.measure ?? estimate;
+  if (level === 'overview') return overviewLayout(input, measure);
   const lines = lifelines(scenario, input.labels, measure);
   const x = new Map(lines.map((l) => [l.id, l.x]));
   const headerLines = Math.max(1, ...lines.map((l) => l.lines.length));
@@ -267,7 +387,7 @@ export function layout(input: LayoutInput): DiagramLayout {
   const arrows: Arrow[] = [];
   const groups: Group[] = [];
   let y = top;
-  if (mode === 'protocol') {
+  if (level === 'protocol') {
     scenario.events.forEach((e, i) => {
       y += SIZES.row;
       if (i < cursor) arrows.push(arrow(e, i, y));
@@ -337,5 +457,6 @@ export function layout(input: LayoutInput): DiagramLayout {
     lifelines: lines,
     arrows,
     groups,
+    stages: [],
   };
 }

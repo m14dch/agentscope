@@ -104,7 +104,7 @@
   font-family: var(--font-text);
 }
 
-/* Architecture mode: one group per phase, headed by its takeaway. */
+/* Architecture: one group per phase, headed by its takeaway. */
 .group {
   cursor: pointer;
 }
@@ -271,7 +271,7 @@
   text-underline-offset: 0.2em;
 }
 
-/* Architecture mode: flat sections stacked in order, no frames. */
+/* Architecture: flat sections stacked in order, no frames. */
 .phase {
   border-left: 3px solid transparent;
   padding-left: var(--space-1);
@@ -323,4 +323,44 @@
 
 .phase .row:first-child {
   border-top: var(--line-hair) solid var(--color-rule);
+}
+
+/* The Overview (02 zoom_levels.overview): one block per stage, its sentence at text size. */
+.stage-sentence {
+  fill: var(--color-ink);
+  font-size: var(--size-text);
+  paint-order: stroke;
+  stroke: var(--color-paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.stage--current .stage-sentence {
+  font-weight: var(--weight-strong);
+}
+
+/* A stage is read, not clicked. */
+.stage-frame {
+  pointer-events: none;
+}
+
+/* The step list's stages: flat sections like the groups, with the parties below the sentence. */
+.stages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage-item {
+  display: flex;
+  flex-direction: column;
+  padding-block: var(--space-1);
+}
+
+.stage-text {
+  line-height: var(--leading-text);
+}
+
+.phase--current .stage-text {
+  font-weight: var(--weight-strong);
 }

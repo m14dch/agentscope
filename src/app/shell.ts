@@ -1,12 +1,19 @@
 /**
- * App shell (02-ui-ux.yaml navigation, layout, controls, learning): one quiet frame with
- * tabs, the scenario picker, the mode switch, the learning question,
- * the control row (playback buttons, play speed and step timeline), and the diagram beside
- * the step's message.
+ * App shell (02-ui-ux.yaml navigation, layout, controls, learning, zoom_levels): one quiet frame
+ * with tabs, the scenario picker, the learning question, the control row (zoom control, playback
+ * buttons, play speed and step timeline), and the diagram beside the step's message.
  */
 import { Player } from '../engine/player.ts';
 import { ControlRow } from './controls.ts';
-import type { Mode } from '../diagram/model.ts';
+import {
+  type Level,
+  stageAt,
+  stageSpans,
+  stageStops,
+  type StageSpan,
+  zoomCursor,
+  zoomed,
+} from '../diagram/zoom.ts';
 import { contextModel, hasContext, renderContext } from '../inspector/context.ts';
 import { combinedPanel } from './combined.ts';
 import {
@@ -122,6 +129,13 @@ function button(
   return b;
 }
 
+/** The keys that zoom in (+, and = for + without Shift) and out (02 controls.keyboard). */
+const ZOOM_KEYS = new Map<string, 1 | -1>([
+  ['+', 1],
+  ['=', 1],
+  ['-', -1],
+]);
+
 /** Whether the focused element needs this key for itself (02 controls.keyboard_scope). */
 function keyBelongsToFocus(target: EventTarget | null, key: string): boolean {
   if (!(target instanceof Element)) return false;
@@ -130,6 +144,8 @@ function keyBelongsToFocus(target: EventTarget | null, key: string): boolean {
     // Space activates buttons, links and menus and types into text fields.
     return !!target.closest('button, a, summary, [role="button"], input:not([type="range"])');
   }
+  // + and - type into text fields; elsewhere they zoom (02 controls.keyboard_scope).
+  if (ZOOM_KEYS.has(key)) return !!target.closest('input:not([type="range"])');
   // The arrow keys move text cursors, the step slider and the splitter, and scroll the
   // diagram region; a focused group inside the region leaves them to stepping.
   return (
@@ -153,6 +169,7 @@ interface ScenarioView {
   defaults: readonly ScenarioEvent[];
   player: Player;
   view: DiagramView;
+  row: ControlRow;
   /** Index of the event whose prediction prompt is showing, if any. */
   prompt: number | undefined;
   /** The selected lineage value; cleared when the scenario changes. */
@@ -239,17 +256,19 @@ export class Shell {
     }
     const route = parsed.route;
     if (route.tab === 'compare') {
-      if (this.compare) this.compare.follow(route.step, route.mode);
+      if (this.compare) this.compare.follow(route.step, route.level);
       else this.renderCompare(route);
       return;
     }
     const scenario = this.registry[route.scenario];
     if (!scenario) return;
     if (this.current?.scenario.id === scenario.id) {
-      // Same scenario: follow the step and mode in the link.
+      // Same scenario: follow the step and level in the link.
       const c = this.current;
       c.player.jump(fromDefaultStep(c.defaults, c.player.playback.events, route.step));
-      this.current.view.setMode(route.mode);
+      this.setLevel(c, route.level);
+      // The Overview rests at the end of the stage (02 zoom_levels.cursor_mapping).
+      c.player.jump(zoomCursor(this.spans(c), c.player.cursor, 'protocol', route.level));
       this.current.prompt = undefined;
       this.route = {
         ...route,
@@ -279,7 +298,7 @@ export class Shell {
     if (!c || !this.route) return;
     // The address numbers steps as played at the defaults (02 navigation.route_steps).
     const step = toDefaultStep(c.defaults, c.player.playback.events, c.player.cursor);
-    this.route = { ...this.route, step, mode: c.view.mode };
+    this.route = { ...this.route, step, level: c.view.level };
     const hash = formatRoute(this.route);
     if (location.hash !== hash) history.replaceState(null, '', hash);
   }
@@ -323,11 +342,10 @@ export class Shell {
       row,
       el('p', { class: 'small muted simulated' }, SIMULATED, offlineIndicator()),
     );
-    if (scenario) this.toMenu('View', [this.modeSwitch()], row);
   }
 
   /**
-   * The menu that holds the scenario picker, the view switch and the play speed on
+   * The menu that holds the scenario picker, the zoom control and the play speed on
    * phones (02 layout.phone.header); hidden from 48rem, where they sit in their own places.
    * It is shown once something is in it.
    */
@@ -348,11 +366,11 @@ export class Shell {
       body.hidden = true;
       if (focus) toggle.focus();
     };
-    // A scenario choice closes it; so does a change of view, with focus back on the menu.
+    // A scenario choice closes it; so does a change of level, with focus back on the menu.
     body.addEventListener('click', (e) => {
       const target = e.target as Element;
       if (target.closest('a')) close(false);
-      else if (target.closest('[data-mode]')) close(true);
+      else if (target.closest('[data-level]')) close(true);
     });
     // Escape anywhere on the page closes the open menu, and does nothing else (it does not
     // clear a lineage selection: the window's key handler skips a handled event).
@@ -457,22 +475,38 @@ export class Shell {
     return details;
   }
 
-  private modeSwitch(): HTMLElement {
-    const group = el('div', { class: 'segmented', role: 'group', 'aria-label': 'View' });
-    for (const mode of ['architecture', 'protocol'] as const) {
-      const b = button(mode === 'architecture' ? 'Architecture' : 'Protocol', () =>
-        this.setMode(mode),
-      );
-      b.dataset['mode'] = mode;
-      group.append(b);
-    }
-    return group;
+  /** The stages of the scenario with the spans of their events as played now. */
+  private spans(c: ScenarioView): StageSpan[] {
+    return stageSpans(c.scenario.overview, c.player.playback.events);
   }
 
-  private setMode(mode: Mode): void {
-    if (!this.current) return;
-    this.current.view.setMode(mode);
-    this.current.render();
+  /**
+   * Sets the zoom level of the diagram, the control and the stepping: the Overview steps stage
+   * by stage (02 zoom_levels.stepping). The caller moves the cursor.
+   */
+  private setLevel(c: ScenarioView, level: Level): void {
+    c.view.setLevel(level);
+    c.row.setLevel(level);
+    c.player.setStops(level === 'overview' ? () => stageStops(this.spans(c)) : undefined);
+  }
+
+  /**
+   * Zooms to a level, keeping the learner's place (02 zoom_levels.cursor_mapping), and announces
+   * the level and the position (zoom_levels.control).
+   */
+  private zoom(level: Level): void {
+    const c = this.current;
+    if (!c || level === c.view.level) return;
+    const from = c.view.level;
+    this.act(() => {
+      c.prompt = undefined;
+      const target = zoomCursor(this.spans(c), c.player.cursor, from, level);
+      this.setLevel(c, level);
+      c.player.jump(target);
+      c.render();
+      c.row.announce(level, c.row.status.textContent ?? '');
+      keepFocusVisible(c.row);
+    });
   }
 
   /** The Compare tab: both scenarios side by side, in sync by semantic phase. */
@@ -491,25 +525,24 @@ export class Shell {
       panes: [pane(compare.left_scenario), pane(compare.right_scenario)],
       labels: this.labels,
       step: route.step,
-      mode: route.mode,
-      onChange: (step, mode) => {
-        this.route = { ...route, step, mode };
+      level: route.level,
+      onChange: (step, level) => {
+        this.route = { ...route, step, level };
         const hash = formatRoute(this.route);
         if (location.hash !== hash) history.replaceState(null, '', hash);
       },
     });
-    const bar = this.header.querySelector('.shell-bar') ?? undefined;
-    this.toMenu('View', [this.compare.modeSwitch], bar);
     this.toPhoneControls(this.compare.controls);
   }
 
   /**
    * On phones the playback buttons become the bottom bar with the position line and the step
-   * slider, and the play speed moves into the menu (02 layout.phone.controls).
+   * slider, and the zoom control and the play speed move into the menu (02 layout.phone.controls).
    */
   private toPhoneControls(row: ControlRow): void {
     const signal = (this.headerListeners ??= new AbortController()).signal;
     relocate([row.status, row.slider], row.buttons, signal);
+    this.toMenu('Zoom', [row.zoom]);
     this.toMenu(undefined, [row.speed]);
   }
 
@@ -517,11 +550,14 @@ export class Shell {
     const player = new Player(createPlayback(scenario));
     player.jump(route.step);
 
+    // The headline names the mechanism, so it is shown from Architecture on; the Overview names
+    // no protocol (02 zoom_levels.overview).
+    const headline = el('p', { class: 'headline' }, scenario.headline);
     const lesson = el(
       'section',
       { class: 'lesson' },
       el('h2', { tabindex: '-1' }, scenario.learning_question),
-      el('p', { class: 'headline' }, scenario.headline),
+      headline,
     );
     // The control row (02 controls.row): the buttons, the play speed and the timeline.
     const row = new ControlRow({
@@ -533,7 +569,12 @@ export class Shell {
       toggle: () => this.act(() => player.toggle()),
       next: () => this.next(),
       speed: (speed) => player.setSpeed(speed),
-      jump: (step) => this.go(() => player.jump(step)),
+      // At the Overview the slider runs over the stages (02 zoom_levels.stepping).
+      jump: (step) =>
+        this.go(() =>
+          player.jump(view.level === 'overview' ? (this.stops(state)[step] ?? 0) : step),
+        ),
+      zoom: (level) => this.zoom(level),
     });
     const { slider, buttons: controls } = row;
     const steps = player.playback.length;
@@ -678,7 +719,7 @@ export class Shell {
 
     const view = new DiagramView(diagram, player, {
       labels: this.labels,
-      mode: route.mode,
+      level: route.level,
       name: 'Sequence diagram',
       onNaturalWidth: (px) => workspace.style.setProperty('--diagram-width', `${px}px`),
     });
@@ -687,6 +728,7 @@ export class Shell {
       defaults: player.playback.events,
       player,
       view,
+      row,
       prompt: undefined,
       selection: undefined,
       render: () => undefined,
@@ -696,16 +738,34 @@ export class Shell {
     state.render = (): void => {
       const n = player.playback.length;
       const k = player.cursor;
+      const overview = view.level === 'overview';
       const event = player.playback.event(k);
       const phase = event ? scenario.phases.find((p) => p.id === event.phase) : undefined;
-      const where = phase ? `Step ${k} of ${n} · ${phase.label}` : `Step ${k} of ${n}`;
+      const stops = this.stops(state);
+      // At the Overview the position counts stages (02 zoom_levels.stepping).
+      const stage = Math.max(
+        0,
+        stops.findIndex((s) => s >= k),
+      );
+      const where = overview
+        ? `Stage ${stage} of ${stops.length - 1}`
+        : phase
+          ? `Step ${k} of ${n} · ${phase.label}`
+          : `Step ${k} of ${n}`;
       row.update({
-        step: k,
-        length: n,
+        step: overview ? stage : k,
+        length: overview ? stops.length - 1 : n,
         where,
         playing: player.status === 'playing',
         speed: player.speed,
       });
+      // The Overview shows the very basics: no headline naming the protocol, no parameters, step
+      // details or panels (02 zoom_levels.overview).
+      headline.hidden = overview;
+      parameters.hidden = overview;
+      details.hidden = overview;
+      if (context) context.hidden = overview;
+      const shown = overview ? 0 : k;
       const config = player.playback.retrievalConfig;
       for (const b of parameterButtons) {
         const current = JSON.stringify(config[b.dataset['parameter'] ?? '']);
@@ -719,15 +779,14 @@ export class Shell {
         input.setAttribute('aria-valuetext', text);
         output.textContent = text;
       }
-      ingestion?.panel.update(ingestionModel(player.playback.events, k, ingestion.sources));
+      // At the Overview each panel shows what it shows before the first step: nothing.
+      ingestion?.panel.update(ingestionModel(player.playback.events, shown, ingestion.sources));
       retrieval?.panel.update(
-        retrievalModel(player.playback.events, k, retrieval.index()),
+        retrievalModel(player.playback.events, shown, retrieval.index()),
         state.selection,
       );
-      combined?.update();
-      for (const b of this.header.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
-        b.setAttribute('aria-pressed', String(b.dataset['mode'] === view.mode));
-      }
+      combined?.update(shown);
+      row.setLevel(view.level);
       const promptAt =
         state.prompt === k && player.playback.event(k + 1)?.prediction ? k : undefined;
       if (promptAt !== shownPrompt) {
@@ -757,9 +816,15 @@ export class Shell {
     };
 
     const unsubscribe = player.subscribe(() => {
-      // Play pauses before a step that asks for a prediction (02 learning.prediction_rules).
+      // Play pauses before a step that asks for a prediction (02 learning.prediction_rules), not
+      // at the Overview, which steps by stage and shows no prompts (zoom_levels.overview).
       const next = player.playback.event(player.cursor + 1);
-      if (player.status === 'playing' && next?.prediction && state.prompt !== player.cursor) {
+      if (
+        player.status === 'playing' &&
+        view.level !== 'overview' &&
+        next?.prediction &&
+        state.prompt !== player.cursor
+      ) {
         player.pause();
         state.prompt = player.cursor;
       }
@@ -783,8 +848,16 @@ export class Shell {
       ...(combined ? [combined.root] : []),
     );
     this.toPhoneControls(row);
+    this.setLevel(state, route.level);
+    // The Overview rests at the end of the stage (02 zoom_levels.cursor_mapping).
+    player.jump(zoomCursor(this.spans(state), player.cursor, 'protocol', route.level));
     state.render();
     return state;
+  }
+
+  /** Where the Overview's cursor rests: 0 and the end of each stage. */
+  private stops(c: ScenarioView): number[] {
+    return stageStops(this.spans(c));
   }
 
   private promptContent(state: ScenarioView): Node[] {
@@ -801,13 +874,24 @@ export class Shell {
     ];
   }
 
-  /** Before the first step: the question the scenario answers. */
+  /**
+   * Before the first step: the question the scenario answers. At the Overview, then the current
+   * stage's sentence (02 zoom_levels.overview).
+   */
   private introContent(state: ScenarioView): Node[] {
-    if (state.player.cursor > 0) return [];
     const { scenario } = state;
+    if (state.player.cursor > 0) {
+      if (state.view.level !== 'overview') return [];
+      const stage = stageAt(this.spans(state), state.player.cursor);
+      return stage ? [el('p', { class: 'message' }, stage.stage.sentence)] : [];
+    }
     return [
       el('p', { class: 'message' }, `${scenario.question ?? scenario.learning_question}`),
-      el('p', { class: 'small muted' }, 'Nothing has happened yet. Next runs the first step.'),
+      el(
+        'p',
+        { class: 'small muted' },
+        `Nothing has happened yet. Next runs the first ${state.view.level === 'overview' ? 'stage' : 'step'}.`,
+      ),
     ];
   }
 
@@ -836,7 +920,7 @@ export class Shell {
     const c = this.current;
     if (!c) return;
     const upcoming = c.player.playback.event(c.player.cursor + 1);
-    if (upcoming?.prediction && c.prompt !== c.player.cursor) {
+    if (c.view.level !== 'overview' && upcoming?.prediction && c.prompt !== c.player.cursor) {
       c.prompt = c.player.cursor;
       c.render();
       return;
@@ -1014,9 +1098,11 @@ export class Shell {
     if (compare) {
       if (keyBelongsToFocus(e.target, e.key)) return;
       // CompareView treats these as the learner's explicit step actions.
+      const direction = ZOOM_KEYS.get(e.key);
       if (e.key === 'ArrowRight') compare.next();
       else if (e.key === 'ArrowLeft') compare.previous();
       else if (e.key === ' ') compare.toggle();
+      else if (direction) compare.zoomBy(direction);
       else return;
       e.preventDefault();
       return;
@@ -1029,10 +1115,30 @@ export class Shell {
       return;
     }
     if (keyBelongsToFocus(e.target, e.key)) return;
+    const direction = ZOOM_KEYS.get(e.key);
+    const level = direction ? zoomed(c.view.level, direction) : undefined;
     if (e.key === 'ArrowRight') this.next();
     else if (e.key === 'ArrowLeft') this.go(() => c.player.previous());
     else if (e.key === ' ') this.act(() => c.player.toggle());
-    else return;
+    else if (direction) {
+      if (level) this.zoom(level);
+    } else return;
     e.preventDefault();
   };
+}
+
+/**
+ * After a change of level, focus that sat in what the level hides (the step details, a panel)
+ * moves to the zoom control's pressed button, so it is never lost.
+ */
+export function keepFocusVisible(row: ControlRow): void {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || active === document.body) return;
+  if (active.isConnected && !active.closest('[hidden]')) return;
+  // On phones the zoom control can sit in the closed menu: then the menu's toggle takes focus.
+  const pressed = row.zoom.querySelector<HTMLElement>('[aria-pressed="true"]');
+  const target = pressed?.closest('[hidden]')
+    ? document.querySelector<HTMLElement>('.menu-toggle')
+    : pressed;
+  target?.focus({ preventScroll: true });
 }

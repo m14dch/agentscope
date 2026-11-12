@@ -216,12 +216,12 @@ for (const [width, height] of [
     test.use({ viewport: { width, height } });
 
     for (const [tab, route] of TABS) {
-      for (const mode of ['', '/protocol']) {
-        test(`${tab}${mode}: Tab reaches every control with a visible focus, and keys operate them`, async ({
+      for (const level of ['/architecture', '/protocol']) {
+        test(`${tab}${level}: Tab reaches every control with a visible focus, and keys operate them`, async ({
           page,
         }) => {
           // Keyboard only from the moment the page loads: no pointer input at all.
-          await page.goto(`./#/${route}${mode}`);
+          await page.goto(`./#/${route}${level}`);
           await ready(page);
           const compare = tab === 'Compare';
           const line = status(page, compare);
@@ -244,7 +244,7 @@ for (const [width, height] of [
           ).toBeVisible();
 
           // Tab reaches every control, each on screen with a visible focus indicator.
-          await page.goto(`./#/${route}${mode}`);
+          await page.goto(`./#/${route}${level}`);
           await page.reload();
           await ready(page);
           const controls = await markControls(page);
@@ -273,8 +273,8 @@ for (const [width, height] of [
             await expect(focused(page)).not.toHaveText(first);
           }
 
-          // Enter expands a diagram group (architecture mode).
-          if (mode === '') {
+          // Enter expands a diagram group (Architecture).
+          if (level === '/architecture') {
             await page.reload();
             await ready(page);
             await tabTo(page, '[data-group][aria-expanded="false"]');
@@ -299,10 +299,10 @@ for (const [width, height] of [
             await expect.poll(() => page.url()).not.toBe(url);
           }
 
-          // The mode switch: Enter on the other mode's button switches the view.
+          // The zoom control: Enter on another level's button zooms there.
           await page.reload();
           await ready(page);
-          const other = mode === '' ? 'Protocol' : 'Architecture';
+          const other = level === '/architecture' ? 'Protocol' : 'Architecture';
           await tabTo(page, 'button', other);
           await page.keyboard.press('Enter');
           await expect(page.getByRole('button', { name: other, exact: true })).toHaveAttribute(

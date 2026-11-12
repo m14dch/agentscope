@@ -49,7 +49,7 @@ event_schema:
 phase_schema:
   fields:
     id: Unique within the scenario
-    label: Shown in architecture mode
+    label: Shown at the Architecture zoom level
     semantic_phase: One of 06-comparison-scenarios.yaml semantic_phases; drives Compare
       synchronization
     takeaway: Required. One sentence stating what the learner should understand from
@@ -127,9 +127,28 @@ scenario_format:
   - phases
   - events
   - initial_state
+  - overview
   learning_fields:
     learning_question: The question the scenario teaches, ending with "?"
     headline: One sentence stating the scenario's main message
+  overview_fields:
+    overview: '{parties, stages}: the scenario at the Overview zoom level (02 zoom_levels.overview),
+      written for a first-time visitor before any protocol name (issue 51).'
+    parties: 'List of 2 to 4 {id, label, members}: each party merges participants into one lifeline,
+      for example You, Assistant and Bank systems. members lists participant IDs of the scenario;
+      the parties partition the participants (each participant in exactly one party). IDs are unique
+      within the scenario; the order is the order of the merged lifelines.'
+    stages: 'List of 3 to 5 {id, phases, sentence}: the story in big steps. phases lists phase IDs;
+      the stages partition the phases in their order (each stage a consecutive run of the phase list,
+      every phase in exactly one stage), and the scenario''s events visit the stages in order, so each
+      stage''s events are one consecutive run. sentence is one plain sentence (it ends with a period
+      and holds no other sentence end) without protocol names or payloads.'
+    plain_words: 'Party labels and stage sentences are for a first-time visitor: they name no
+      protocol and use no technical term a newcomer would have to look up. None of these words
+      appears in them, in any letter case and with its plural or other endings: MCP, HTTP(S), JSON
+      (also in JSON-RPC), RPC, LLM, API, tool, server, vector, embed (embedding, embedded),
+      chunk, prompt, token, schema and model; nor REST in capitals (the English word rest stays
+      allowed). The same rule holds for 06 compare.overview_headline.'
   optional:
   - question
   - parameters
@@ -153,7 +172,10 @@ scenario_format:
     headers mirroring the body; model-visible context rules; security boundary IDs;
     lineage keys; value_ref paths; learning fields and prediction prompts; derived_events
     and optional_steps naming the scenario''s events, each optional step enabled by a
-    boolean parameter and holding both events of a pair. A failure stops the build.
+    boolean parameter and holding both events of a pair; the overview (overview_fields: 2 to 4
+    parties that partition the participants, 3 to 5 stages that partition the phases in
+    order and that the events visit in order, one-sentence stage sentences, plain words). A
+    failure stops the build.
     Errors identify scenario and event. validate_specs.py additionally validates MCP
     payloads against schema.json, recomputes the RAG reference results and recomputes
     every derived event of rag-index, rag-query and the Combined scenario at the default
@@ -188,8 +210,8 @@ composition_format:
   - Process steps in order
   - Prefix every event ID and pair_id with '<composed id>:'
   - Set scenario_id and renumber sequence from 1
-  - Take title, question, learning_question, headline, participants, phases, initial_state
-    and derived_events from the composition
+  - Take title, question, learning_question, headline, participants, phases, overview,
+    initial_state and derived_events from the composition
   - Copied ranges must contain complete request/response pairs
   - Validate the composed scenario
 deterministic_model:

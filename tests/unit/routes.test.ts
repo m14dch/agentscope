@@ -23,48 +23,50 @@ describe('routes', () => {
   };
 
   it('fill in defaults', () => {
-    expect(ok('')).toEqual({ tab: 'mcp', scenario: 'mcp-balance', step: 0, mode: 'architecture' });
+    expect(ok('')).toEqual({ tab: 'mcp', scenario: 'mcp-balance', step: 0, level: 'overview' });
     expect(ok('#/')).toEqual(ok(''));
     expect(ok('#/rag')).toEqual({
       tab: 'rag',
       scenario: 'rag-query',
       step: 0,
-      mode: 'architecture',
+      level: 'overview',
     });
     expect(ok('#/compare')).toEqual({
       tab: 'compare',
       scenario: 'compare-rag-mcp',
       step: 0,
-      mode: 'architecture',
+      level: 'overview',
     });
     expect(ok('#/compare/compare-rag-mcp/12/protocol')).toMatchObject({
       step: 12,
-      mode: 'protocol',
+      level: 'protocol',
     });
   });
 
-  it('read scenario, step and mode', () => {
+  it('read scenario, step and zoom level (02 navigation.routes)', () => {
     expect(ok('#/mcp/mcp-balance/14/protocol')).toEqual({
       tab: 'mcp',
       scenario: 'mcp-balance',
       step: 14,
-      mode: 'protocol',
+      level: 'protocol',
     });
-    expect(ok('#/combined/combined-balance-explanation/3').mode).toBe('architecture');
+    expect(ok('#/mcp/mcp-balance/14/architecture').level).toBe('architecture');
+    // An address without a level is the Overview, also an old one that meant architecture.
+    expect(ok('#/combined/combined-balance-explanation/3').level).toBe('overview');
   });
 
-  it("open a removed variant's base scenario at step 0, keeping the mode (02 removed_scenarios)", () => {
+  it("open a removed variant's base scenario at step 0, keeping the level (02 removed_scenarios)", () => {
     expect(ok('#/mcp/mcp-not-found/3')).toEqual({
       tab: 'mcp',
       scenario: 'mcp-balance',
       step: 0,
-      mode: 'architecture',
+      level: 'overview',
     });
     expect(ok('#/rag/rag-hybrid/12/protocol')).toEqual({
       tab: 'rag',
       scenario: 'rag-query',
       step: 0,
-      mode: 'protocol',
+      level: 'protocol',
     });
     expect(ok('#/combined/combined-missing-terms').scenario).toBe('combined-balance-explanation');
     // Only on its own tab.
@@ -74,10 +76,16 @@ describe('routes', () => {
     });
   });
 
+  it('read /overview as the Overview and write it without a level (02 navigation.routes)', () => {
+    expect(ok('#/mcp/mcp-balance/3/overview').level).toBe('overview');
+    expect(formatRoute(ok('#/mcp/mcp-balance/3/overview'))).toBe('#/mcp/mcp-balance/3');
+  });
+
   it('round-trip through formatRoute', () => {
     for (const hash of [
       '#/mcp/mcp-balance/14/protocol',
       '#/rag/rag-index/0',
+      '#/rag/rag-index/4/architecture',
       '#/compare/compare-rag-mcp/12/protocol',
     ]) {
       expect(formatRoute(ok(hash))).toBe(hash);
@@ -100,6 +108,7 @@ describe('routes', () => {
       message: 'Unknown step: x',
     });
     expect(parseRoute('#/mcp/mcp-balance/3/sideways', tabs)).toMatchObject({ ok: false });
+
     expect(parseRoute('#/compare/rag-query', tabs)).toMatchObject({
       ok: false,
       tab: 'compare',

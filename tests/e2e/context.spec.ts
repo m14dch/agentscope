@@ -9,7 +9,7 @@ async function open(page: Page, hash: string): Promise<void> {
 const panel = (page: Page) => page.locator('#context-panel');
 
 test('the model-context panel is collapsed at start and opens on request', async ({ page }) => {
-  await open(page, '#/mcp/mcp-balance/24');
+  await open(page, '#/mcp/mcp-balance/24/architecture');
   const toggle = page.getByRole('button', { name: 'Model context' });
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(panel(page)).toBeHidden();
@@ -21,7 +21,7 @@ test('the model-context panel is collapsed at start and opens on request', async
 test('the balance is in agent state at the tool result and seen by the model only from the follow-up request', async ({
   page,
 }) => {
-  await open(page, '#/mcp/mcp-balance/24');
+  await open(page, '#/mcp/mcp-balance/24/architecture');
   await page.getByRole('button', { name: 'Model context' }).click();
   const state = page.getByRole('region', { name: 'Agent state' });
   const seen = page.getByRole('region', { name: 'Model-visible context' });
@@ -39,7 +39,7 @@ test('the balance is in agent state at the tool result and seen by the model onl
 });
 
 test('no context panel where the scenario has no agent state', async ({ page }) => {
-  await open(page, '#/rag/rag-index/3');
+  await open(page, '#/rag/rag-index/3/architecture');
   await expect(page.getByRole('button', { name: 'Model context' })).toHaveCount(0);
 });
 
@@ -77,7 +77,7 @@ test('with a selection only its fields are highlighted in the payload', async ({
   await expect(marks.filter({ hasText: '12500.75' }).first()).toBeVisible();
 });
 
-test('architecture mode marks the group caption holding the selected value with a solid ink underline', async ({
+test('Architecture marks the group caption holding the selected value with a solid ink underline', async ({
   page,
 }) => {
   await open(page, '#/mcp/mcp-balance/24/protocol');

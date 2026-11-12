@@ -1,8 +1,9 @@
 /**
- * Hash routes (02-ui-ux.yaml navigation.routes): #/<tab>/<scenario>/<step>[/protocol].
- * Pure functions, so every link can be parsed, formatted and tested without a browser.
+ * Hash routes (02-ui-ux.yaml navigation.routes): #/<tab>/<scenario>/<step>[/architecture|/protocol],
+ * the Overview without a level. Pure functions, so every link can be parsed, formatted and tested
+ * without a browser.
  */
-import type { Mode } from '../diagram/model.ts';
+import type { Level } from '../diagram/zoom.ts';
 import type { SpecSources } from '../scenarios/types.ts';
 
 export const TABS = ['mcp', 'rag', 'compare', 'combined'] as const;
@@ -31,7 +32,16 @@ export interface Route {
   /** On the Compare tab, the compare ID; its step counts the compare timeline. */
   scenario: string;
   step: number;
-  mode: Mode;
+  level: Level;
+}
+
+/**
+ * The level a route's last part names; the Overview has none, and /overview is read as it and
+ * written without (02 navigation.routes).
+ */
+function levelOf(part: string | undefined): Level | undefined {
+  if (part === undefined || part === 'overview') return 'overview';
+  return part === 'architecture' || part === 'protocol' ? part : undefined;
 }
 
 export type Parsed = { ok: true; route: Route } | { ok: false; tab: Tab; message: string };
@@ -61,7 +71,7 @@ export const REMOVED_SCENARIOS: Readonly<Partial<Record<Tab, Readonly<Record<str
 /** Parses a location hash; missing parts take the tab's defaults. */
 export function parseRoute(hash: string, tabs: Record<Tab, string[]>): Parsed {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  const [tabPart = 'mcp', scenarioPart, stepPart, modePart, ...rest] = parts;
+  const [tabPart = 'mcp', scenarioPart, stepPart, levelPart, ...rest] = parts;
   if (!(TABS as readonly string[]).includes(tabPart)) {
     return { ok: false, tab: 'mcp', message: `Unknown page: ${tabPart}` };
   }
@@ -73,23 +83,26 @@ export function parseRoute(hash: string, tabs: Record<Tab, string[]>): Parsed {
       : undefined;
   if (base !== undefined && tabs[tab].includes(base)) {
     // A removed variant's step numbers named other events, so its base opens at step 0.
-    const mode = parts.includes('protocol') ? 'protocol' : 'architecture';
-    return { ok: true, route: { tab, scenario: base, step: 0, mode } };
+    const level = levelOf(parts.slice(3).find((p) => levelOf(p) !== undefined));
+    return { ok: true, route: { tab, scenario: base, step: 0, level: level ?? 'overview' } };
   }
   const scenario = scenarioPart ?? tabs[tab][0];
   if (scenario === undefined || !tabs[tab].includes(scenario)) {
     return { ok: false, tab, message: `Unknown scenario: ${scenarioPart ?? ''}` };
   }
   const step = stepPart === undefined ? 0 : /^\d+$/.test(stepPart) ? Number(stepPart) : Number.NaN;
-  if (Number.isNaN(step) || (modePart !== undefined && modePart !== 'protocol') || rest.length) {
+  const level = levelOf(levelPart);
+  if (Number.isNaN(step) || level === undefined || rest.length) {
     return { ok: false, tab, message: `Unknown step: ${parts.slice(2).join('/')}` };
   }
-  return {
-    ok: true,
-    route: { tab, scenario, step, mode: modePart === 'protocol' ? 'protocol' : 'architecture' },
-  };
+  return { ok: true, route: { tab, scenario, step, level } };
+}
+
+/** The address suffix of a level: none for the Overview. */
+export function levelSuffix(level: Level): string {
+  return level === 'overview' ? '' : `/${level}`;
 }
 
 export function formatRoute(route: Route): string {
-  return `#/${route.tab}/${route.scenario}/${route.step}${route.mode === 'protocol' ? '/protocol' : ''}`;
+  return `#/${route.tab}/${route.scenario}/${route.step}${levelSuffix(route.level)}`;
 }

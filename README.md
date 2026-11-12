@@ -26,8 +26,11 @@ explaining it, and the exact payloads on demand.
 - **Combined** — one answer that takes the balance from an MCP tool and the account terms from retrieved
   documents, each statement labelled with its source. Scenario: `combined-balance-explanation`.
 
-Two modes show the same step at two levels: **Architecture** groups each phase under its takeaway;
-**Protocol** shows every event. The inspector holds Payload, Transport, Security and Lineage; the **Model
+Three zoom levels show the same place at three altitudes: the **Overview** tells the scenario in three to
+five plain sentences between a few parties (You, Assistant, Bank systems), without protocol names;
+**Architecture** groups each phase under its takeaway; **Protocol** shows every event. The zoom control
+(or the keys + and -) keeps the learner's place, and the level is part of the address
+(`#/mcp/mcp-balance/14/protocol`; no suffix is the Overview). The inspector holds Payload, Transport, Security and Lineage; the **Model
 context** panel puts the agent's state beside what the model has actually seen. On a phone the diagram
 becomes a step list and the controls move to a bar at the bottom of the screen. After the first visit the
 site works offline.
@@ -89,7 +92,7 @@ in use.
   only); `index.html` declares the favicon. Both resolve against the base path and are precached. These three
   files are the only exception to the colour-token rule: they keep their own colours and the source scan skips
   exactly them. Do not edit them.
-- Keyboard: → next, ← previous, Space plays or pauses, wherever the focused control does not need the key
+- Keyboard: → next, ← previous, Space plays or pauses, + and - zoom in and out, wherever the focused control does not need the key
   itself. Every control shows a 2 px accent focus outline (a diagram group: a 2 px ink frame). With reduced
   motion nothing animates. Code wraps instead of scrolling at 200% zoom.
 
@@ -217,22 +220,22 @@ Each use case has exactly one scenario (`03-simulation-engine.yaml` → `one_sce
 Every item of `specifications/08-acceptance-tests.yaml` → `quality_gates` and `definition_of_done`, with the
 test or evidence that proves it. CI runs all of them on every pull request.
 
-| Item                                                        | Evidence                                                                                                                                                                           |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| At least 80 events, played at the default parameters        | `tests/unit/rag.test.ts` (quality gate of supported events); `quality.spec.ts` steps through every scenario with the arrow key: 83 events, 95% of steps within 100 ms              |
-| Desktop and tablet                                          | `diagram.spec.ts` (labels at desktop and tablet width), `compare.spec.ts` (panes stack at tablet width), `quality.spec.ts` (keyboard at 1440 and 820 px), `a11y.spec.ts` at 820 px |
-| Phone                                                       | `phone.spec.ts` (phone-layout at 390 × 844 and 360 × 800), `a11y.spec.ts` at 390 px                                                                                                |
-| Keyboard navigation                                         | `quality.spec.ts` (Tab reaches every control on every tab with a visible focus; keys and Enter step), `navigation.spec.ts`, `diagram.spec.ts`, `inspector.spec.ts`                 |
-| Reduced motion                                              | `quality.spec.ts` (nothing animates, diagram regions jump at once), `diagram.spec.ts`                                                                                              |
-| Scenario schema validation                                  | `npm run validate:specs`; `tests/unit/node/scenarios-build.test.ts` (a broken event fails the build), `scenarios-golden.test.ts`                                                   |
-| Zero runtime API and external requests                      | `tests/e2e/fixtures.ts` fails every browser test on either; `guard.spec.ts` proves the guard catches both                                                                          |
-| Offline reload after precache                               | `offline.spec.ts` (offline and pages)                                                                                                                                              |
-| Static build and source delivered                           | This repository; CI builds `dist/` and deploys it to Pages; release v1.0.0                                                                                                         |
-| README includes run and extend instructions                 | Development; Extend a scenario                                                                                                                                                     |
-| All primary scenarios deterministic and executable          | `navigation.spec.ts` (deterministic snapshots), `mcp.spec.ts`, `rag.spec.ts`, `combined.spec.ts`, `tests/unit/engine.test.ts`                                                      |
-| All protocol examples validated against the pinned revision | `npm run validate:specs` validates every MCP payload against `specifications/tools/mcp-schema-2026-07-28.json` in CI, and the golden tests run the validator                       |
-| No fictional model output represented as real inference     | The header statement on every page (`navigation.spec.ts`); every model response, tool-call requests included, labelled "Simulated model output" (`tests/unit/scenarios.test.ts`)   |
-| GitHub Pages workflow deploys the Vite dist artifact        | `.github/workflows/ci.yml`, `scripts/check-deployment.ts` (`tests/unit/deployment-check.test.ts`)                                                                                  |
-| Production build runs offline after precache                | `offline.spec.ts`, `tests/unit/node/offline.test.ts`                                                                                                                               |
-| No runtime backend, API keys or external services           | A static `dist/`; the request guard of every browser test                                                                                                                          |
-| No serious or critical accessibility issue (axe)            | `a11y.spec.ts`: every tab, representative scenarios and steps, both modes, at 1440, 820 and 390 px, with panels and menus open                                                     |
+| Item                                                        | Evidence                                                                                                                                                                             |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| At least 80 events, played at the default parameters        | `tests/unit/rag.test.ts` (quality gate of supported events); `quality.spec.ts` steps through every scenario with the arrow key: 83 events, 95% of steps within 100 ms                |
+| Desktop and tablet                                          | `diagram.spec.ts` (labels at desktop and tablet width), `compare.spec.ts` (panes stack at tablet width), `quality.spec.ts` (keyboard at 1440 and 820 px), `a11y.spec.ts` at 820 px   |
+| Phone                                                       | `phone.spec.ts` (phone-layout at 390 × 844 and 360 × 800), `a11y.spec.ts` at 390 px                                                                                                  |
+| Keyboard navigation                                         | `quality.spec.ts` (Tab reaches every control on every tab with a visible focus; keys and Enter step), `navigation.spec.ts`, `diagram.spec.ts`, `inspector.spec.ts`                   |
+| Reduced motion                                              | `quality.spec.ts` (nothing animates, diagram regions jump at once), `diagram.spec.ts`                                                                                                |
+| Scenario schema validation                                  | `npm run validate:specs`; `tests/unit/node/scenarios-build.test.ts` (a broken event fails the build), `scenarios-golden.test.ts`                                                     |
+| Zero runtime API and external requests                      | `tests/e2e/fixtures.ts` fails every browser test on either; `guard.spec.ts` proves the guard catches both                                                                            |
+| Offline reload after precache                               | `offline.spec.ts` (offline and pages)                                                                                                                                                |
+| Static build and source delivered                           | This repository; CI builds `dist/` and deploys it to Pages; release v1.0.0                                                                                                           |
+| README includes run and extend instructions                 | Development; Extend a scenario                                                                                                                                                       |
+| All primary scenarios deterministic and executable          | `navigation.spec.ts` (deterministic snapshots), `mcp.spec.ts`, `rag.spec.ts`, `combined.spec.ts`, `tests/unit/engine.test.ts`                                                        |
+| All protocol examples validated against the pinned revision | `npm run validate:specs` validates every MCP payload against `specifications/tools/mcp-schema-2026-07-28.json` in CI, and the golden tests run the validator                         |
+| No fictional model output represented as real inference     | The header statement on every page (`navigation.spec.ts`); every model response, tool-call requests included, labelled "Simulated model output" (`tests/unit/scenarios.test.ts`)     |
+| GitHub Pages workflow deploys the Vite dist artifact        | `.github/workflows/ci.yml`, `scripts/check-deployment.ts` (`tests/unit/deployment-check.test.ts`)                                                                                    |
+| Production build runs offline after precache                | `offline.spec.ts`, `tests/unit/node/offline.test.ts`                                                                                                                                 |
+| No runtime backend, API keys or external services           | A static `dist/`; the request guard of every browser test                                                                                                                            |
+| No serious or critical accessibility issue (axe)            | `a11y.spec.ts`: every tab, representative scenarios and steps, Architecture and Protocol, at 1440, 820 and 390 px, with panels and menus open; the Overview in `zoom-levels.spec.ts` |

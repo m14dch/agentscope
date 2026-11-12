@@ -2,7 +2,7 @@
  * Renders a DiagramLayout as SVG markup (02-ui-ux.yaml diagram.encoding). Every text is
  * escaped; colours come from classes in src/styles/diagram.css only.
  */
-import { type Arrow, type DiagramLayout, type Group, SIZES } from './model.ts';
+import { type Arrow, type DiagramLayout, type Group, SIZES, type StageBlock } from './model.ts';
 
 const esc = (text: string): string =>
   text.replace(
@@ -76,6 +76,25 @@ ${g.selected ? markRect(textX, captionY, g.captionWidth) : ''}<text class="group
 </g>${steps}`;
 }
 
+/** A stage of the Overview: its frame, the accent bar when current, and its sentence. */
+function renderStage(s: StageBlock, count: number): string {
+  const cls = ['stage'];
+  if (s.current) cls.push('stage--current');
+  const textX = s.x1 + 2 * SIZES.groupPad;
+  const first = s.y + SIZES.groupPad + SIZES.stageFont;
+  const lines = s.sentence
+    .map((t, i) => `<tspan x="${textX}" dy="${i === 0 ? 0 : SIZES.stageLine}">${esc(t)}</tspan>`)
+    .join(' ');
+  const bar = s.current
+    ? `<rect class="group-bar" x="${s.x1}" y="${s.y}" width="3" height="${s.height}" />`
+    : '';
+  // Paper behind the sentence, so lifelines pass under it rather than through it.
+  const band = `<rect class="group-text-band" x="${textX - 4}" y="${s.y + SIZES.groupPad}" width="${s.textWidth + 8}" height="${s.sentence.length * SIZES.stageLine}" />`;
+  const current = s.current ? ' data-current="" aria-current="step"' : '';
+  const name = `Stage ${s.number} of ${count}: ${s.sentence.join(' ')} ${s.parties.join(', ')}.`;
+  return `<g class="${cls.join(' ')}" data-stage="${esc(s.stage.id)}"${current} role="listitem" aria-label="${esc(name)}"><rect class="group-frame stage-frame" x="${s.x1}" y="${s.y}" width="${s.x2 - s.x1}" height="${s.height}" />${band}${bar}<text class="stage-sentence" x="${textX}" y="${first}">${lines}</text></g>`;
+}
+
 export function renderSvg(
   layout: DiagramLayout,
   title: string,
@@ -103,12 +122,14 @@ export function renderSvg(
   // band hides what passes beneath. The diagram continues below them in the same coordinates.
   const head = layout.lifelines.length ? layout.top - 8 : 0;
   const header = head
-    ? `<div class="diagram-head" data-header="${head}"><svg class="diagram-participants" width="${layout.width}" height="${head}" viewBox="0 0 ${layout.width} ${head}" role="list" aria-label="Participants"><rect class="participants-band" x="0" y="0" width="${layout.width}" height="${head}" />${participants}</svg></div>`
+    ? `<div class="diagram-head" data-header="${head}"><svg class="diagram-participants" width="${layout.width}" height="${head}" viewBox="0 0 ${layout.width} ${head}" role="list" aria-label="${layout.stages.length ? 'Parties' : 'Participants'}"><rect class="participants-band" x="0" y="0" width="${layout.width}" height="${head}" />${participants}</svg></div>`
     : '';
   const height = layout.height - head;
-  const body = layout.groups.length
-    ? layout.groups.map((g) => renderGroup(g, ids, names)).join('')
-    : `<g role="list" aria-label="Steps">${layout.arrows.map((a) => renderArrow(a, ids, names)).join('')}</g>`;
+  const body = layout.stages.length
+    ? `<g role="list" aria-label="Stages">${layout.stages.map((s) => renderStage(s, layout.stages.length)).join('')}</g>`
+    : layout.groups.length
+      ? layout.groups.map((g) => renderGroup(g, ids, names)).join('')
+      : `<g role="list" aria-label="Steps">${layout.arrows.map((a) => renderArrow(a, ids, names)).join('')}</g>`;
   return `${header}<svg class="diagram" width="${layout.width}" height="${height}" viewBox="0 ${head} ${layout.width} ${height}" role="group" aria-label="${esc(title)}">
 <defs>
 <marker id="${ids}-request" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head--request" d="M 0 0 L 10 5 L 0 10 z" /></marker>

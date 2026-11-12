@@ -3,7 +3,7 @@ import {
   estimate,
   layout,
   type DiagramLayout,
-  type Mode,
+  type Level,
   operationLabel,
   SIZES,
   wrap,
@@ -25,10 +25,10 @@ function scenario(id: string): Scenario {
 
 const build = (
   scn: Scenario,
-  mode: Mode,
+  level: Level,
   cursor: number,
   expanded: Iterable<string> = [],
-): DiagramLayout => layout({ scenario: scn, labels, mode, cursor, expanded: new Set(expanded) });
+): DiagramLayout => layout({ scenario: scn, labels, level, cursor, expanded: new Set(expanded) });
 
 describe('labels', () => {
   const events = scenario('mcp-balance').events;
@@ -56,7 +56,7 @@ describe('labels', () => {
   });
 });
 
-describe('protocol mode', () => {
+describe('Protocol level', () => {
   const scn = scenario('mcp-balance');
 
   it('shows events up to the cursor and keeps every row in place', () => {
@@ -97,7 +97,7 @@ describe('protocol mode', () => {
   });
 });
 
-describe('architecture mode', () => {
+describe('Architecture level', () => {
   const scn = scenario('mcp-balance');
 
   it('collapses each phase into one group and marks the current one', () => {
@@ -183,7 +183,7 @@ function boxes(
 }
 
 describe('no overlapping labels', () => {
-  it('in any scenario, mode and expansion', () => {
+  it('in any scenario, level and expansion', () => {
     for (const scn of scenarios) {
       const all = build(scn, 'architecture', 0).groups.map((g) => g.key);
       for (const model of [

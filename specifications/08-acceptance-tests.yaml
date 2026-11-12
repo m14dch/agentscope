@@ -6,7 +6,7 @@ phases:
   exit:
   - Step navigation and random access correct
   - Event inspector displays payload
-  - Architecture/protocol modes preserve cursor
+  - Zoom levels (Overview, Architecture, Protocol) keep the learner's place
   - Composition expansion validated
 - id: 2
   name: MCP primary
@@ -64,7 +64,14 @@ unit_tests:
 - Every security_boundaries entry exists in 07-security-protocols.yaml
 - Identical JSON fixtures and parameters yield identical snapshots, rankings and citations
 - Every Compare step, and stepping either pane, keeps both panes on the same semantic phase
-- In architecture mode the group the cursor enters expands (forward, back, jump, reset), and a
+- Zooming maps the cursor both ways for every scenario (02 zoom_levels.cursor_mapping) - in to the
+  first event of the current stage, out to the last event of the stage holding the event, unchanged
+  between Architecture and Protocol - and Overview stepping stops at the end of every stage with
+  played events
+- Both validators report the same overview problems (03 overview_fields), and every scenario's
+  overview passes
+- At the Overview Compare steps stage by stage with both panes on the same semantic phase
+- At Architecture the group the cursor enters expands (forward, back, jump, reset), and a
   group the learner collapsed stays collapsed until the cursor enters it again
 e2e_tests:
 - id: mcp-walkthrough
@@ -85,12 +92,26 @@ e2e_tests:
   steps:
   - Jump to last step
   - Step backward
-  - Switch architecture view
-  - Step through mcp-balance in architecture mode and verify the current group is expanded
+  - Switch to the Architecture level
+  - Step through mcp-balance at Architecture and verify the current group is expanded
     with the current step in view at every step; collapse a group and verify it stays
     collapsed until the cursor enters it again
   - Reset and replay
   - Verify deterministic snapshots
+- id: zoom-levels
+  steps:
+  - Open the MCP tab as a first-time visitor and verify the Overview of mcp-balance with its parties
+    and 3 to 5 stage sentences, and that no protocol name (MCP, HTTP, JSON-RPC, LLM API, REST) appears
+    anywhere on the page before zooming in.
+  - Step through the stages with Next, then zoom in and out at a few representative steps with the
+    zoom control and with + and -, and verify that zooming in opens the first event of the current
+    stage, zooming out the stage holding the current event, and that Architecture and Protocol keep
+    the event; verify the level change is announced.
+  - Open a deep link at each level (none, /architecture, /protocol) and verify level and position,
+    including an old address without a level that opens the stage holding its step.
+  - Verify the RAG, Compare and Combined tabs offer all three levels, and Compare at the Overview
+    shows both stories side by side stage by stage.
+  - Scan the Overview of MCP, RAG and Compare with axe-core at desktop and phone width.
 - id: offline
   steps:
   - Load the production build under the Pages base path and wait for offline readiness.
@@ -109,8 +130,8 @@ e2e_tests:
   - Verify CHF 12,500.75 and cited fee, interest and access trade-offs.
 - id: phone-layout
   steps:
-  - At 390 × 844 and 360 × 800, open every scenario of the MCP, RAG and Combined tabs in both
-    modes and step through it with the inspector's step details and the model context open,
+  - At 390 × 844 and 360 × 800, open every scenario of the MCP, RAG and Combined tabs at
+    Architecture and Protocol and step through it with the inspector's step details and the model context open,
     then every group expanded at its last step, and verify that nothing scrolls horizontally,
     on the page or inside any element, and that no element extends past the screen's edges.
   - Verify the diagram is the step list, every reached step names its sender and receiver, and
@@ -118,24 +139,24 @@ e2e_tests:
   - Step through the longest scenario with Next in the bottom bar and verify that Reset,
     Previous, Play/Pause and Next stay inside the viewport, uncovered, at every step without
     scrolling.
-  - At both sizes, for every scenario in both modes, step from the top of the page with Next
+  - At both sizes, for every scenario at Architecture and Protocol, step from the top of the page with Next
     in the bottom bar through every step and verify that the current row or group, any
     prediction prompt and the message line are entirely on screen above the bar.
   - Play a scenario with its step details open and verify that without scrolling each step
     keeps the stepping area on screen, that after the learner scrolls the page it stays where
     it is while Play steps on, and that the next explicit step brings the stepping area back.
-  - At 360 × 800, play Compare in both modes and combined-balance-explanation in protocol
-    mode to the end without any input and verify at every step that the stepping area is on
+  - At 360 × 800, play Compare at Architecture and Protocol and combined-balance-explanation at
+    Protocol to the end without any input and verify at every step that the stepping area is on
     screen above the bar.
-  - Step through Compare with Next from the top of the page in both modes and verify that the
+  - Step through Compare with Next from the top of the page at Architecture and Protocol and verify that the
     current row of each pane whose step changed is on screen above the bar when both fit, else
     the lower changed pane's current row.
   - Verify every control outside running text is at least 44 × 44 px on MCP, RAG, Combined
     and Compare with the step details and the menu open, and the menu holds the scenario
-    list (on RAG), the view switch and the play speed, and last the GitHub link, and the
+    list (on RAG), the zoom control and the play speed, and last the GitHub link, and the
     bottom bar holds the position line, the step slider and Reset, Previous, Play/Pause and
     Next as named icon buttons.
-  - Step through Compare in both modes and verify both panes use the step list without
+  - Step through Compare at Architecture and Protocol and verify both panes use the step list without
     horizontal scrolling; verify the RAG projection takes its compact form.
 - id: pages
   steps:
@@ -146,10 +167,10 @@ e2e_tests:
   - Fail on external requests or runtime API traffic.
 - id: accessibility
   steps:
-  - At desktop, tablet and phone width, scan every tab and representative scenarios and steps in both modes
-    with axe-core, as loaded and with the step details, the model context, a group and the scenario
+  - At desktop, tablet and phone width, scan every tab and representative scenarios and steps at every zoom
+    level with axe-core, as loaded and with the step details, the model context, a group and the scenario
     picker or the menu open, and fail on any serious or critical finding.
-  - At desktop and tablet width, on every tab in both modes, move through the page with Tab and verify
+  - At desktop and tablet width, on every tab at Architecture and Protocol, move through the page with Tab and verify
     that every control is reached, on screen and shows a visible focus indicator, that each playback
     icon button shows its name while focused, and that the arrow keys and Enter on Next step.
   - With reduced motion, verify on every tab that nothing animates or transitions and that the diagram

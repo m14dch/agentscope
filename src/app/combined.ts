@@ -11,8 +11,8 @@ import '../styles/combined.css';
 
 export interface CombinedView {
   root: HTMLElement;
-  /** Shows the panel for the player's current step. */
-  update: () => void;
+  /** Shows the panel for a step: the player's current one unless given. */
+  update: (cursor?: number) => void;
 }
 
 export function combinedPanel(
@@ -36,6 +36,7 @@ export function combinedPanel(
   const panel = new CombinedPanel({ index: () => searched, ...actions });
   return {
     root: panel.root,
-    update: () => panel.update(combinedModel(player.playback.events, player.cursor, parts)),
+    update: (cursor = player.cursor) =>
+      panel.update(combinedModel(player.playback.events, cursor, parts)),
   };
 }

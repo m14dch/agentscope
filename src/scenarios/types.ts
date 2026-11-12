@@ -69,12 +69,34 @@ export interface ScenarioEvent {
 
 export interface Phase {
   id: string;
-  /** Shown in architecture mode. */
+  /** Shown at the Architecture level. */
   label: string;
   /** Drives Compare synchronisation (06-comparison-scenarios.yaml semantic_phases). */
   semantic_phase: string;
   /** One sentence: what the learner should understand from the phase. */
   takeaway: string;
+}
+
+/** A party of the Overview: participants merged into one lifeline (03 overview_fields). */
+export interface Party {
+  id: string;
+  label: string;
+  /** Participant IDs of the scenario. */
+  members: string[];
+}
+
+/** A stage of the Overview: consecutive phases told in one plain sentence. */
+export interface Stage {
+  id: string;
+  /** Phase IDs, a consecutive run of the scenario's phases. */
+  phases: string[];
+  sentence: string;
+}
+
+/** The scenario at the Overview zoom level (02 zoom_levels.overview). */
+export interface Overview {
+  parties: Party[];
+  stages: Stage[];
 }
 
 export interface ParameterSpec {
@@ -99,6 +121,8 @@ export interface Scenario {
   headline: string;
   participants: string[];
   phases: Phase[];
+  /** Parties and stages of the Overview zoom level. */
+  overview: Overview;
   events: ScenarioEvent[];
   initial_state: JsonObject;
   parameters?: Record<string, ParameterSpec>;
@@ -134,6 +158,7 @@ export interface Composition {
   headline: string;
   participants: string[];
   phases: Phase[];
+  overview: Overview;
   initial_state: JsonObject;
   compose: CompositionStep[];
   expanded_event_count: number;
