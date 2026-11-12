@@ -444,8 +444,9 @@ phone_steps:
       Overview has nothing more to show for a stage, so its stages are not rows that open: the
       whole story reads at once, and the zoom control leads further in.'
     architecture: 'One row per group of zoom_levels.architecture_groups, in order: its takeaway
-      (for a continued run its phase label followed by "continued"), and below it the caption in
-      small ink-muted text.'
+      (for a continued run its phase label followed by "continued"), and below it in small
+      ink-muted text the caption: the phase label and the number of steps (for a continued run
+      only the number, as its title already names the phase).'
     protocol: 'One row per played event, in order: the step number in small ink-muted text, the
       direction glyph, the operation label (diagram.labels), and below the label the two
       participants by registry label in small ink-muted text, "Agent → MCP server"; a computation
@@ -520,8 +521,8 @@ phone_steps:
     the same way. An opened Compare row shows the explanation (a group: its events as at
     Architecture) and a link "Inspect step <k> in <tab>" to the scenario''s own route at that step
     and level, where its payloads and panels are. From Architecture on the aspects follow
-    (compare_view.layout). The address keeps its compare step, which only a change of level
-    changes (compare_view.route).'
+    (compare_view.layout). Opening rows leaves the address; a change of level changes only its
+    level suffix, and the compare step stays (compare_view.route).'
 learning:
   interaction: 'Each scenario follows the handover''s pattern (6.1): show the learning
     question and headline, the participants, an optional prediction, one step, the highlighted
