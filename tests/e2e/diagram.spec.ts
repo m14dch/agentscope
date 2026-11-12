@@ -8,10 +8,10 @@ const SCENARIOS = [
   ['combined-balance-explanation', 35],
 ] as const;
 
-/** The shell route for a scenario at a step, in either mode. */
-function route(id: string, step: number, mode: 'architecture' | 'protocol'): string {
+/** The shell route for a scenario at a step, at Architecture or Protocol. */
+function route(id: string, step: number, level: 'architecture' | 'protocol'): string {
   const tab = id.startsWith('mcp-') ? 'mcp' : id.startsWith('rag-') ? 'rag' : 'combined';
-  return `#/${tab}/${id}/${step}/${mode}`;
+  return `#/${tab}/${id}/${step}/${level}`;
 }
 
 async function open(page: Page, hash: string): Promise<void> {
@@ -83,7 +83,9 @@ test('the diagram scrolls horizontally on a narrow screen instead of squeezing',
   expect(pageWidth).toBeLessThanOrEqual(768);
 });
 
-test('switching mode keeps the cursor on the same step', async ({ page }) => {
+test('zooming between Architecture and Protocol keeps the cursor on the same step', async ({
+  page,
+}) => {
   await open(page, route('mcp-balance', 14, 'protocol'));
   await expect(page.locator('[data-current]')).toHaveAttribute('data-index', '13');
   await page.getByRole('button', { name: 'Architecture' }).click();
@@ -98,7 +100,7 @@ test('switching mode keeps the cursor on the same step', async ({ page }) => {
   await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/15\/protocol$/);
 });
 
-test('future steps are hidden in protocol mode', async ({ page }) => {
+test('future steps are hidden at the Protocol level', async ({ page }) => {
   await open(page, route('mcp-balance', 3, 'protocol'));
   await expect(page.locator('.step')).toHaveCount(3);
   await page.keyboard.press('ArrowRight');

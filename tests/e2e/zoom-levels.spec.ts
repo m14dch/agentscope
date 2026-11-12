@@ -24,7 +24,12 @@ test('a first-time visitor sees the Overview of mcp-balance before any protocol 
   await expect(level(page, 'Overview')).toHaveAttribute('aria-pressed', 'true');
   const diagram = page.locator('svg.diagram');
   await expect(diagram).toHaveAttribute('aria-label', /overview, before the first stage/);
-  await expect(page.locator('.participant')).toHaveText(['You', 'Assistant', 'Bank systems']);
+  await expect(page.getByRole('list', { name: 'Parties' }).locator('.participant')).toHaveText([
+    'You',
+    'Assistant',
+    'Bank systems',
+  ]);
+  await expect(page.locator('.inspector')).toContainText('Next runs the first stage.');
   await expect(page.locator('[data-stage]')).toHaveCount(4);
   await expect(status(page)).toHaveText('Stage 0 of 4');
   // Nothing in the page names a protocol: no headline, step details or panels at the Overview.
@@ -99,6 +104,10 @@ test('deep links open each level; an old link without a level opens the stage ho
   await open(page, '#/mcp/mcp-balance/14');
   await expect(status(page)).toHaveText('Stage 3 of 4');
   await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/24$/);
+  // /overview names the Overview too, and is written without a level.
+  await open(page, '#/mcp/mcp-balance/3/overview');
+  await expect(status(page)).toHaveText('Stage 1 of 4');
+  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/8$/);
   await open(page, '#/rag/rag-index/4/architecture');
   await expect(level(page, 'Architecture')).toHaveAttribute('aria-pressed', 'true');
   await expect(status(page)).toHaveText('Step 4 of 10 · Chunk');
@@ -126,30 +135,54 @@ test('every tab offers the three levels; Compare tells both stories stage by sta
   }
   await open(page, '#/compare');
   await expect(zoom(page).getByRole('button')).toHaveText(['Overview', 'Architecture', 'Protocol']);
+  // A plain heading and no aspects at the Overview: nothing in the content names a protocol
+  // but the panes' own names (02 compare_view.layout).
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(/^Two assistants answer/);
+  await expect(page.locator('.compare-aspects')).toBeHidden();
   const shared = page.locator('.compare-status');
-  await expect(shared).toHaveText('Step 0 of 4');
+  await expect(shared).toHaveText('Stage 0 of 4');
   const rag = page.getByRole('region', { name: 'RAG', exact: true });
   const mcp = page.getByRole('region', { name: 'MCP', exact: true });
   await page.getByRole('button', { name: 'Next step' }).click();
   // Preparation: MCP learns the bank's actions; RAG's index was built earlier.
-  await expect(shared).toHaveText('Step 1 of 4 · Preparation');
+  await expect(shared).toHaveText('Stage 1 of 4 · Preparation');
   await expect(rag.locator('.compare-message')).toHaveText('Index built earlier by rag-index.');
   await expect(mcp.locator('.compare-position p')).toHaveText('Stage 1 of 4');
+  await expect(mcp.getByRole('link', { name: 'Inspect in MCP' })).toBeVisible();
   await page.getByRole('button', { name: 'Next step' }).click();
   await page.getByRole('button', { name: 'Next step' }).click();
-  // Both look up their information in the same compare step.
-  await expect(shared).toHaveText('Step 3 of 4 · Information acquisition');
+  // Both look up their information in the same compare step; the address counts events.
+  await expect(shared).toHaveText('Stage 3 of 4 · Information acquisition');
+  await expect(page).toHaveURL(/#\/compare\/compare-rag-mcp\/14$/);
   await expect(rag.locator('.compare-position p')).toHaveText('Stage 2 of 3');
   await expect(mcp.locator('.compare-position p')).toHaveText('Stage 3 of 4');
   await expect(rag.locator('[data-stage][data-current]')).toHaveAttribute('data-stage', 'search');
   await expect(mcp.locator('[data-stage][data-current]')).toHaveAttribute('data-stage', 'fetch');
-  // Zooming in keeps RAG's place: the first event of its search stage, MCP in the same phase.
+  // Zooming in keeps RAG's place: the first event of its search stage, MCP in the same phase;
+  // only the control row announces it.
+  const live = page.locator('.compare-phase-line [aria-live="polite"]');
+  const said = await live.textContent();
   await page.keyboard.press('+');
   await expect(page).toHaveURL(/#\/compare\/compare-rag-mcp\/\d+\/architecture$/);
   await expect(rag.locator('.compare-position p')).toHaveText('Step 2 of 10 · Embed query');
-  await expect(shared).toHaveText(/ · Information acquisition$/);
+  await expect(shared).toHaveText(/^Step \d+ of 28 · Information acquisition$/);
+  await expect(announcer(page)).toHaveText(/^Architecture\. Step \d+ of 28/);
+  await expect(live).toHaveText(said ?? '');
+  await expect(page.locator('.compare-aspects')).toBeVisible();
   await page.keyboard.press('-');
-  await expect(shared).toHaveText('Step 3 of 4 · Information acquisition');
+  await expect(shared).toHaveText('Stage 3 of 4 · Information acquisition');
+  // The answer stage covers three semantic phases, and says so.
+  await page.getByRole('button', { name: 'Next step' }).click();
+  await expect(shared).toHaveText('Stage 4 of 4 · Context assembly to Answer');
+  await expect(page.locator('.compare-phases [aria-current="step"]')).toHaveText([
+    'Context assembly',
+    'Model generation',
+    'Answer',
+  ]);
+  // An old address without a level, which meant Architecture, opens the stage holding its step.
+  await open(page, '#/compare/compare-rag-mcp/16');
+  await expect(shared).toHaveText('Stage 3 of 4 · Information acquisition');
+  await expect(page).toHaveURL(/#\/compare\/compare-rag-mcp\/14$/);
 });
 
 test('at Architecture the current group starts in view together with its step', async ({

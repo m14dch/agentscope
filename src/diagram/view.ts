@@ -63,6 +63,9 @@ export class DiagramView {
   private destroyed = false;
   /** The natural width last reported, and the widest layout it was derived from. */
   private reportedWidth = -1;
+  /** Watches the region's width for the Overview, and the width it was laid out for. */
+  private resize: ResizeObserver | undefined;
+  private laidOutWidth = 0;
   private widest: { events: readonly unknown[]; measure: Measure; width: number } | undefined;
   /** Level and cursor the region last scrolled to. */
   private scrolledTo = '';
@@ -84,6 +87,14 @@ export class DiagramView {
     root.addEventListener('keydown', this.onKey);
     this.phone?.addEventListener('change', this.onPhoneChange);
     this.unsubscribe = player.subscribe(() => this.render());
+    // The Overview spreads its parties across the region, so it follows the region's width.
+    if (typeof ResizeObserver === 'function') {
+      this.resize = new ResizeObserver(() => {
+        if (this.viewLevel !== 'overview') return;
+        if (Math.abs(this.root.clientWidth - this.laidOutWidth) > 16) this.render();
+      });
+      this.resize.observe(root);
+    }
     // Measure with the real font once it has loaded, then lay out again.
     if (typeof document !== 'undefined' && document.fonts) {
       void document.fonts.ready.then(() => {
@@ -138,12 +149,13 @@ export class DiagramView {
     this.root.removeEventListener('click', this.onClick);
     this.root.removeEventListener('keydown', this.onKey);
     this.phone?.removeEventListener('change', this.onPhoneChange);
+    this.resize?.disconnect();
     this.root.replaceChildren();
   }
 
   /**
    * Lays the diagram out again. Focus stays on the same group (or the region); the region
-   * scrolls to the current step only when the cursor or the mode changed.
+   * scrolls to the current step only when the cursor or the level changed.
    */
   private render(): void {
     // The events as played: derived from the parameters, without disabled optional steps.
@@ -167,7 +179,9 @@ export class DiagramView {
       measure: this.measure,
       selected: this.selected,
       held: this.held,
+      available: this.root.clientWidth,
     });
+    this.laidOutWidth = this.root.clientWidth;
     const title = this.title(scenario);
     this.root.innerHTML = list
       ? renderList(model, title, this.options.labels)
@@ -214,7 +228,7 @@ export class DiagramView {
   }
 
   /**
-   * The scenario's widest layout at its current parameters: protocol mode with every step
+   * The scenario's widest layout at its current parameters: the Protocol level with every step
    * shown. Computed once per set of events and measure, so stepping does not change it.
    */
   private widestWidth(scenario: Parameters<typeof layout>[0]['scenario']): number {

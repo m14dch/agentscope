@@ -77,7 +77,7 @@ test('with a selection only its fields are highlighted in the payload', async ({
   await expect(marks.filter({ hasText: '12500.75' }).first()).toBeVisible();
 });
 
-test('architecture mode marks the group caption holding the selected value with a solid ink underline', async ({
+test('Architecture marks the group caption holding the selected value with a solid ink underline', async ({
   page,
 }) => {
   await open(page, '#/mcp/mcp-balance/24/protocol');

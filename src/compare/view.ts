@@ -19,7 +19,13 @@ import {
 import { levelSuffix } from '../app/routes.ts';
 import { createPlayback } from '../rag/bundled.ts';
 import type { Compare, Scenario } from '../scenarios/types.ts';
-import { CompareTimeline, type PaneAt, type PaneInput, stageInput } from './timeline.ts';
+import {
+  type CompareStep,
+  CompareTimeline,
+  type PaneAt,
+  type PaneInput,
+  stageInput,
+} from './timeline.ts';
 import { isPhone, type PageScroll, stepDelta } from '../app/phone.ts';
 import '../styles/compare.css';
 
@@ -109,6 +115,10 @@ export class CompareView {
   private readonly bar: HTMLElement;
   /** Each pane's cursor at the last render, to tell which pane's step changed. */
   private cursors: [number, number] | undefined;
+  /** The heading: the headline, or at the Overview the plain one (02 compare_view.layout). */
+  private readonly heading: HTMLElement;
+  /** Where RAG and MCP differ; shown from Architecture on. */
+  private readonly aspects: HTMLElement;
 
   constructor(root: HTMLElement, options: CompareOptions) {
     this.options = options;
@@ -124,7 +134,7 @@ export class CompareView {
       stageInput(inputs[0], this.panes[0].spans),
       stageInput(inputs[1], this.panes[1].spans),
     ]);
-    this.position = this.timeline.clamp(options.step);
+    this.position = this.fromAddress(options.step);
     this.announced = this.position;
 
     // The shared control row (02 compare_view.controls, controls.row).
@@ -141,7 +151,13 @@ export class CompareView {
       zoom: (level) => this.setLevel(level),
     });
     const steps = this.events.length;
-    this.controls.reserve(phases.map((p) => `Step ${steps} of ${steps} · ${p.label}`));
+    const ranges = phases.flatMap((a, i) =>
+      phases.slice(i + 1).map((b) => `Stage ${steps} of ${steps} · ${a.label} to ${b.label}`),
+    );
+    this.controls.reserve([
+      ...phases.map((p) => `Step ${steps} of ${steps} · ${p.label}`),
+      ...ranges,
+    ]);
     for (const pane of this.panes) pane.view.setLevel(this.level);
     this.bar = this.controls.buttons;
     const phaseList = el('ol', { class: 'compare-phases small', 'aria-label': 'Semantic phases' });
@@ -154,7 +170,7 @@ export class CompareView {
     // The semantic phase labels below the control row (02 compare_view.phase_line).
     const phaseLine = el('div', { class: 'compare-phase-line' }, phaseList, this.announcer);
 
-    const aspects = el(
+    this.aspects = el(
       'section',
       { class: 'compare-aspects', 'aria-labelledby': 'compare-aspects-title' },
       el('h3', { id: 'compare-aspects-title' }, 'Where RAG and MCP differ'),
@@ -168,12 +184,13 @@ export class CompareView {
       ),
     );
 
+    this.heading = el('h2', { tabindex: '-1' });
     root.replaceChildren(
-      el('section', { class: 'lesson' }, el('h2', { tabindex: '-1' }, compare.headline)),
+      el('section', { class: 'lesson' }, this.heading),
       this.controls.root,
       phaseLine,
       el('div', { class: 'compare-panes' }, ...this.panes.map((p) => p.root)),
-      aspects,
+      this.aspects,
     );
     this.render();
   }
@@ -191,8 +208,69 @@ export class CompareView {
   follow(step: number, level: Level): void {
     this.level = level;
     for (const pane of this.panes) pane.view.setLevel(level);
-    this.position = this.timeline.clamp(step);
+    this.position = this.fromAddress(step);
     this.render();
+  }
+
+  /**
+   * The pane whose place zooming keeps (02 compare_view.defaults): one that steps in the current
+   * phase, the left first, else one that is done with it; undefined before the first step.
+   */
+  private leading(step: CompareStep): 0 | 1 | undefined {
+    for (const status of ['stepping', 'done'] as const) {
+      const side = step.panes.findIndex((p) => p.status === status);
+      if (side === 0 || side === 1) return side;
+    }
+    return undefined;
+  }
+
+  /**
+   * The position for a compare step read from the address, which counts the timeline of events
+   * at every level (02 compare_view.route): at the Overview, the stage holding the leading
+   * pane's event there.
+   */
+  private fromAddress(step: number): number {
+    const at = this.events.at(step);
+    if (this.level !== 'overview') return this.events.clamp(step);
+    const side = this.leading(at);
+    if (side === undefined) return 0;
+    const pane = this.panes[side];
+    const end = zoomCursor(pane.spans, at.panes[side].cursor, 'architecture', 'overview');
+    return this.stages.stepOf(side, pane.stops.indexOf(end));
+  }
+
+  /**
+   * The compare step the address holds: at the Overview the first step of events at which the
+   * leading pane is at the end of its current stage.
+   */
+  private addressStep(): number {
+    if (this.level !== 'overview') return this.position;
+    const at = this.stages.at(this.position);
+    const side = this.leading(at);
+    if (side === undefined) return 0;
+    const pane = this.panes[side];
+    return this.events.stepOf(side, pane.stops[at.panes[side].cursor] ?? 0);
+  }
+
+  /**
+   * The semantic phases a compare step covers (02 compare_view.timeline): its phase, and at the
+   * Overview every semantic phase of the stages its panes are at, from the first to the last.
+   */
+  private covered(step: CompareStep): string[] {
+    if (step.phase === undefined) return [];
+    if (this.level !== 'overview') return [step.phase];
+    const order = this.options.phases.map((p) => p.id);
+    const indices = [order.indexOf(step.phase)];
+    step.panes.forEach((at, side) => {
+      if (at.status !== 'stepping' && at.status !== 'done') return;
+      const pane = this.panes[side as 0 | 1];
+      const stage = stageAt(pane.spans, this.cursorOf(pane, 'overview', at.cursor));
+      const mapping = this.options.compare.phase_mapping[pane.spec.scenario.id] ?? {};
+      for (const phase of stage?.stage.phases ?? [])
+        indices.push(order.indexOf(mapping[phase] ?? ''));
+    });
+    const valid = indices.filter((i) => i >= 0);
+    return order.slice(Math.min(...valid), Math.max(...valid) + 1);
   }
 
   /** Zooms in (+1) or out (-1) from the current level, if there is a level there. */
@@ -286,10 +364,10 @@ export class CompareView {
     const from = this.level;
     this.act(() => {
       const step = this.timeline.at(this.position);
-      const side = step.panes.findIndex((p) => p.status === 'stepping' || p.status === 'done');
+      const side = this.leading(step);
       this.level = level;
       for (const pane of this.panes) pane.view.setLevel(level);
-      if (side === 0 || side === 1) {
+      if (side !== undefined) {
         const pane = this.panes[side];
         const cursor = zoomCursor(
           pane.spans,
@@ -305,6 +383,8 @@ export class CompareView {
         if (this.position >= this.timeline.length) this.stop();
         else this.schedule();
       }
+      // The control row announces the change of level; the phase line stays quiet.
+      this.announced = this.position;
       this.render();
       const where = this.controls.status.textContent ?? '';
       this.controls.announce(level, where);
@@ -468,10 +548,21 @@ export class CompareView {
 
   private render(): void {
     const step = this.timeline.at(this.position);
-    const phase = this.phaseLabel(step.phase);
+    const overview = this.level === 'overview';
+    const covered = this.covered(step);
+    const first = this.phaseLabel(covered[0]);
+    const last = this.phaseLabel(covered[covered.length - 1]);
+    const phase = covered.length > 1 ? `${first} to ${last}` : first;
+    const unit = overview ? 'Stage' : 'Step';
     const where = phase
-      ? `Step ${this.position} of ${this.timeline.length} · ${phase}`
-      : `Step ${this.position} of ${this.timeline.length}`;
+      ? `${unit} ${this.position} of ${this.timeline.length} · ${phase}`
+      : `${unit} ${this.position} of ${this.timeline.length}`;
+    // At the Overview a plain heading, and the aspects, which name the protocols, from
+    // Architecture on (02 compare_view.layout).
+    const { compare } = this.options;
+    const heading = overview ? String(compare['overview_headline'] ?? '') : compare.headline;
+    if (this.heading.textContent !== heading) this.heading.textContent = heading;
+    this.aspects.hidden = overview;
     this.controls.update({
       step: this.position,
       length: this.timeline.length,
@@ -480,7 +571,7 @@ export class CompareView {
       speed: this.rate,
     });
     for (const [id, item] of this.phaseItems) {
-      if (id === step.phase) item.setAttribute('aria-current', 'step');
+      if (covered.includes(id)) item.setAttribute('aria-current', 'step');
       else item.removeAttribute('aria-current');
     }
     this.controls.setLevel(this.level);
@@ -504,8 +595,10 @@ export class CompareView {
       pane.message.replaceChildren(...this.paneMessage(pane, at, other, step.phase));
       const route = `#/${pane.spec.tab}/${pane.spec.scenario.id}/${cursor}${levelSuffix(this.level)}`;
       pane.inspect.href = route;
-      pane.inspect.textContent = `Inspect step ${cursor} in ${pane.spec.label}`;
-      const overview = this.level === 'overview';
+      // The Overview shows no step numbers (02 compare_view.pane).
+      pane.inspect.textContent = overview
+        ? `Inspect in ${pane.spec.label}`
+        : `Inspect step ${cursor} in ${pane.spec.label}`;
       const n = overview ? pane.stops.length - 1 : pane.player.playback.length;
       announcements.push(
         at.status === 'placeholder'
@@ -533,6 +626,6 @@ export class CompareView {
         if (!this.options.pageScroll?.userScrolled) this.keepInView(changed);
       }
     }
-    this.options.onChange(this.position, this.level);
+    this.options.onChange(this.addressStep(), this.level);
   }
 }

@@ -55,6 +55,8 @@ export const SIZES = {
   stageLine: 24,
   stageGap: 16,
   partySpacing: 200,
+  /** The widest gap between parties when they spread across the region. */
+  partySpacingMax: 360,
   stageMinText: 360,
 } as const;
 
@@ -179,6 +181,8 @@ export interface LayoutInput {
    * waiting through a phase it has no events in (02 compare_view.timeline).
    */
   held?: boolean;
+  /** The diagram region's width; the Overview spreads its parties across it. */
+  available?: number;
 }
 
 /** Lifeline x positions: each gap is as wide as the labels of arrows that span only it. */
@@ -260,13 +264,20 @@ function overviewLayout(input: LayoutInput, measure: Measure): DiagramLayout {
   const { scenario, cursor } = input;
   const { overview } = scenario;
   const big = stageMeasure(measure);
+  // The parties spread across the region, from 200 px to 360 px apart (02 zoom_levels.overview).
+  const n = overview.parties.length;
+  const room = (input.available ?? 0) - 2 * SIZES.margin - SIZES.minSpacing;
+  const gap =
+    n > 1
+      ? Math.max(SIZES.partySpacing, Math.min(SIZES.partySpacingMax, Math.floor(room / (n - 1))))
+      : SIZES.partySpacing;
   let x = SIZES.margin + SIZES.minSpacing / 2;
   const lines: Lifeline[] = overview.parties.map((party, i) => {
-    if (i > 0) x += SIZES.partySpacing;
+    if (i > 0) x += gap;
     return {
       id: party.id,
       x,
-      lines: wrap(party.label, SIZES.partySpacing - 8, (t) => measure(t, true)),
+      lines: wrap(party.label, gap - 8, (t) => measure(t, true)),
     };
   });
   const at = new Map(lines.map((l) => [l.id, l.x]));

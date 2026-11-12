@@ -6,7 +6,7 @@ import { expect, test } from './fixtures';
 /**
  * Automated accessibility scan (issue 19): axe-core runs inside the page, so it sends no
  * request and the guard of fixtures.ts stays strict. Every tab and representative scenarios
- * and steps are scanned in both modes, at desktop, tablet and phone width, with the panels and the
+ * and steps are scanned at Architecture and Protocol (the Overview in zoom-levels.spec.ts), at desktop, tablet and phone width, with the panels and the
  * menu open. Serious and critical findings fail the test; minor and moderate ones are left to
  * review (axe marks some of them as best practice, not WCAG).
  */
@@ -55,8 +55,8 @@ for (const size of WIDTHS) {
     test.use({ viewport: { width: size.width, height: size.height } });
 
     for (const route of ROUTES) {
-      for (const mode of ['architecture', 'protocol'] as const) {
-        const url = `./${route}/${mode}`;
+      for (const level of ['architecture', 'protocol'] as const) {
+        const url = `./${route}/${level}`;
         test(`${url} has no serious or critical issues`, async ({ page }) => {
           await page.goto(url);
           await page.locator('[data-measured]').first().waitFor();

@@ -122,7 +122,7 @@ export function renderSvg(
   // band hides what passes beneath. The diagram continues below them in the same coordinates.
   const head = layout.lifelines.length ? layout.top - 8 : 0;
   const header = head
-    ? `<div class="diagram-head" data-header="${head}"><svg class="diagram-participants" width="${layout.width}" height="${head}" viewBox="0 0 ${layout.width} ${head}" role="list" aria-label="Participants"><rect class="participants-band" x="0" y="0" width="${layout.width}" height="${head}" />${participants}</svg></div>`
+    ? `<div class="diagram-head" data-header="${head}"><svg class="diagram-participants" width="${layout.width}" height="${head}" viewBox="0 0 ${layout.width} ${head}" role="list" aria-label="${layout.stages.length ? 'Parties' : 'Participants'}"><rect class="participants-band" x="0" y="0" width="${layout.width}" height="${head}" />${participants}</svg></div>`
     : '';
   const height = layout.height - head;
   const body = layout.stages.length

@@ -139,6 +139,25 @@ describe('Overview layout (02 zoom_levels.overview)', () => {
       expect((a?.y ?? 0) + (a?.height ?? 0)).toBeLessThan(b.y);
   });
 
+  it('spreads the parties across the region, from 200 to 360 px apart', () => {
+    const gaps = (available?: number) => {
+      const xs = layout({
+        scenario: scn,
+        labels,
+        level: 'overview',
+        cursor: 0,
+        expanded: new Set(),
+        ...(available === undefined ? {} : { available }),
+      }).lifelines.map((l) => l.x);
+      return xs.slice(1).map((x, i) => x - (xs[i] ?? 0));
+    };
+    expect(gaps()).toEqual([200, 200]);
+    expect(gaps(500)).toEqual([200, 200]);
+    // 3 parties in 700 px: (700 - 2 × 16 - 110) / 2 = 279.
+    expect(gaps(700)).toEqual([279, 279]);
+    expect(gaps(1400)).toEqual([360, 360]);
+  });
+
   it('names no protocol and no operation, in the SVG and in the step list', () => {
     const model = at(14);
     const svg = renderSvg(model, 'Overview', 'o', labels);
@@ -147,8 +166,12 @@ describe('Overview layout (02 zoom_levels.overview)', () => {
       expect(html).not.toMatch(/\b(MCP|HTTP|JSON-RPC|LLM|REST|tools\/call)\b/);
       expect(html).toContain('aria-current="step"');
       expect(html).toContain('Stage 3 of 4');
+      expect(html).not.toMatch(
+        /\b(tool|server|vector|embedding|chunk|prompt|token|schema|model)s?\b/i,
+      );
     }
     expect(list).toContain('Assistant · Bank systems');
+    expect(renderSvg(model, 'Overview', 'o', labels)).toContain('aria-label="Parties"');
   });
 
   it('a waiting Compare pane marks no stage', () => {

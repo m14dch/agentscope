@@ -41,7 +41,7 @@ test('navigation: jump to the last step, step back, switch view, reset and repla
   expect(await snapshot(page)).toBe(at27);
 });
 
-test('a deep link restores tab, scenario, step and mode after reload', async ({ page }) => {
+test('a deep link restores tab, scenario, step and zoom level after reload', async ({ page }) => {
   await open(page, '#/rag/rag-index/5/protocol');
   await expect(page.getByRole('link', { name: 'RAG' })).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.picker summary')).toContainText('Ingest and index documents');
@@ -302,7 +302,7 @@ test('after choosing a tab or a scenario, focus moves to the new page heading', 
   await page.goBack();
   await expect(page.locator('.lesson h2')).toBeFocused();
   await page.goto('./#/compare');
-  await page.getByRole('link', { name: 'Inspect step 0 in MCP' }).press('Enter');
+  await page.getByRole('link', { name: 'Inspect in MCP' }).press('Enter');
   await expect(page.locator('.lesson h2')).toBeFocused();
   await page.goto('./#/rag/nope');
   await page.getByRole('link', { name: 'Go to RAG' }).press('Enter');

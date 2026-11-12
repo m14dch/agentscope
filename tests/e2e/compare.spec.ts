@@ -215,5 +215,5 @@ test('compare: focus moves to the heading when Compare is chosen from the tabs',
   await page.locator('[data-measured] svg.diagram').waitFor();
   await page.getByRole('link', { name: 'Compare' }).press('Enter');
   await expect(page.locator('.lesson h2')).toBeFocused();
-  await expect(page.locator('.lesson h2')).toContainText('MCP fetches live data');
+  await expect(page.locator('.lesson h2')).toContainText('Two assistants answer');
 });

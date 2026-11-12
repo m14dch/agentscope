@@ -61,7 +61,7 @@ async function walkThrough(page: Page, hash: string): Promise<string> {
     await expect(page.locator('.status')).toContainText(`Step ${step} of ${last}`);
     seen.push((await inspector(page).innerText()).replace(/\s+/g, ' '));
   }
-  // The SVG diagram draws one labelled arrow per step (protocol mode shows every event).
+  // The SVG diagram draws one labelled arrow per step (the Protocol level shows every event).
   const diagram = page.locator('[data-measured] svg.diagram');
   await expect(diagram).toBeVisible();
   await expect(diagram.locator('.arrow')).toHaveCount(last);

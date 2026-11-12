@@ -76,6 +76,11 @@ describe('routes', () => {
     });
   });
 
+  it('read /overview as the Overview and write it without a level (02 navigation.routes)', () => {
+    expect(ok('#/mcp/mcp-balance/3/overview').level).toBe('overview');
+    expect(formatRoute(ok('#/mcp/mcp-balance/3/overview'))).toBe('#/mcp/mcp-balance/3');
+  });
+
   it('round-trip through formatRoute', () => {
     for (const hash of [
       '#/mcp/mcp-balance/14/protocol',
@@ -103,8 +108,7 @@ describe('routes', () => {
       message: 'Unknown step: x',
     });
     expect(parseRoute('#/mcp/mcp-balance/3/sideways', tabs)).toMatchObject({ ok: false });
-    // The Overview is the address without a level; it has no suffix of its own.
-    expect(parseRoute('#/mcp/mcp-balance/3/overview', tabs)).toMatchObject({ ok: false });
+
     expect(parseRoute('#/compare/rag-query', tabs)).toMatchObject({
       ok: false,
       tab: 'compare',

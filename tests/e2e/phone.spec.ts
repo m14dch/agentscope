@@ -91,7 +91,7 @@ for (const [width, height] of SIZES) {
     test.use({ viewport: { width, height }, hasTouch: true });
 
     for (const [tab, id] of SCENARIOS) {
-      test(`${id}: no horizontal scrolling at any step in either mode, every step readable`, async ({
+      test(`${id}: no horizontal scrolling at any step at Architecture and Protocol, every step readable`, async ({
         page,
       }) => {
         await page.goto(`./#/${tab}/${id}/0/protocol`);
@@ -138,7 +138,7 @@ for (const [width, height] of SIZES) {
           if (await page.getByRole('tab', { name: 'Payload' }).count())
             await expect(page.locator('.tab-panel')).toBeVisible();
         }
-        // Architecture mode at the last step, every group expanded.
+        // Architecture at the last step, every group expanded.
         await goTo(page, `#/${tab}/${id}/${n}`);
         await expect(list(page).locator('.phase').first()).toBeVisible();
         for (let i = await list(page).locator('.phase-toggle').count(); i > 0; i -= 1) {
@@ -179,8 +179,8 @@ for (const [width, height] of SIZES) {
       test(`${id}: the current step, the prompt and the message stay above the bar while stepping with Next`, async ({
         page,
       }) => {
-        for (const mode of ['/protocol', '/architecture']) {
-          await page.goto(`./#/${tab}/${id}/0${mode}`);
+        for (const level of ['/protocol', '/architecture']) {
+          await page.goto(`./#/${tab}/${id}/0${level}`);
           await list(page).and(page.locator('[data-measured]')).waitFor();
           await page.evaluate(() => window.scrollTo(0, 0));
           const n = Number(
@@ -191,7 +191,7 @@ for (const [width, height] of SIZES) {
           for (let guard = 0; guard < 2 * n + 2; guard += 1) {
             if ((await status.textContent())?.startsWith(`Step ${n} of ${n}`)) break;
             await next.click();
-            const where = `${id}${mode} ${(await status.textContent()) ?? ''}`;
+            const where = `${id}${level} ${(await status.textContent()) ?? ''}`;
             const barTop = (await bar(page).boundingBox())?.y ?? 0;
             const shown = async (l: Locator): Promise<boolean> => {
               const box = await l.boundingBox();
@@ -203,7 +203,7 @@ for (const [width, height] of SIZES) {
               .locator('.inspector .message, .inspector .message ~ p')
               .all())
               expect(await shown(line), `${where}: message`).toBe(true);
-            // The innermost current element: the row, or the group in architecture mode.
+            // The innermost current element: the row, or the group at Architecture.
             const current = list(page).locator('[data-current]').last();
             await expect
               .poll(
@@ -270,8 +270,8 @@ for (const [width, height] of SIZES) {
     test('Compare: stepping with Next keeps the current rows of the changed panes above the bar', async ({
       page,
     }) => {
-      for (const mode of ['/protocol', '/architecture']) {
-        await page.goto(`./#/compare/compare-rag-mcp/0${mode}`);
+      for (const level of ['/protocol', '/architecture']) {
+        await page.goto(`./#/compare/compare-rag-mcp/0${level}`);
         await expect(page.locator('[data-presentation="list"][data-measured]')).toHaveCount(2);
         await page.evaluate(() => window.scrollTo(0, 0));
         const n = Number(
@@ -299,7 +299,7 @@ for (const [width, height] of SIZES) {
               .locator('.diagram-pane [data-current]')
               .last()
               .boundingBox();
-            expect(box, `compare ${k}${mode} pane ${i}`).not.toBeNull();
+            expect(box, `compare ${k}${level} pane ${i}`).not.toBeNull();
             if (box) rows.push(box);
           }
           if (!rows.length) continue;
@@ -309,25 +309,26 @@ for (const [width, height] of SIZES) {
           const upper = rows[0] as { y: number; height: number };
           // Both when they fit together, else the lower changed pane's.
           const together = lower.y + lower.height - upper.y <= limit - 16;
-          if (together) for (const b of rows) expect(on(b), `compare ${k}${mode}: rows`).toBe(true);
-          else expect(on(lower), `compare ${k}${mode}: lower row`).toBe(true);
+          if (together)
+            for (const b of rows) expect(on(b), `compare ${k}${level}: rows`).toBe(true);
+          else expect(on(lower), `compare ${k}${level}: lower row`).toBe(true);
         }
       }
     });
 
     test('Compare: both panes use the step list and nothing scrolls sideways', async ({ page }) => {
-      for (const mode of ['/architecture', '/protocol']) {
-        await page.goto(`./#/compare/compare-rag-mcp/0${mode}`);
+      for (const level of ['/architecture', '/protocol']) {
+        await page.goto(`./#/compare/compare-rag-mcp/0${level}`);
         await expect(page.locator('[data-presentation="list"][data-measured]')).toHaveCount(2);
         const n = Number(
           await page.getByRole('slider', { name: 'Compare step' }).getAttribute('max'),
         );
         for (let k = 0; k <= n; k += 1) {
-          await goTo(page, `#/compare/compare-rag-mcp/${k}${mode}`);
+          await goTo(page, `#/compare/compare-rag-mcp/${k}${level}`);
           await expect(page.locator('.controls .compare-status')).toHaveText(
             new RegExp(`^Step ${k} of ${n}`),
           );
-          expect(await overflow(page), `compare ${k}${mode}`).toEqual([]);
+          expect(await overflow(page), `compare ${k}${level}`).toEqual([]);
         }
         await expect(page.locator('svg.diagram')).toHaveCount(0);
       }
@@ -387,12 +388,12 @@ test.describe('at 360 × 800, Play without input', () => {
     });
   });
 
-  for (const mode of ['/architecture', '/protocol']) {
-    test(`Compare${mode} keeps the changed panes' current rows above the bar at every step`, async ({
+  for (const level of ['/architecture', '/protocol']) {
+    test(`Compare${level} keeps the changed panes' current rows above the bar at every step`, async ({
       page,
     }) => {
       await page.clock.install();
-      await page.goto(`./#/compare/compare-rag-mcp/0${mode}`);
+      await page.goto(`./#/compare/compare-rag-mcp/0${level}`);
       await expect(page.locator('[data-presentation="list"][data-measured]')).toHaveCount(2);
       const sliders = ['RAG step', 'MCP step'].map((name) => page.getByRole('slider', { name }));
       const panes = ['RAG', 'MCP'].map((name) => page.getByRole('region', { name, exact: true }));

@@ -35,9 +35,12 @@ export interface Route {
   level: Level;
 }
 
-/** The level a route's last part names; the Overview has none (02 navigation.routes). */
+/**
+ * The level a route's last part names; the Overview has none, and /overview is read as it and
+ * written without (02 navigation.routes).
+ */
 function levelOf(part: string | undefined): Level | undefined {
-  if (part === undefined) return 'overview';
+  if (part === undefined || part === 'overview') return 'overview';
   return part === 'architecture' || part === 'protocol' ? part : undefined;
 }
 

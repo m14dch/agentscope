@@ -887,7 +887,11 @@ export class Shell {
     }
     return [
       el('p', { class: 'message' }, `${scenario.question ?? scenario.learning_question}`),
-      el('p', { class: 'small muted' }, 'Nothing has happened yet. Next runs the first step.'),
+      el(
+        'p',
+        { class: 'small muted' },
+        `Nothing has happened yet. Next runs the first ${state.view.level === 'overview' ? 'stage' : 'step'}.`,
+      ),
     ];
   }
 
@@ -1131,5 +1135,10 @@ export function keepFocusVisible(row: ControlRow): void {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || active === document.body) return;
   if (active.isConnected && !active.closest('[hidden]')) return;
-  row.zoom.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus({ preventScroll: true });
+  // On phones the zoom control can sit in the closed menu: then the menu's toggle takes focus.
+  const pressed = row.zoom.querySelector<HTMLElement>('[aria-pressed="true"]');
+  const target = pressed?.closest('[hidden]')
+    ? document.querySelector<HTMLElement>('.menu-toggle')
+    : pressed;
+  target?.focus({ preventScroll: true });
 }

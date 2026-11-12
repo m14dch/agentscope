@@ -69,7 +69,7 @@ export interface ScenarioEvent {
 
 export interface Phase {
   id: string;
-  /** Shown in architecture mode. */
+  /** Shown at the Architecture level. */
   label: string;
   /** Drives Compare synchronisation (06-comparison-scenarios.yaml semantic_phases). */
   semantic_phase: string;

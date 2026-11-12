@@ -56,7 +56,7 @@ describe('labels', () => {
   });
 });
 
-describe('protocol mode', () => {
+describe('Protocol level', () => {
   const scn = scenario('mcp-balance');
 
   it('shows events up to the cursor and keeps every row in place', () => {
@@ -97,7 +97,7 @@ describe('protocol mode', () => {
   });
 });
 
-describe('architecture mode', () => {
+describe('Architecture level', () => {
   const scn = scenario('mcp-balance');
 
   it('collapses each phase into one group and marks the current one', () => {
@@ -183,7 +183,7 @@ function boxes(
 }
 
 describe('no overlapping labels', () => {
-  it('in any scenario, mode and expansion', () => {
+  it('in any scenario, level and expansion', () => {
     for (const scn of scenarios) {
       const all = build(scn, 'architecture', 0).groups.map((g) => g.key);
       for (const model of [
