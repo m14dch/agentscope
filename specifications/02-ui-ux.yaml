@@ -54,6 +54,15 @@ design:
     participants into a few parties and tells the scenario in 3 to 5 plain sentences; Architecture and
     Protocol are the former modes. The Overview names no protocol, so a first-time visitor meets the
     idea before the machinery (zoom_levels).'
+  - 'Phones get one column of steps (issue 50, user testing: "Phone layout is unusable"), taken
+    from tls12.xargs.org: the page order is the order of the exchange, every step is a closed
+    full-width row with its direction glyph, and opening it shows the explanation and the raw
+    message; several can be open and "Open all" opens them all. Its structure is adopted, its
+    decoration is not: rows are separated by hairline rules, with no rounded bars, fills,
+    shadows or illustrations, and the glyph is never the only signal (phone_steps). The column
+    replaces the step list, the bottom bar, the menu and the automatic page scrolling of issue 30,
+    which fitted the desktop structure onto a phone. Desktop and tablet keep the sequence diagram:
+    with up to seven participants a single column only suits a phone.'
   governing_rule: Maximise the signal-to-noise ratio. Viewers already process protocols,
     payloads, context and trust boundaries; anything that carries no information is
     noise and is removed.
@@ -142,7 +151,7 @@ design:
     points in a list tied to the plot (rag_retrieval.projection).
   - Charts fit the available width with text at its real size. Only sequence diagrams
     keep a fixed scale and scroll horizontally, from 48rem (768 px) up where they do not
-    fit; below 48rem they become the step list (diagram.phone_list), and the RAG projection
+    fit; below 48rem they become the column of steps (phone_steps), and the RAG projection
     takes its compact form (rag_retrieval.projection), so nothing scrolls horizontally on
     a phone.
   - Figures expose their text to assistive technology; scrollable regions are named
@@ -222,9 +231,8 @@ layout:
     own files and are precached like every other file of the build.'
   source_link: 'A text link "GitHub" to https://github.com/m14dch/agentscope ends the header
     row, after the tabs and the controls there; it opens in the same tab, has no icon and is
-    styled like the tabs (ink, no underline). On phones (layout.phone.header) it is the last
-    entry of the menu; where the menu would hold nothing else (the error page for an unknown
-    tab or scenario), there is no menu and the link ends the wordmark row instead. It is an ordinary link: nothing is fetched from GitHub, so the app
+    styled like the tabs (ink, no underline). On phones (layout.phone.header) it ends the
+    wordmark row. It is an ordinary link: nothing is fetched from GitHub, so the app
     stays free of external requests.'
   offline_indicator: 'After the service worker has cached the build and activated (01-architecture.yaml
     deployment offline_mechanics readiness), the header''s simulated statement ends with "Available
@@ -254,66 +262,26 @@ layout:
     about 45–75 characters: the learning question and headline are at most 36rem wide.'
   phone:
     breakpoint: Below 48rem (768 px), which includes a desktop browser zoomed to 200%; from
-      48rem the tablet and desktop layouts apply unchanged.
-    principle: One column that reads top to bottom. Nothing scrolls horizontally, on the
-      page or inside any region, in any tab, scenario, zoom level or panel, from 360 px wide.
-    header: 'The wordmark (32 px high), then on its row a disclosure "Menu" (dotted underline
-      like every fold); below them the tabs and the simulated statement, always visible.
-      The menu holds the scenario picker''s list of scenarios on RAG (shown in place, without the
-      picker''s own fold), the zoom control (zoom_levels.control) and the play speed, each
-      group labelled in small ink-muted text, and last the GitHub link (layout.source_link).
-      These controls move into the menu; none is duplicated. It opens below the wordmark row
-      and pushes the page down; it closes on Escape anywhere on the page while it is open
-      (focus returns to it), a pointer press outside it, a scenario choice or a change of level
-      (focus returns to it).'
-    controls: 'A bar fixed to the bottom edge of the screen, within thumb reach: the position
-      ("Step <k> of <n> · <phase>", the line the timeline shows from 48rem), then the step
-      slider at full width, then Reset, Previous step, Play or Pause and Next step as their icons
-      (controls.row) side by side in equal widths, so the progress sits next to the buttons. It
-      stays in place while the page scrolls; the page ends with room for it (and for the safe
-      area at the screen''s bottom edge), and focused elements scroll clear of it. In Compare it
-      holds the compare step, the shared slider and the shared buttons; each pane''s slider stays
-      in its pane.'
-    touch_targets: 'Every control outside running text (buttons, tabs, the menu and its
-      entries, toggles, sliders) is at least 44 × 44 px. Links and buttons inside a sentence
-      (citations, step links, the lineage jumps) and folds inside code are exempt, as in WCAG
-      2.5.8.'
-    presentation: The diagram region shows the step list (diagram.phone_list) and scrolls
-      vertically only; it is 30% of the screen's height (at least 9rem), so the stepping area
-      (the step list, then the prediction prompt and the message line below it) fits above the
-      bottom bar.
-    stepping_area: 'After a change of step or of the prediction prompt (not a parameter
-      change, a lineage selection or a fold), if the step list''s region does not start inside
-      the screen or the last of the prompt and the message line ends below the
-      top of the bottom bar, the page scrolls at once (no animation) so the region starts 8 px
-      below the top of the screen, as far as the page can scroll. The current row or group is
-      then in view inside the region, whose list scrolls at once too
-      (diagram.auto_scroll_to_current), so the learner sees the current step, any prediction
-      prompt and the message without scrolling. An explicit step action (Next, Previous,
-      Continue, Play or Pause, Reset, the keys, a step slider or a jump link) always
-      does this, even when the learner had scrolled down to read the payload: it brings the
-      stepping area back. A step made by Play does it only while the learner has not scrolled
-      the page since the last explicit step action. A scroll of the page counts as the
-      learner''s only when it follows their input within a second (a wheel, a touch that moves, a
-      scrolling key that nothing else handled, or a press on the scrollbar); scrolls the browser
-      makes by itself (scroll anchoring, clamping when content shrinks) and the page''s own
-      jumps never count. Once the learner scrolls during Play, its steps leave the page where it
-      is until the next explicit step action. In Compare, after a change of compare step the
-      same rules bring the panes whose step changed on screen above the bar: when both panes
-      changed and their current rows fit on screen together, both current rows; otherwise the
-      lower changed pane''s message and current row, its message starting 8 px below the top
-      of the screen when it is above it, else its current row ending 8 px above the bar. A pane
-      that waits through a phase or is done with it did not change. This is the only case in
-      which the page scrolls by itself (zoom_levels.scrolling).'
-    inspector: 'Below the diagram region, in this order: the prediction prompt when shown
-      (learning.prediction) and the message line, always visible; then a
-      toggle "Step details" (aria-expanded, dotted underline) over the tabs, collapsed at
-      start and kept as the learner left it while stepping. Long values and code wrap; no
-      tab scrolls sideways.'
-    panels: Every panel below the diagram and inspector stacks into one column; the projection takes its
-      compact form (rag_retrieval.projection).
-    input: Nothing depends on hover. Focus, the keys of controls.keyboard and the focus
-      order work as on desktop, for a learner with a hardware keyboard.
+      48rem the tablet and desktop layouts apply unchanged. Crossing 48rem (a window resized or
+      zoomed) lays the page out again at the same address.
+    principle: One column that reads top to bottom, and only the page scrolls. Nothing scrolls
+      horizontally, on the page or inside any region, in any tab, scenario, zoom level or panel,
+      from 360 px wide; no region scrolls on its own and nothing is fixed to the screen.
+    header: 'The wordmark (32 px high) with the GitHub link at the end of its row
+      (layout.source_link), then the tabs, then on RAG the scenario picker
+      (navigation.scenario_picker), then the simulated statement. There is no menu: the zoom
+      control is in the column''s intro (phone_steps.intro) and there is no play speed.'
+    presentation: Each scenario and Compare is the column of steps (phone_steps) in place of the
+      control row, the diagram, the inspector and the panels below them.
+    touch_targets: 'Every control outside running text (buttons, tabs, links of the header,
+      toggles, sliders, the rows of phone_steps) is at least 44 × 44 px. Links and buttons inside
+      a sentence (citations, step links, the lineage jumps) and folds inside code are exempt, as
+      in WCAG 2.5.8.'
+    panels: Every panel stacks into one column inside the row it belongs to
+      (phone_steps.inline_panels); the projection takes its compact form
+      (rag_retrieval.projection).
+    input: Nothing depends on hover. Focus and the focus order work as on desktop, for a learner
+      with a hardware keyboard; the keys are those of phone_steps.keyboard.
   splitter: 'The boundary between diagram and inspector is a separator that resizes them by
     pointer drag or, when focused, the arrow keys; the inspector keeps 20rem to 60% of the
     width. Its width is a share of the workspace up to the column''s width (layout.max_width),
@@ -346,7 +314,7 @@ diagram:
   layout:
     lifeline_spacing: At least 110 px; wider gaps only where an arrow label needs the room,
       up to 240 px. From 48rem, where it does not fit, the diagram scrolls horizontally;
-      below 48rem it is the step list (phone_list).
+      below 48rem it is the column of steps (phone_steps).
     rows: One row per event in order, so labels never share a row. The label sits above
       its arrow, starting at the arrow's left end; a label longer than its arrow extends
       to the right and the diagram widens to fit it.
@@ -362,29 +330,9 @@ diagram:
     current: emphasized
     future: hidden at the Protocol level; rows keep their space so the layout does not move
       as the cursor advances
-  phone_list: 'Below 48rem (layout.phone) the diagram is a one-dimensional list in the same
-    region, from the same events, visibility, marks and expanded groups as the diagram.
-    Protocol lists each reached event in order (future steps are not listed, so the
-    current step is the last row): its step number in small ink-muted text, its arrow label
-    (labels), and below it the sender and the receiver by registry label,
-    joined by a short arrow 32 px long drawn with the event''s encoding (line kind, filled or
-    open head, the accent for the current step and its pair).
-    A self-call names its participant once, followed by a short loop. Each row names its two
-    participants, so there are no lifelines and no participant header. Architecture
-    stacks the groups of zoom_levels.architecture_groups as flat sections in order, separated by a
-    hairline rule, with no frame: each section is one full-width button with the takeaway,
-    then the caption below it; the current group has a 3 px accent bar along its left edge
-    and its takeaway in weight 600; an expanded group lists its reached events below its
-    button, as Protocol does. The Overview stacks the stages the same way, each a section (not a
-    button) with its sentence and below it the parties its events involve in small ink-muted text
-    (for example "Assistant · Bank systems"), the current stage with the accent bar and its sentence
-    in weight 600. A selected lineage value marks a row''s label, or a
-    collapsed group''s caption, as in the diagram. The region scrolls vertically only and
-    keeps the current row, group or stage in view (auto_scroll_to_current, zoom_levels.scrolling).'
   pair_highlighting: true
   auto_scroll_to_current: Keep the current step (or current group) in view; scroll
-    smoothly, or instantly with reduced motion and in the step list of phones
-    (layout.phone.stepping_area)
+    smoothly, or instantly with reduced motion
   accessible_without_color: true
   rendering: SVG lifelines, arrows and labels generated from ordered event data. The
     header states once that everything is simulated; arrows carry no per-arrow simulation
@@ -434,8 +382,7 @@ zoom_levels:
     cursor leaves it, so the level stays one takeaway per phase; a group the learner
     collapsed reopens only when the cursor enters it again; a group the learner expanded keeps
     its state while the learner steps. At step 0 (and after Reset) no group is current and only
-    the groups the learner expanded are open. The same holds in the phone step list
-    (diagram.phone_list) and in each Compare pane, where a waiting pane (compare_view.timeline)
+    the groups the learner expanded are open. The same holds in each Compare pane, where a waiting pane (compare_view.timeline)
     has no current group. Lifelines pass under a group''s takeaway and caption, not
     through them.'
   protocol: 'Technical level: show all individual events with exact logical messages;
@@ -455,15 +402,14 @@ zoom_levels:
     maps the cursor both ways, and a unit test checks it for every scenario.'
   control: 'One zoom control replaces the architecture/protocol switch: a group "Zoom" of three
     buttons, Overview, Architecture and Protocol, the current one pressed (aria-pressed), at the start
-    of the control row (controls.row); below 48rem it moves into the menu (layout.phone.header). The
+    of the control row (controls.row); below 48rem it is in the column''s intro (phone_steps.intro). The
     keys + (or =) zoom in and - zooms out (controls.keyboard). A change of level keeps focus on the
     control that made it, and a polite live region announces the level and the position, for example
     "Architecture. Step 9 of 28 · Model chooses a tool; agent validates." or "Overview. Stage 2 of
-    4."; stepping announces nothing there. Where that control is hidden (in the closed menu on
-    phones) and focus sat in what the level hides, focus moves to the menu''s toggle.'
+    4."; stepping announces nothing there. Where focus sat in what the level hides, it moves to
+    the zoom control''s pressed button.'
   scrolling: Only a cursor change or a change of level scrolls, and only the diagram's own
-    scroll region, never the page (on phones the page also scrolls to keep the stepping area
-    in view, layout.phone.stepping_area); toggling a group or laying out again keeps the scroll
+    scroll region, never the page (on phones, phone_steps.scrolling); toggling a group or laying out again keeps the scroll
     position. It scrolls only as far as needed to bring the current step into view, or the current
     group when it is collapsed (in an expanded current group, the step inside it, together with the
     group's start when both fit in the region), or the current stage, horizontally never past its
@@ -471,6 +417,102 @@ zoom_levels:
     stays on the same group or region across steps. Arrow keys scroll the diagram region while it
     has focus.
   switch_preserves_position: true
+phone_steps:
+  principle: 'Below 48rem (layout.phone) a scenario is one column of steps that reads top to
+    bottom, as tls12.xargs.org shows a TLS connection (issue 50; handover_decisions): the order of
+    the page is the order of the exchange, so reading down the page is stepping through it. Every
+    unit of the current zoom level is listed from the start, as a closed row; opening a row shows
+    what the inspector and the panels show for it on wider screens. Desktop and tablet keep the
+    sequence diagram.'
+  intro: 'In this order: the learning question (the level-2 heading); from Architecture on the
+    headline (zoom_levels.overview); the zoom control (zoom_levels.control); in a scenario with
+    parameters, from Architecture on, a fold "Parameters" (a button with aria-expanded, dotted
+    underline like every fold, closed at start) over the parameter controls (rag_controls); then,
+    at Architecture and Protocol, the buttons "Open all" and "Close all" side by side. Nothing
+    else comes before the rows.'
+  rows:
+    overview: 'The stages in order as a numbered list, each its sentence and below it the parties
+      its events involve in small ink-muted text (for example "Assistant · Bank systems"). The
+      Overview has nothing more to show for a stage, so its stages are not rows that open: the
+      whole story reads at once, and the zoom control leads further in.'
+    architecture: 'One row per group of zoom_levels.architecture_groups, in order: its takeaway
+      (for a continued run its phase label followed by "continued"), and below it the caption in
+      small ink-muted text.'
+    protocol: 'One row per played event, in order: the step number in small ink-muted text, the
+      direction glyph, the operation label (diagram.labels), and below the label the two
+      participants by registry label in small ink-muted text, "Agent → MCP server"; a computation
+      inside one participant names it once, followed by "· nothing sent".'
+    glyph: '→ for a request or action sent to another participant (the filled arrowhead of the
+      diagram), ← for a response or result (the open arrowhead), ± for a computation inside one
+      participant (its sender is its receiver), which sends nothing. It sits in a column of its
+      own in ink and is hidden from assistive technology, which hears "request", "response" or
+      "nothing sent" in its place. It is never the only signal: the participants line states
+      the direction.'
+    control: 'Each row of Architecture and Protocol is one full-width button inside a list
+      item, with aria-expanded and aria-controls naming its body; a hairline rule separates the
+      rows. Activating it (pointer, Enter or Space) opens or closes its body directly below it,
+      and focus stays on it. Several rows can be open. Open all opens every row and Close all
+      closes every one; neither moves focus. An open row''s title is in weight 600. At start no
+      row is open except the one the address names (address).'
+  body:
+    protocol: 'In this order: the prediction prompt when the event has one (predictions); the
+      inspector for the event (inspector), its message line without the sender → receiver line
+      the row already shows, then its tabs; then the panels the event holds (inline_panels).
+      The tabs show directly: the row is the fold.'
+    architecture: 'The group''s events in order, each its step number, operation label and
+      participants as in a Protocol row, and its explanation (inspector.message_line), as plain
+      text; then the panels its events hold (inline_panels). Payloads are at Protocol.'
+  predictions: 'A Protocol row whose event carries a prediction prompt (learning.prediction)
+    opens with "Before this step" in small ink-muted text, the prompt, and a button "Show the
+    step"; the rest of its body appears once that is pressed, and focus moves to the body''s
+    message. Open all shows every body in full, each prompt above its step. Nothing is scored.'
+  inline_panels: 'A panel sits in the row of the step it explains, not below the page, and shows
+    what it shows at that step on wider screens: the model context (context_panel) as a fold
+    "Model context" (aria-expanded, closed at start) in the row of every LLM API request; in
+    rag-index the ingestion panel (rag_ingestion) at index-07, which computes the vectors; in
+    rag-query the scores and the projection (rag_retrieval.scores, rag_retrieval.projection) at
+    retrieve-06, where top K and the threshold decide, the prompt (rag_retrieval.prompt) at
+    retrieve-10, the request that sends it, and the answer (rag_retrieval.answer) at retrieve-12;
+    in the Combined scenario the answer''s provenance (combined_answer) at c-08. At Architecture
+    they follow the group''s events. A jump link in the inspector or a panel opens the row of its
+    step and scrolls it to the top of the screen.'
+  stepping: 'There is no control row: no step slider, Reset, Previous, Play, Next or play speed.
+    The page order already is the sequence and the learner reads at their own pace, so stepping
+    controls would only add a second way to move through the same rows.'
+  keyboard: 'Tab reaches the rows in page order, and Enter or Space opens or closes the focused
+    one. + (or =) and - zoom as on wider screens (controls.keyboard, keyboard_scope); the arrow
+    keys and Space keep their browser meaning (scrolling the page, pressing the focused button).'
+  address: 'The step of the address (navigation.routes) is the last row the learner opened: its
+    event at Protocol, the first event of its group at Architecture; closing a row leaves it.
+    Opening a page at a step opens the row holding that step (at Architecture the group holding
+    it) and scrolls the page at once so the row starts at the top of the screen. At the Overview
+    the address holds the stage as on wider screens (zoom_levels.cursor_mapping).'
+  zoom: 'A change of level keeps the place (zoom_levels.cursor_mapping): the row holding the
+    mapped step opens (none at step 0), the others are closed, focus stays on the zoom control and
+    the page does not scroll. A polite live region announces the level and the number of rows, for
+    example "Protocol. 28 steps." or "Overview. 4 stages."'
+  parameters: 'A parameter change recomputes the events (controls.action_rules.parameter_change)
+    and rebuilds the rows; the rows of events still played stay open, and the fold and focus stay.'
+  scrolling: 'Only the page scrolls, and it scrolls by itself only for an address or a jump link
+    (address, inline_panels), at once. Opening, closing, Open all, Close all, a change of level and
+    a parameter leave it where it is. No region scrolls on its own and nothing is fixed to the
+    screen, so nothing covers the content.'
+  design: 'Swiss rules (handover_decisions): flush left, hairline rules between rows and no other
+    frame, no rounded bars, fills, shadows or illustrations. An open row is marked by the weight of
+    its title and the body below it.'
+  compare: 'Compare is one column too, interleaved by semantic phase: the heading
+    (compare_view.layout), the zoom control, Open all and Close all from Architecture on, then each
+    semantic phase in order as a level-3 heading with its label, followed by the units of the level
+    in it, RAG''s first and then MCP''s. Each unit says "RAG" or "MCP" in small ink-muted text
+    before its title, so the scenario is read as text, not colour. The units are those of the level,
+    by the semantic phase they belong to (compare_view.timeline): stages at the Overview (each by
+    the semantic phase of its first phase), groups at Architecture, events at Protocol. A scenario
+    without units in a phase shows its placeholder (06 compare.placeholders) as a plain line marked
+    the same way. An opened Compare row shows the explanation (a group: its events as at
+    Architecture) and a link "Inspect step <k> in <tab>" to the scenario''s own route at that step
+    and level, where its payloads and panels are. From Architecture on the aspects follow
+    (compare_view.layout). The address keeps its compare step, which only a change of level
+    changes (compare_view.route).'
 learning:
   interaction: 'Each scenario follows the handover''s pattern (6.1): show the learning
     question and headline, the participants, an optional prediction, one step, the highlighted
@@ -522,12 +564,11 @@ controls:
     right and a bar (Next step). Each button is named in text (Reset, Previous step, Play or Pause,
     Next step), declares its key of controls.keyboard (aria-keyshortcuts; Reset has none) and,
     while it has focus, shows its name and key in small text: below the button, clear of the
-    rule under the row, and on phones above the whole bottom bar, so it covers neither the
-    position line nor the slider; nothing depends on hover.
+    rule under the row, so it covers neither the position line nor the slider; nothing depends
+    on hover.
     While playing, Play shows the Pause icon and is named Pause. When the row is too narrow, the
-    timeline wraps onto its own line directly below the buttons. Below 48rem the position line,
-    the slider and the buttons form the bottom bar and the zoom control and the speed move into the
-    menu (layout.phone).'
+    timeline wraps onto its own line directly below the buttons. Below 48rem there is no control
+    row: the zoom control is in the column''s intro and nothing steps (phone_steps.stepping).'
   keyboard:
     ArrowRight: next
     ArrowLeft: previous
@@ -647,9 +688,7 @@ compare_view:
     row per entry of compare.aspects: its label in small ink-muted text beside its sentence, the label
     above the sentence below 48rem. Nothing makes the
     page scroll horizontally at any width; each diagram scrolls inside its own region, and below
-    48rem each pane''s diagram is the step list (diagram.phone_list), the shared Previous, Play or
-    Pause and Next sit with Reset in the bottom bar and the play speed and the zoom control in the
-    menu (layout.phone).'
+    48rem Compare is one column of steps interleaved by semantic phase (phone_steps.compare).'
   pane: 'Each pane shows its scenario''s question, its position ("Step <k> of <n> · <scenario phase
     label>", at the Overview "Stage <s> of <m>", or "No stage in <phase> · <s> of <m> played" for a
     waiting pane) with its own step slider, over the stages at the Overview, the current event''s
