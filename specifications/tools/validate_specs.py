@@ -82,7 +82,7 @@ def compose(comp, registry):
         else:
             events += copy.deepcopy(step["insert"])
     scn = {k: copy.deepcopy(comp[k]) for k in ("title", "question", "learning_question", "headline", "participants",
-                                                "phases", "initial_state", "derived_events") if k in comp}
+                                                "phases", "overview", "initial_state", "derived_events") if k in comp}
     scn["events"] = events
     return finalize(scn, comp["id"])
 
@@ -375,9 +375,96 @@ def check_scenario(scn, ctx):
             check_mcp(e, by_id, ctx, where)
     check_visibility(scn)
     check_derived(scn, by_id)
+    check_overview(scn)
     for k in ("question",):
         if k in scn and not isinstance(scn[k], str):
             err(sid, "question must be a string")
+
+
+# Words a first-time visitor would have to look up (03 overview_fields.plain_words).
+JARGON = re.compile(r"\b(mcp\w*|https?|json\w*|rpcs?|llms?|apis?|tools?|servers?|vectors?|embed\w*"
+                    r"|chunk\w*|prompts?|tokens?|schemas?|models?)\b", re.I | re.A)
+REST = re.compile(r"\bREST\b")
+
+
+def jargon(text):
+    """The first technical word in text, or None (03 overview_fields.plain_words)."""
+    m = JARGON.search(text) or REST.search(text)
+    return m.group(0) if m else None
+
+
+def one_sentence(text):
+    """One plain sentence: it ends with a period and holds no other sentence end."""
+    body = text.strip()
+    return bool(body) and body.endswith(".") and not re.search(r"[.?!]\s", body[:-1]) \
+        and not re.search(r"[?!]", body)
+
+
+def check_overview(scn):
+    """The Overview zoom level (03 scenario_format.overview_fields); mirrored in validate.ts."""
+    sid = scn["id"]
+    ov = scn.get("overview")
+    if not isinstance(ov, dict):
+        err(sid, "overview must be {parties, stages}")
+        return
+    parties = ov.get("parties") if isinstance(ov.get("parties"), list) else []
+    stages = ov.get("stages") if isinstance(ov.get("stages"), list) else []
+    if not 2 <= len(parties) <= 4:
+        err(sid, "overview needs 2 to 4 parties")
+    if not 3 <= len(stages) <= 5:
+        err(sid, "overview needs 3 to 5 stages")
+    ids = set()
+    members = []
+    for i, party in enumerate(parties):
+        party = party if isinstance(party, dict) else {}
+        pid = party.get("id") if isinstance(party.get("id"), str) else ""
+        label = party.get("label")
+        if not pid or pid in ids:
+            err(sid, f"overview party {i} needs a unique id")
+        ids.add(pid)
+        if not isinstance(label, str) or not label.strip():
+            err(sid, f"overview party {pid} needs a label")
+        elif jargon(label):
+            err(sid, f"overview party {pid} uses the technical word {jargon(label)}")
+        group = party.get("members")
+        if not isinstance(group, list) or not group:
+            err(sid, f"overview party {pid} needs members")
+            group = []
+        members += [m if isinstance(m, str) else "" for m in group]
+    if sorted(members) != sorted(scn["participants"]):
+        err(sid, "overview parties must partition the participants")
+    covered = []
+    stage_ids = set()
+    stage_of = {}
+    for i, stage in enumerate(stages):
+        stage = stage if isinstance(stage, dict) else {}
+        tid = stage.get("id") if isinstance(stage.get("id"), str) else ""
+        sentence = stage.get("sentence")
+        if not tid or tid in stage_ids:
+            err(sid, f"overview stage {i} needs a unique id")
+        stage_ids.add(tid)
+        if not isinstance(sentence, str) or not one_sentence(sentence):
+            err(sid, f"overview stage {tid} needs one sentence ending with a period")
+        elif jargon(sentence):
+            err(sid, f"overview stage {tid} uses the technical word {jargon(sentence)}")
+        phases = stage.get("phases")
+        if not isinstance(phases, list) or not phases:
+            err(sid, f"overview stage {tid} needs phases")
+            phases = []
+        for ph in phases:
+            name = ph if isinstance(ph, str) else ""
+            covered.append(name)
+            stage_of[name] = i
+    if covered != [p["id"] for p in scn["phases"]]:
+        err(sid, "overview stages must partition the phases in their order")
+        return
+    last = 0
+    for e in scn["events"]:
+        at = stage_of.get(e.get("phase"), last)
+        if at < last:
+            err(f"{sid}/{e['id']}", "events must visit the overview stages in order")
+            return
+        last = at
 
 
 def check_derived(scn, by_id):
@@ -780,6 +867,11 @@ def check_compare(cmp_, registry):
         for phase, text in given.items():
             if not isinstance(text, str) or not text.strip():
                 err("compare.placeholders", f"{sid} placeholder for {phase} is empty")
+    headline = compare.get("overview_headline")
+    if not isinstance(headline, str) or not one_sentence(headline):
+        err("compare.overview_headline", "needs one sentence ending with a period")
+    elif jargon(headline):
+        err("compare.overview_headline", f"uses the technical word {jargon(headline)}")
     aspects = compare.get("aspects")
     if not isinstance(aspects, list) or not aspects:
         err("compare.aspects", "needs at least one aspect")

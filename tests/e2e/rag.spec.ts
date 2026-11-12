@@ -122,7 +122,7 @@ test.describe('rag-walkthrough', () => {
   test('run ingestion, then inspect chunks and vectors equal to index-05 and index-07', async ({
     page,
   }) => {
-    await open(page, '#/rag/rag-index/0');
+    await open(page, '#/rag/rag-index/0/architecture');
     await expect(panel(page)).toBeHidden();
     // Run ingestion.
     await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
@@ -167,7 +167,7 @@ test.describe('rag-walkthrough', () => {
   test('dense overlap marks only what the selected chunk shares with its neighbours', async ({
     page,
   }) => {
-    await open(page, '#/rag/rag-index/10');
+    await open(page, '#/rag/rag-index/10/architecture');
     await page.getByRole('button', { name: 'Chunk size 25 words' }).click();
     await page.getByRole('button', { name: 'Overlap 20 words' }).click();
     // The first chunk (words 0–24) shares words 5–24 with the second only.
@@ -208,7 +208,7 @@ test.describe('rag-walkthrough', () => {
   test('before the embed step the panel names the step that computes the vector', async ({
     page,
   }) => {
-    await open(page, '#/rag/rag-index/4');
+    await open(page, '#/rag/rag-index/4/architecture');
     await expect(panel(page)).toBeHidden();
     await page.getByRole('button', { name: 'Next' }).click();
     await expect(panel(page)).toBeVisible();
@@ -223,7 +223,7 @@ test.describe('rag-walkthrough', () => {
   test('focus stays on the chosen chunk and the parameter control while the panel rebuilds', async ({
     page,
   }) => {
-    await open(page, '#/rag/rag-index/10');
+    await open(page, '#/rag/rag-index/10/architecture');
     const second = panel(page).getByRole('button', { name: 'everyday-account@1.2-c50o10-002' });
     await second.focus();
     await page.keyboard.press('Enter');
@@ -240,7 +240,7 @@ test.describe('rag-walkthrough', () => {
   test('focus moves to the step slider when the panel disappears while holding it', async ({
     page,
   }) => {
-    await open(page, '#/rag/rag-index/5');
+    await open(page, '#/rag/rag-index/5/architecture');
     const chunk = panel(page).getByRole('button', { name: 'everyday-account@1.2-c50o10-002' });
     await chunk.focus();
     await page.keyboard.press('ArrowLeft');
@@ -261,7 +261,7 @@ test.describe('rag-walkthrough', () => {
     page,
   }) => {
     // Run retrieval.
-    await open(page, '#/rag/rag-query/0');
+    await open(page, '#/rag/rag-query/0/architecture');
     await expect(retrieval(page)).toBeHidden();
     await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
     await page.getByRole('button', { name: 'Play' }).click();
@@ -356,7 +356,7 @@ test.describe('rag-walkthrough', () => {
   });
 
   test('the threshold slider, reranking and full documents recompute at once', async ({ page }) => {
-    await open(page, '#/rag/rag-query/10');
+    await open(page, '#/rag/rag-query/10/architecture');
     const threshold = page.getByRole('slider', { name: 'Threshold' });
     await threshold.focus();
     for (let i = 0; i < 25; i += 1) await page.keyboard.press('ArrowRight');
@@ -377,7 +377,7 @@ test.describe('rag-walkthrough', () => {
       'true',
     );
     await expect(page.locator('.status')).toHaveText('Step 11 of 11 · Answer');
-    expect(page.url()).toMatch(/#\/rag\/rag-query\/10$/);
+    expect(page.url()).toMatch(/#\/rag\/rag-query\/10\/architecture$/);
     await expect(scoreRow(page, 'savings-account@1.2-c50o10-002').locator('.outcome')).toHaveText(
       /^retained, rank 2 · rerank 0\.7457$/,
     );
@@ -401,9 +401,9 @@ test.describe('rag-walkthrough', () => {
   test('the panel follows the steps and hands focus to the slider when it disappears', async ({
     page,
   }) => {
-    await open(page, '#/rag/rag-query/4');
+    await open(page, '#/rag/rag-query/4/architecture');
     await expect(retrieval(page)).toBeHidden();
-    await open(page, '#/rag/rag-query/5');
+    await open(page, '#/rag/rag-query/5/architecture');
     await expect(retrieval(page)).toBeVisible();
     await expect(retrieval(page).locator('.dotplot .retained')).toHaveCount(0);
     // The threshold comes from retrieve-06, which is not played yet.
@@ -425,7 +425,7 @@ test.describe('rag-walkthrough', () => {
     );
     await expect(retrieval(page).locator('.retrieval-answer')).toHaveCount(0);
     // Focus inside the panel moves to the step slider when the panel disappears.
-    await open(page, '#/rag/rag-query/5');
+    await open(page, '#/rag/rag-query/5/architecture');
     await retrieval(page).getByRole('button', { name: 'step 6' }).focus();
     await page.keyboard.press('ArrowLeft');
     await expect(page.locator('.status')).toHaveText('Step 4 of 10 · Search and filter');
@@ -438,7 +438,7 @@ test.describe('reference_results on screen', () => {
   for (const [name, ref] of Object.entries(rag.reference_results)) {
     if (typeof ref === 'string') continue;
     test(`${name}: selection, scores, answer and sources`, async ({ page }) => {
-      await open(page, '#/rag/rag-query/0');
+      await open(page, '#/rag/rag-query/0/architecture');
       const k = ref.parameters['top_k'];
       if (k !== 5) await page.getByRole('button', { name: `Top K ${String(k)} chunks` }).click();
       const t = Number(ref.parameters['similarity_threshold']);
@@ -521,7 +521,7 @@ test.describe('retrieval panel geometry', () => {
       page,
     }) => {
       await page.setViewportSize({ width, height: 900 });
-      await open(page, '#/rag/rag-query/10');
+      await open(page, '#/rag/rag-query/10/architecture');
       await page.getByRole('button', { name: 'Keyword retrieval' }).click();
       await page.getByRole('button', { name: 'Reranking' }).click();
       await expect(retrieval(page).locator('.answer-text')).toBeVisible();

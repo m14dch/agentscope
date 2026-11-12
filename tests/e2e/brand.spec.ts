@@ -19,7 +19,7 @@ test('the header shows the light wordmark as the level-1 heading, linked to the 
   page,
 }) => {
   // RAG has the scenario picker, the widest header (02 navigation.scenario_picker).
-  await page.goto('./#/rag/rag-query/3');
+  await page.goto('./#/rag/rag-query/3/architecture');
   const heading = page.getByRole('heading', { level: 1 });
   await expect(heading).toHaveAccessibleName('AgentScope');
   await expect(heading.getByRole('link', { name: 'AgentScope' })).toHaveAttribute('href', '#/');
@@ -40,7 +40,7 @@ test('the header shows the light wordmark as the level-1 heading, linked to the 
   for (const other of [
     page.getByRole('navigation', { name: 'Modules' }),
     page.locator('.picker'),
-    page.getByRole('group', { name: 'View', exact: true }),
+    page.getByRole('group', { name: 'Zoom', exact: true }),
     page.locator('.simulated'),
   ]) {
     const b = await other.boundingBox();
@@ -100,7 +100,8 @@ test('on a wide screen the text lies in the centred 90rem column, the header end
   page,
 }) => {
   await page.setViewportSize(WIDE);
-  await page.goto('./#/mcp/mcp-balance/3');
+  // At Architecture, where the headline shows (02 zoom_levels.overview).
+  await page.goto('./#/mcp/mcp-balance/3/architecture');
   const github = page.getByRole('link', { name: 'GitHub', exact: true });
   await expect(github).toBeVisible();
 
@@ -112,13 +113,14 @@ test('on a wide screen the text lies in the centred 90rem column, the header end
   }
   expect((await edges(page, '.lesson')).left).toBeCloseTo(COLUMN.left, 0);
 
-  // The link ends the header row: an ordinary link in the same tab, after the view switch.
+  // The link ends the header row: an ordinary link in the same tab, after the tabs (the zoom
+  // control is in the control row, 02 zoom_levels.control).
   await expect(github).toHaveAttribute('href', 'https://github.com/m14dch/agentscope');
   await expect(github).not.toHaveAttribute('target', /.+/);
   const link = await github.boundingBox();
-  const view = await page.getByRole('group', { name: 'View', exact: true }).boundingBox();
-  expect(link && view && link.x > view.x + view.width).toBe(true);
-  await page.getByRole('button', { name: 'Protocol', exact: true }).focus();
+  const tabs = await page.getByRole('navigation', { name: 'Modules' }).boundingBox();
+  expect(link && tabs && link.x > tabs.x + tabs.width).toBe(true);
+  await page.getByRole('link', { name: 'Combined', exact: true }).focus();
   await page.keyboard.press('Tab');
   await expect(github).toBeFocused();
 
@@ -168,8 +170,8 @@ test('the widened workspace keeps its width while stepping and after a parameter
     return Math.round(right - left);
   };
 
-  // Every step of mcp-balance, from the architecture overview at step 0 to the end.
-  await page.goto('./#/mcp/mcp-balance/0');
+  // Every step of mcp-balance, at Architecture from step 0 to the end.
+  await page.goto('./#/mcp/mcp-balance/0/architecture');
   await page.locator('[data-measured]').waitFor();
   const status = page.locator('.control-row .status');
   const length = Number(/of (\d+)/.exec((await status.textContent()) ?? '')?.[1]);
@@ -184,6 +186,19 @@ test('the widened workspace keeps its width while stepping and after a parameter
     await expect(status).toContainText(`Step ${step} of`);
     expect(await width(), `step ${step}`).toBe(wide);
   }
+  // Zooming keeps it too: the widest layout is the Protocol one at every level (02 max_width).
+  for (const [key, name] of [
+    ['-', 'Overview'],
+    ['+', 'Architecture'],
+    ['+', 'Protocol'],
+  ] as const) {
+    await page.keyboard.press(key);
+    await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(await width(), name).toBe(wide);
+  }
 
   // The separator gives the share the inspector takes of this wider workspace.
   const splitter = page.getByRole('separator', { name: 'Resize the inspector' });
@@ -193,7 +208,7 @@ test('the widened workspace keeps its width while stepping and after a parameter
   await expect(splitter).toHaveAttribute('aria-valuetext', `Inspector ${shown}% of the width`);
 
   // rag-query keeps the column's width when a parameter changes its steps.
-  await page.goto('./#/rag/rag-query/10');
+  await page.goto('./#/rag/rag-query/10/architecture');
   await page.locator('[data-measured]').waitFor();
   const before = await width();
   const rerank = page.getByRole('button', { name: 'Reranking' });

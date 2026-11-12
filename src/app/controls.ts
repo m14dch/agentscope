@@ -1,10 +1,12 @@
 /**
- * The control row (02-ui-ux.yaml controls.row): Reset, Previous step, Play or Pause and Next
- * step as media icons, the play speed, then the timeline (step slider and position line).
+ * The control row (02-ui-ux.yaml controls.row): the zoom control, Reset, Previous step, Play or
+ * Pause and Next step as media icons, the play speed, then the timeline (step slider and position
+ * line).
  * The scenario view and Compare build the same row; below 48rem the shell moves its parts
  * (layout.phone).
  */
 import { SPEEDS, type Speed } from '../engine/player.ts';
+import { type Level, LEVEL_LABELS, LEVELS } from '../diagram/zoom.ts';
 
 const SVG = 'http://www.w3.org/2000/svg';
 
@@ -120,11 +122,15 @@ export interface ControlRowOptions {
   next: () => void;
   speed: (speed: Speed) => void;
   jump: (step: number) => void;
+  /** Changes the zoom level (02 zoom_levels.control). */
+  zoom: (level: Level) => void;
 }
 
 export class ControlRow {
   /** The whole row, placed below the learning question. */
   readonly root: HTMLElement;
+  /** The zoom control: Overview, Architecture, Protocol; it moves into the menu on phones. */
+  readonly zoom: HTMLElement;
   /** Reset, Previous step, Play or Pause, Next step: the bottom bar on phones. */
   readonly buttons: HTMLElement;
   /** The play speed with its label; it moves into the menu on phones. */
@@ -135,8 +141,28 @@ export class ControlRow {
   private readonly play: HTMLButtonElement;
   private readonly select: HTMLSelectElement;
   private playing: boolean | undefined;
+  /** Announces a change of level (02 zoom_levels.control); quiet while stepping. */
+  private readonly announcer: HTMLElement;
 
   constructor(options: ControlRowOptions) {
+    this.zoom = document.createElement('div');
+    this.zoom.className = 'segmented zoom';
+    this.zoom.setAttribute('role', 'group');
+    this.zoom.setAttribute('aria-label', 'Zoom');
+    for (const level of LEVELS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = LEVEL_LABELS[level];
+      b.dataset['level'] = level;
+      b.dataset['label'] = LEVEL_LABELS[level];
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', () => options.zoom(level));
+      this.zoom.append(b);
+    }
+    this.announcer = document.createElement('div');
+    this.announcer.className = 'visually-hidden';
+    this.announcer.setAttribute('aria-live', 'polite');
+
     this.play = iconButton('play', 'Play', options.toggle, KEYS.play);
     this.buttons = document.createElement('div');
     this.buttons.className = 'controls';
@@ -183,7 +209,19 @@ export class ControlRow {
 
     this.root = document.createElement('div');
     this.root.className = 'control-row';
-    this.root.append(this.buttons, this.speed, timeline);
+    this.root.append(this.zoom, this.buttons, this.speed, timeline, this.announcer);
+  }
+
+  /** Presses the current level's button. */
+  setLevel(level: Level): void {
+    for (const b of this.zoom.querySelectorAll<HTMLButtonElement>('button')) {
+      b.setAttribute('aria-pressed', String(b.dataset['level'] === level));
+    }
+  }
+
+  /** Says the new level and the position once, after a change of level. */
+  announce(level: Level, where: string): void {
+    this.announcer.textContent = `${LEVEL_LABELS[level]}. ${where}${/[.?!]$/.test(where) ? '' : '.'}`;
   }
 
   /**

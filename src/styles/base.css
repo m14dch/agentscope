@@ -80,6 +80,11 @@ pre {
   color: var(--color-ink-muted);
 }
 
+/* Hidden stays hidden whatever display a class gives (the zoom levels hide whole regions). */
+[hidden] {
+  display: none !important;
+}
+
 /* 12-column grid; children span columns with --span. */
 .grid {
   display: grid;

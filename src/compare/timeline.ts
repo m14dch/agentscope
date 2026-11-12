@@ -121,3 +121,20 @@ export class CompareTimeline {
     return found === -1 ? this.length : found;
   }
 }
+
+/**
+ * A pane's stages as the events of the Overview's timeline (02 compare_view.timeline): each stage
+ * with played events counts as one event of the semantic phase of its first phase, so the panes
+ * step stage by stage. A pane's cursor on this timeline counts stages.
+ */
+export function stageInput(
+  pane: PaneInput,
+  stages: readonly { stage: { id: string; phases: readonly string[] }; last: number }[],
+): PaneInput {
+  return {
+    semanticOf: pane.semanticOf,
+    events: stages
+      .filter((s) => s.last > 0)
+      .map((s) => ({ id: s.stage.id, phase: s.stage.phases[0] ?? '' })),
+  };
+}

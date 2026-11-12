@@ -29,6 +29,8 @@ export class Player {
   /** Identifies the live timer; a callback from any other timer does nothing. */
   private token: object | undefined;
   private disposed = false;
+  /** Where Next, Previous and Play stop; undefined: at every event. */
+  private stopsAt: (() => readonly number[]) | undefined;
   private readonly listeners = new Set<(player: Player) => void>();
 
   readonly playback: Playback;
@@ -66,11 +68,33 @@ export class Player {
   }
 
   next(): void {
-    this.navigate(this.position + 1);
+    this.navigate(this.following());
   }
 
   previous(): void {
-    this.navigate(this.position - 1);
+    const stops = this.stopsAt?.();
+    if (!stops) {
+      this.navigate(this.position - 1);
+      return;
+    }
+    this.navigate(Math.max(0, ...stops.filter((s) => s < this.position)));
+  }
+
+  /**
+   * Makes Next, Previous and Play stop only at the given cursors, for example at the end of each
+   * stage of the Overview (02 zoom_levels.stepping); undefined stops at every event again. The
+   * function is asked at each step, so the stops follow parameter changes.
+   */
+  setStops(stops: (() => readonly number[]) | undefined): void {
+    this.stopsAt = stops;
+  }
+
+  /** The cursor Next and Play move to: the next stop, or past the last one the end. */
+  private following(): number {
+    const stops = this.stopsAt?.();
+    if (!stops) return this.position + 1;
+    const next = stops.find((s) => s > this.position);
+    return next ?? this.playback.length;
   }
 
   jump(cursor: number): void {
@@ -163,7 +187,7 @@ export class Player {
 
   private tick(token: object): void {
     if (!this.playing || token !== this.token) return;
-    this.move(this.position + 1);
+    this.move(this.following());
     if (this.atEnd) this.stop();
     else this.schedule();
     this.emit();

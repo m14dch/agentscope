@@ -127,23 +127,23 @@ function offenders(found: Found): string[] {
 // the switches (02 layout.phone); those pages are checked at a phone's width too.
 const PHONE_ROUTES = new Set([
   './#/mcp/mcp-balance/23/protocol',
-  './#/mcp/mcp-balance/14',
-  './#/rag/rag-query/10',
-  './#/compare/compare-rag-mcp/16',
+  './#/mcp/mcp-balance/14/architecture',
+  './#/rag/rag-query/10/architecture',
+  './#/compare/compare-rag-mcp/16/architecture',
 ]);
 
 for (const route of [
   './',
   './#/design',
   './#/mcp/mcp-balance/23/protocol',
-  './#/mcp/mcp-balance/14',
+  './#/mcp/mcp-balance/14/architecture',
   './#/mcp/mcp-balance/2/protocol',
   // The ingestion panel with a selected chunk, overlap and the vector's dots.
-  './#/rag/rag-index/10',
+  './#/rag/rag-index/10/architecture',
   // The retrieval panel: retained dots, the projection, the prompt and the answer with citations.
-  './#/rag/rag-query/10',
+  './#/rag/rag-query/10/architecture',
   // Both compare panes, one of them done with its phase.
-  './#/compare/compare-rag-mcp/16',
+  './#/compare/compare-rag-mcp/16/architecture',
   // The combined answer with its provenance labels, sources and the evidence gap.
   './#/combined/combined-balance-explanation/35/protocol',
   // An unknown route: the error line and its link back to the tab.

@@ -154,6 +154,30 @@ scenarios:
     label: Answer
     semantic_phase: answer
     takeaway: The simulated answer reports exactly the balance the tool returned.
+  overview:
+    parties:
+    - id: you
+      label: You
+      members: [user]
+    - id: assistant
+      label: Assistant
+      members: [agent, llm, mcp-client]
+    - id: bank-systems
+      label: Bank systems
+      members: [mcp-server, rest-api, database]
+    stages:
+    - id: prepare
+      phases: [setup, discovery]
+      sentence: Before any question, the assistant learns which actions the bank's systems offer.
+    - id: ask
+      phases: [question]
+      sentence: You ask the assistant for your current balance.
+    - id: fetch
+      phases: [planning, tool, backend]
+      sentence: The assistant asks the bank's systems, which look up your live balance.
+    - id: answer
+      phases: [context, generation, answer]
+      sentence: The assistant answers with exactly the balance the bank's systems returned.
   events:
   - id: mcp-01
     scenario_id: mcp-balance
