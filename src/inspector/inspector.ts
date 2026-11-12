@@ -1,10 +1,17 @@
 /**
- * Event inspector (02-ui-ux.yaml inspector): the step's message first, then tabs for the
- * payload, the simulated transport envelope, the security boundaries and the lineage.
- * A tab is shown only when the step has content for it. The inspector is rebuilt only
- * when the step changes, and focus stays on the equivalent control.
+ * Event inspector (02-ui-ux.yaml inspector): the step's message and what it carries first,
+ * then tabs for the payload (with its annotations), the simulated transport envelope and the
+ * security boundaries. A tab is shown only when the step has content for it. The inspector is
+ * rebuilt only when the step changes, and focus stays on the equivalent control.
  */
 import { operationLabel } from '../diagram/model.ts';
+import {
+  type JsonLine,
+  parsePath,
+  resolvePath,
+  type SplitGroup,
+  splitPayload,
+} from '../scenarios/annotations.ts';
 import type {
   EarlierMessage,
   EarlierRevision,
@@ -12,16 +19,16 @@ import type {
   Json,
   ScenarioEvent,
 } from '../scenarios/types.ts';
+import { type Travel, travel, type TravelSources, valueLabel } from './annotated.ts';
 import { jsonTree, mcpBoilerplate, newInRequest, type TreeNode, trackedValues } from './json.ts';
 
-export type TabId = 'payload' | 'transport' | 'security' | 'lineage';
+export type TabId = 'payload' | 'transport' | 'security';
 const TAB_LABELS: Record<TabId, string> = {
   payload: 'Payload',
   transport: 'Transport',
   security: 'Security',
-  lineage: 'Lineage',
 };
-const ORDER: TabId[] = ['payload', 'transport', 'security', 'lineage'];
+const ORDER: TabId[] = ['payload', 'transport', 'security'];
 const REDACTED = /<REDACTED[^>]*>/;
 
 export interface Boundary {
@@ -35,8 +42,8 @@ export interface InspectorContext {
   boundaries: readonly Boundary[];
   /** Moves the cursor to a step (1-based). */
   jump: (step: number) => void;
-  /** Selects a tracked value, or clears the selection (02 lineage_selection.select). */
-  select: (selection: Selection | undefined) => void;
+  /** The initial state and 03 lineage.origins, for the travel lines' origins. */
+  travel?: TravelSources | undefined;
   /** 04-mcp-scenarios.yaml protocol.earlier_revision_handshake, for server/discover. */
   earlierRevision?: EarlierRevision | undefined;
   /** Prefix of the element IDs, unique per page (several inspectors on phones); "inspector". */
@@ -48,6 +55,8 @@ export interface InspectorContext {
    * which already shows them (02 phone_steps.body).
    */
   route?: boolean;
+  /** The state of the Annotations toggle, when several inspectors share it. */
+  toggles?: { annotated: boolean };
 }
 
 /** Whether a step offers the earlier-revision comparison (02 inspector.earlier_revision). */
@@ -59,32 +68,10 @@ export function offersEarlierRevision(event: ScenarioEvent): boolean {
   );
 }
 
-/** A selected tracked value. */
-export interface Selection {
-  key: string;
-  value: string | number;
-}
-
-/** Steps (0-based indices) whose tracked values under `key` include `value`. */
-export function occurrences(events: readonly ScenarioEvent[], selection: Selection): number[] {
-  const found: number[] = [];
-  events.forEach((e, i) => {
-    const t = e.tracked_values?.[selection.key];
-    if (
-      t !== undefined &&
-      (Array.isArray(t) ? t.some((x) => x === selection.value) : t === selection.value)
-    ) {
-      found.push(i);
-    }
-  });
-  return found;
-}
-
 /** What the inspector shows for one cursor position. */
 export interface InspectorStep {
   events: readonly ScenarioEvent[];
   cursor: number;
-  selection?: Selection | undefined;
 }
 
 export interface TransportLines {
@@ -188,6 +175,39 @@ function renderTree(node: TreeNode): HTMLElement {
   return details;
 }
 
+/** A JSON path of an annotation as segments (the paths were checked by splitPayload). */
+function pathOf(path: string): string[] {
+  return parsePath(path) ?? [];
+}
+
+/** One line of an annotated payload: indented by depth, marked as in the closed payload. */
+function annotatedLine(
+  line: JsonLine,
+  changed: ReadonlySet<string>,
+  tracked: ReadonlySet<string | number>,
+): HTMLElement {
+  const dotted = line.segments.join('.');
+  const isChanged = [...changed].some((p) => dotted === p || dotted.startsWith(`${p}.`));
+  const key =
+    line.key === undefined
+      ? []
+      : [el('span', 'json-key', JSON.stringify(line.key)), el('span', 'json-punct', ': ')];
+  const comma = line.comma ? [el('span', 'json-punct', ',')] : [];
+  let text: Node[] = [el('span', 'json-punct', line.text)];
+  if (line.kind === 'leaf' && !/^[[{]/.test(line.text)) {
+    const value = JSON.parse(line.text) as Json;
+    const mark =
+      !isChanged && (typeof value === 'string' || typeof value === 'number') && tracked.has(value);
+    text = [el('span', `json-value${mark ? ' json-mark' : ''}`, line.text)];
+    if (typeof value === 'string' && REDACTED.test(value))
+      text.push(el('span', 'json-label', ' redacted'));
+  }
+  const node = el('div', `json-line${isChanged ? ' json-mark' : ''}`, ...key, ...text, ...comma);
+  node.dataset['depth'] = String(line.depth);
+  node.style.setProperty('--depth', String(line.depth));
+  return node;
+}
+
 function headerLine([k, v]: [string, string]): HTMLElement {
   const redacted = REDACTED.test(v) ? [el('span', 'json-label', ' redacted')] : [];
   return el(
@@ -203,21 +223,23 @@ export class Inspector {
   private readonly root: HTMLElement;
   private readonly context: InspectorContext;
   private chosen: TabId = 'payload';
+  /**
+   * The Annotations toggle (02 inspector.annotations.toggle): closed at start, kept while
+   * stepping; shared by the inspectors of a phone's rows (inspector.annotations.phone).
+   */
+  private readonly toggles: { annotated: boolean };
   /** The step last rendered, so unrelated player changes keep folds and focus. */
   private rendered: InspectorStep | undefined;
 
   constructor(root: HTMLElement, context: InspectorContext) {
     this.root = root;
     this.context = context;
+    this.toggles = context.toggles ?? { annotated: false };
     root.classList.add('inspector-body');
   }
 
   update(step: InspectorStep, force = false): void {
-    const same =
-      this.rendered?.events === step.events &&
-      this.rendered.cursor === step.cursor &&
-      this.rendered.selection?.key === step.selection?.key &&
-      this.rendered.selection?.value === step.selection?.value;
+    const same = this.rendered?.events === step.events && this.rendered.cursor === step.cursor;
     if (!force && same) return;
     this.rendered = { ...step };
     const active = document.activeElement;
@@ -246,9 +268,6 @@ export class Inspector {
       panels.set('payload', () => this.payload(event, step));
     if (event.http) panels.set('transport', () => this.transport(step));
     if (event.security_boundaries?.length) panels.set('security', () => this.security(event));
-    if (event.tracked_values && Object.keys(event.tracked_values).length) {
-      panels.set('lineage', () => this.lineage(event, step));
-    }
     const message = this.message(event);
     const available = ORDER.filter((t) => panels.has(t));
     if (!available.length) {
@@ -264,7 +283,7 @@ export class Inspector {
     const panel = el('div', 'tab-panel');
     panel.setAttribute('role', 'tabpanel');
     panel.id = `${prefix}-panel`;
-    // Reachable by keyboard even when it holds nothing focusable (Security, Lineage).
+    // Reachable by keyboard even when it holds nothing focusable (Security).
     panel.tabIndex = 0;
     focusKey(panel, 'panel');
     for (const id of available) {
@@ -312,9 +331,24 @@ export class Inspector {
   private message(event: ScenarioEvent): Node[] {
     const from = this.context.labels[event.sender] ?? event.sender;
     const to = this.context.labels[event.receiver] ?? event.receiver;
+    // What the message carries, under its explanation (02 inspector.carries).
+    const carries = event.carries?.length
+      ? [
+          el(
+            'div',
+            'carries',
+            el('span', 'small muted', 'It carries'),
+            el('ul', undefined, ...event.carries.map((c) => el('li', undefined, c))),
+          ),
+        ]
+      : [];
     const message = el('p', 'message', event.explanation);
-    if (this.context.route === false) return [message];
-    return [message, el('p', 'small muted', `${from} → ${to} · ${operationLabel(event)}`)];
+    if (this.context.route === false) return [message, ...carries];
+    return [
+      message,
+      el('p', 'small muted', `${from} → ${to} · ${operationLabel(event)}`),
+      ...carries,
+    ];
   }
 
   private notes(event: ScenarioEvent): Node[] {
@@ -354,6 +388,19 @@ export class Inspector {
         () => (status.textContent = 'Copy failed'),
       );
     });
+    const split = splitPayload(event.payload, event.annotations);
+    const block = `${this.context.id ?? 'inspector'}-json`;
+    if (split) {
+      const toggle = focusKey(el('button', 'annotations-toggle', 'Annotations'), 'annotations');
+      toggle.type = 'button';
+      toggle.setAttribute('aria-expanded', String(this.toggles.annotated));
+      toggle.setAttribute('aria-controls', block);
+      toggle.addEventListener('click', () => {
+        this.toggles.annotated = !this.toggles.annotated;
+        this.update(step, true);
+      });
+      tools.append(toggle);
+    }
     tools.append(status, copy);
     let changed = new Set<string>();
     if (event.protocol === 'LLM_API' && event.message_type === 'REQUEST') {
@@ -363,23 +410,111 @@ export class Inspector {
         .pop();
       changed = newInRequest(event.payload, before?.payload);
     }
-    const tree = jsonTree(event.payload as Json, {
-      ...(event.protocol === 'MCP' ? { fold: mcpBoilerplate } : {}),
-      changed,
-      // With a selection only its fields are highlighted (02 lineage_selection.payload).
-      tracked: step.selection
-        ? new Set(
-            trackedValues(event.tracked_values).has(step.selection.value)
-              ? [step.selection.value]
-              : [],
-          )
-        : trackedValues(event.tracked_values),
-    });
+    const tracked = trackedValues(event.tracked_values);
     const earlier =
       offersEarlierRevision(event) && this.context.earlierRevision
         ? [this.earlierRevision(this.context.earlierRevision)]
         : [];
-    return [tools, el('div', 'json', renderTree(tree)), ...this.notes(event), ...earlier];
+    let body: HTMLElement;
+    if (split && this.toggles.annotated) {
+      body = el(
+        'div',
+        'annotated',
+        ...split.flatMap((g, i) => this.annotationGroup(g, i, step, changed, tracked)),
+      );
+    } else {
+      const tree = jsonTree(event.payload as Json, {
+        ...(event.protocol === 'MCP' ? { fold: mcpBoilerplate } : {}),
+        changed,
+        tracked,
+      });
+      body = el('div', 'json', renderTree(tree));
+    }
+    body.id = block;
+    return [tools, body, ...this.notes(event), ...earlier];
+  }
+
+  /**
+   * One annotation group: its JSON lines as in the payload, then its callout with heading,
+   * sentence and one bullet per value (02 inspector.annotations.open).
+   */
+  private annotationGroup(
+    group: SplitGroup,
+    index: number,
+    step: InspectorStep,
+    changed: ReadonlySet<string>,
+    tracked: ReadonlySet<string | number>,
+  ): HTMLElement[] {
+    const event = step.events[step.cursor - 1];
+    const lines = el(
+      'div',
+      'json',
+      ...group.lines.map((line) => annotatedLine(line, changed, tracked)),
+    );
+    const bullets = Object.entries(group.annotation.values ?? {}).map(([path, meaning], n) => {
+      const found = resolvePath(event?.payload ?? null, pathOf(path));
+      const value = found?.value ?? null;
+      const item = el(
+        'li',
+        undefined,
+        el('code', 'annotation-value', valueLabel(value)),
+        ` – ${meaning}`,
+      );
+      const where = travel(step.events, step.cursor - 1, value, this.context.travel);
+      if (where) item.append(this.travelLine(where, step.cursor - 1, step, `${index}:${n}`));
+      return item;
+    });
+    const callout = el(
+      'div',
+      'annotation',
+      el('h3', 'annotation-heading', group.annotation.heading),
+      el('p', undefined, group.annotation.sentence),
+      ...(bullets.length ? [el('ul', 'annotation-values', ...bullets)] : []),
+    );
+    return [lines, callout];
+  }
+
+  /**
+   * "From the signed-in session · reaches the model at step m · the model repeats it at step w
+   * · the agent checks it at step c · sent to C at step t" (02 inspector.annotations.travel).
+   */
+  private travelLine(
+    where: Travel,
+    current: number,
+    step: InspectorStep,
+    key: string,
+  ): HTMLElement {
+    const line = el('span', 'travel small');
+    const at = (i: number, what: string): (Node | string)[] =>
+      i === current
+        ? ['here']
+        : ['at ', this.stepLink(i + 1, `step ${i + 1}`, `travel:${key}:${what}`)];
+    // Registry labels without their parenthetical: "Agent", not "Agent (host application …)".
+    const short = (id: string): string => (this.context.labels[id] ?? id).replace(/ \(.*\)$/, '');
+    if ('label' in where.origin) line.append(`From ${where.origin.label}`);
+    else {
+      const i = where.origin.index;
+      line.append('First seen ', ...at(i, 'first'));
+      const first = step.events[i];
+      if (first && i !== current) {
+        const from = short(first.sender);
+        line.append(
+          ` (${first.sender === first.receiver ? from : `${from} → ${short(first.receiver)}`})`,
+        );
+      }
+    }
+    for (const hop of where.hops) {
+      const what =
+        hop.kind === 'model'
+          ? 'reaches the model'
+          : hop.kind === 'repeats'
+            ? 'the model repeats it'
+            : hop.kind === 'checks'
+              ? 'the agent checks it'
+              : `sent to ${short(step.events[hop.index]?.receiver ?? '')}`;
+      line.append(` · ${what} `, ...at(hop.index, hop.kind));
+    }
+    return line;
   }
 
   /** The initialize handshake of an earlier revision, collapsed (02 inspector.earlier_revision). */
@@ -456,68 +591,6 @@ export class Inspector {
         el('p', 'boundary-id', id),
         el('p', undefined, el('span', 'muted', 'Risk: '), b?.risk ?? ''),
         el('p', undefined, el('span', 'muted', 'Mitigation: '), b?.mitigation ?? ''),
-      );
-    });
-  }
-
-  /**
-   * Each tracked key once, its values with the steps where they occurred up to this one,
-   * and a toggle that selects the value (02 inspector.lineage_tab, lineage_selection).
-   */
-  private lineage(event: ScenarioEvent, step: InspectorStep): Node[] {
-    return Object.entries(event.tracked_values ?? {}).map(([key, value]) => {
-      const values = (Array.isArray(value) ? value : [value]).filter(
-        (v): v is string | number => typeof v === 'string' || typeof v === 'number',
-      );
-      const items = values.map((v, i) => {
-        // Steps after the current one are not revealed.
-        const earlier = occurrences(step.events, { key, value: v }).filter(
-          (k) => k < step.cursor - 1,
-        );
-        const where: (Node | string)[] = [];
-        if (!earlier.length) where.push(el('span', 'muted', 'first here'));
-        // At most five later steps by number; selecting the value marks them all.
-        const LATER = 5;
-        earlier.slice(0, LATER + 1).forEach((k, n) => {
-          if (n === 1) where.push(el('span', 'muted', '; also '));
-          else if (n > 1) where.push(', ');
-          const link = this.stepLink(
-            k + 1,
-            n === 0 ? `first at step ${k + 1}` : `${k + 1}`,
-            `lineage:${key}:${i}:${n}`,
-          );
-          if (n > 0) link.setAttribute('aria-label', `step ${k + 1}`);
-          where.push(link);
-        });
-        const more = earlier.length - (LATER + 1);
-        if (more > 0) where.push(el('span', 'muted', ` and ${more} more`));
-        const selected = step.selection?.key === key && step.selection.value === v;
-        const toggle = focusKey(
-          el('button', 'select-value', selected ? 'Selected' : 'Select'),
-          `select:${key}:${i}`,
-        );
-        toggle.type = 'button';
-        toggle.setAttribute('aria-pressed', String(selected));
-        // A stable name; aria-pressed carries the state.
-        toggle.setAttribute('aria-label', `Select ${key} ${JSON.stringify(v)}`);
-        toggle.addEventListener('click', () =>
-          this.context.select(selected ? undefined : { key, value: v }),
-        );
-        return el(
-          'li',
-          undefined,
-          el('span', 'json-value json-mark', JSON.stringify(v)),
-          ' ',
-          ...where,
-          ' ',
-          toggle,
-        );
-      });
-      return el(
-        'div',
-        'lineage-row',
-        el('span', 'json-key', key),
-        el('ul', 'lineage-values', ...items),
       );
     });
   }

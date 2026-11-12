@@ -244,6 +244,32 @@ scenarios:
     - This replaces the initialize/initialized handshake of revisions up to 2025-11-25.
     security_boundaries:
     - agent-to-mcp
+    carries:
+    - 'the method server/discover: what does the server support?'
+    - the protocol revision and the client's name, as in every request
+    - JSON-RPC id 1, which the response repeats
+    annotations:
+    - heading: JSON-RPC envelope
+      sentence: 'Every MCP message is a JSON-RPC 2.0 message: a request names a method and an id, and
+        its response repeats that id.'
+      paths:
+      - jsonrpc
+      - id
+      - method
+      values:
+        jsonrpc: the JSON-RPC version, the same in every message
+        id: unique per request; the response repeats it
+        method: asks the server to describe itself; optional
+    - heading: Request metadata
+      sentence: Revision 2026-07-28 has no handshake that would remember the client, so every request
+        repeats the protocol revision and the client's identity here.
+      paths:
+      - params
+      values:
+        params._meta["io.modelcontextprotocol/protocolVersion"]: the protocol revision; the MCP-Protocol-Version
+          header must repeat it
+        params._meta["io.modelcontextprotocol/clientInfo"]: the client's self-reported name and version
+        params._meta["io.modelcontextprotocol/clientCapabilities"]: '{} declares no optional client features'
   - id: mcp-03
     scenario_id: mcp-balance
     phase: setup
@@ -291,6 +317,55 @@ scenarios:
     - path: mcp_state.server
       op: set
       value_ref: payload.result
+    carries:
+    - the protocol revisions the server supports
+    - 'its capabilities: tools and resources'
+    - instructions for the model, which are lower-trust text
+    - how long the client may cache the answer
+    annotations:
+    - heading: JSON-RPC envelope
+      sentence: The response repeats the request's id, so the client knows which of its requests this
+        answers.
+      paths:
+      - jsonrpc
+      - id
+      values:
+        jsonrpc: the JSON-RPC version, the same in every message
+        id: the id of the server/discover request, repeated
+    - heading: Result type
+      sentence: MCP says whether the request is finished or the server still needs input from the client.
+      paths:
+      - result.resultType
+      values:
+        result.resultType: 'complete: the request finished; the server needs nothing more from the client'
+    - heading: Server capabilities
+      sentence: The result tells the client which revisions and features the server supports before it
+        uses any of them.
+      paths:
+      - result.supportedVersions
+      - result.capabilities
+      - result.instructions
+      values:
+        result.supportedVersions: revisions the server speaks; the client uses 2026-07-28
+        result.capabilities.tools: '{} means supported, with no further options: the server offers tools'
+        result.capabilities.resources: '{} means supported, with no further options: the server offers
+          resources'
+        result.instructions: text for the model; lower trust than the agent's own prompt
+    - heading: Caching
+      sentence: The client may reuse this answer instead of asking again, within these limits.
+      paths:
+      - result.ttlMs
+      - result.cacheScope
+      values:
+        result.ttlMs: how long the answer may be reused, in milliseconds
+        result.cacheScope: 'public: the answer is the same for every user, so a cache may share it'
+    - heading: Server metadata
+      sentence: MCP keeps the server's self-reported identity in _meta, apart from the result's data.
+      paths:
+      - result._meta
+      values:
+        result._meta["io.modelcontextprotocol/serverInfo"]: name and version the server reports about
+          itself; not proof of who it is
   - id: mcp-04
     scenario_id: mcp-balance
     phase: discovery
@@ -340,6 +415,32 @@ scenarios:
     explanation: Request the tool catalogue.
     security_boundaries:
     - agent-to-mcp
+    carries:
+    - 'the method tools/list: which tools are there?'
+    - the protocol revision and the client's name, as in every request
+    - JSON-RPC id 2, which the response repeats
+    annotations:
+    - heading: JSON-RPC envelope
+      sentence: 'Every MCP message is a JSON-RPC 2.0 message: a request names a method and an id, and
+        its response repeats that id.'
+      paths:
+      - jsonrpc
+      - id
+      - method
+      values:
+        jsonrpc: the JSON-RPC version, the same in every message
+        id: unique per request; the response repeats it
+        method: asks for the server's tool catalogue
+    - heading: Request metadata
+      sentence: Revision 2026-07-28 has no handshake that would remember the client, so every request
+        repeats the protocol revision and the client's identity here.
+      paths:
+      - params
+      values:
+        params._meta["io.modelcontextprotocol/protocolVersion"]: the protocol revision; the MCP-Protocol-Version
+          header must repeat it
+        params._meta["io.modelcontextprotocol/clientInfo"]: the client's self-reported name and version
+        params._meta["io.modelcontextprotocol/clientCapabilities"]: '{} declares no optional client features'
   - id: mcp-06
     scenario_id: mcp-balance
     phase: discovery
@@ -434,6 +535,58 @@ scenarios:
     - path: mcp_state.discovered_tools
       op: set
       value_ref: payload.result.tools
+    carries:
+    - 'two tool definitions: name, description, input and output schema'
+    - a read-only hint for each tool
+    - how long the client may cache the list
+    annotations:
+    - heading: JSON-RPC envelope
+      sentence: The response repeats the request's id, so the client knows which of its requests this
+        answers.
+      paths:
+      - jsonrpc
+      - id
+      values:
+        jsonrpc: the JSON-RPC version, the same in every message
+        id: the id of the tools/list request, repeated
+    - heading: Result type
+      sentence: MCP says whether the request is finished or the server still needs input from the client.
+      paths:
+      - result.resultType
+      values:
+        result.resultType: 'complete: the request finished; the server needs nothing more from the client'
+    - heading: 'Tool: get_customer'
+      sentence: Each tool has a name the model will use, a description it reads and schemas for its arguments
+        and its result.
+      paths:
+      - result.tools.0
+      values:
+        result.tools.0.name: the name a tool call must use
+        result.tools.0.description: what the model reads to decide whether to use it
+    - heading: 'Tool: get_customer_balance'
+      sentence: This is the tool the balance question needs, described the same way.
+      paths:
+      - result.tools.1
+      values:
+        result.tools.1.name: the name a tool call must use
+        result.tools.1.inputSchema: 'arguments: one customerId string and nothing else'
+        result.tools.1.outputSchema: the shape of structuredContent in the tool's result
+        result.tools.1.annotations.readOnlyHint: the server says the tool only reads; a hint, not a guarantee
+    - heading: Caching
+      sentence: The client may reuse the list instead of asking again, within these limits.
+      paths:
+      - result.ttlMs
+      - result.cacheScope
+      values:
+        result.ttlMs: how long the answer may be reused, in milliseconds
+        result.cacheScope: 'public: the answer is the same for every user, so a cache may share it'
+    - heading: Server metadata
+      sentence: MCP keeps the server's self-reported identity in _meta, apart from the result's data.
+      paths:
+      - result._meta
+      values:
+        result._meta["io.modelcontextprotocol/serverInfo"]: name and version the server reports about
+          itself; not proof of who it is
   - id: mcp-07
     scenario_id: mcp-balance
     phase: discovery
@@ -563,6 +716,36 @@ scenarios:
       action: set
       value_ref: payload
       description: System prompt, user question and tool definitions become model-visible
+    carries:
+    - the system prompt, with the signed-in customer's ID
+    - the user's question
+    - the two tool definitions, in the model provider's format
+    annotations:
+    - heading: System prompt
+      sentence: The agent's own instructions come first and tell the model who the customer is and how
+        to use the tools.
+      paths:
+      - messages.0
+      values:
+        messages.0.role: 'system: written by the agent, not by the user'
+        messages.0.content: includes customer ID 123 from the signed-in session
+    - heading: Question
+      sentence: The user's words reach the model unchanged, as a user message.
+      paths:
+      - messages.1
+      values:
+        messages.1.role: 'user: the person asking'
+        messages.1.content: the question as the user typed it
+    - heading: Tool definitions
+      sentence: The model can only ask for the tools listed here, and it sees only their name, description
+        and input schema.
+      paths:
+      - tools
+      values:
+        tools.0.name: a tool for the customer's profile
+        tools.1.name: a tool for the account balance
+        tools.1.description: what the model reads to decide whether to use the tool
+        tools.1.parameters: 'JSON Schema the arguments must match: one customerId string'
   - id: mcp-11
     scenario_id: mcp-balance
     phase: planning
@@ -598,6 +781,27 @@ scenarios:
       action: append
       description: Assistant tool-call message stored
       value_ref: payload.message
+    carries:
+    - a request to run get_customer_balance, not an answer
+    - 'the arguments the model filled in: customer ID 123'
+    - a call id that the tool result must refer to
+    annotations:
+    - heading: Tool call
+      sentence: Instead of text, the model returns a request that the agent run one of the offered tools.
+      paths:
+      - message
+      values:
+        message.role: 'assistant: the model''s turn'
+        message.tool_calls.0.id: call id; the tool message with the result must repeat it
+        message.tool_calls.0.name: the tool the model chose from the definitions
+        message.tool_calls.0.arguments.customerId: copied from the system prompt; the agent checks it
+          against the signed-in customer
+    - heading: Stop reason
+      sentence: The stop reason tells the agent why the model stopped and what it expects next.
+      paths:
+      - stop_reason
+      values:
+        stop_reason: 'tool_use: the model waits for the tool''s result'
   - id: mcp-12
     scenario_id: mcp-balance
     phase: planning
@@ -688,6 +892,46 @@ scenarios:
     - agent-to-mcp
     tracked_values:
       customerId: '123'
+    carries:
+    - the tool name the model chose
+    - the customer ID, which the agent checked against the signed-in customer
+    - the protocol revision, which the MCP-Protocol-Version header repeats
+    - JSON-RPC id 3, which the result repeats
+    annotations:
+    - heading: JSON-RPC envelope
+      sentence: 'Every MCP message is a JSON-RPC 2.0 message: a request names a method and an id, and
+        its response repeats that id.'
+      paths:
+      - jsonrpc
+      - id
+      - method
+      values:
+        jsonrpc: the JSON-RPC version, the same in every message
+        id: unique per request; the response repeats it
+        method: 'tools/call: run one tool; the Mcp-Method header repeats it'
+    - heading: Tool call
+      sentence: The client names the tool to run exactly as the server listed it.
+      paths:
+      - params.name
+      values:
+        params.name: the tool the model chose; the Mcp-Name header repeats it
+    - heading: Arguments
+      sentence: The arguments must match the tool's input schema, and the agent has already checked them.
+      paths:
+      - params.arguments
+      values:
+        params.arguments.customerId: whose balance to read; the agent checked it against the signed-in
+          customer
+    - heading: Request metadata
+      sentence: Revision 2026-07-28 has no handshake that would remember the client, so every request
+        repeats the protocol revision and the client's identity here.
+      paths:
+      - params._meta
+      values:
+        params._meta["io.modelcontextprotocol/protocolVersion"]: the protocol revision; the MCP-Protocol-Version
+          header must repeat it
+        params._meta["io.modelcontextprotocol/clientInfo"]: the client's self-reported name and version
+        params._meta["io.modelcontextprotocol/clientCapabilities"]: '{} declares no optional client features'
   - id: mcp-15
     scenario_id: mcp-balance
     phase: tool
@@ -753,6 +997,10 @@ scenarios:
     - mcp-to-rest
     tracked_values:
       customerId: '123'
+    carries:
+    - the customer ID, in the URL path
+    - the server's own service token, not the MCP access token
+    - 'no body: a GET request'
   - id: mcp-18
     scenario_id: mcp-balance
     phase: backend
@@ -832,6 +1080,21 @@ scenarios:
     tracked_values:
       customerId: '123'
       balance: 12500.75
+    carries:
+    - the balance, read from the core ledger
+    - its currency
+    - the customer it belongs to
+    annotations:
+    - heading: Balance
+      sentence: The bank's REST API answers in its own JSON format, which knows nothing about MCP.
+      paths:
+      - customerId
+      - currency
+      - balance
+      values:
+        customerId: the customer whose balance this is
+        currency: 'CHF: Swiss francs'
+        balance: the current balance from the core ledger
   - id: mcp-22
     scenario_id: mcp-balance
     phase: tool
@@ -894,6 +1157,56 @@ scenarios:
     tracked_values:
       customerId: '123'
       balance: 12500.75
+    carries:
+    - the balance as text, for clients that read only content
+    - the same data as structured JSON that matches the output schema
+    - 'isError false: the tool succeeded'
+    - JSON-RPC id 3, matching the tools/call request
+    annotations:
+    - heading: JSON-RPC envelope
+      sentence: The response repeats the request's id, so the client knows which of its requests this
+        answers.
+      paths:
+      - jsonrpc
+      - id
+      values:
+        jsonrpc: the JSON-RPC version, the same in every message
+        id: the id of the tools/call request, repeated
+    - heading: Result type
+      sentence: MCP says whether the request is finished or the server still needs input from the client.
+      paths:
+      - result.resultType
+      values:
+        result.resultType: 'complete: the request finished; the server needs nothing more from the client'
+    - heading: Result content
+      sentence: Content is what a client can pass on to a model, here the backend's JSON as one text block.
+      paths:
+      - result.content
+      values:
+        result.content.0.type: 'text: a plain text block'
+        result.content.0.text: the same data as JSON text; the agent sends this to the model
+    - heading: Structured result
+      sentence: Structured content carries the same data as typed JSON that matches the tool's output
+        schema.
+      paths:
+      - result.structuredContent
+      values:
+        result.structuredContent.customerId: the customer the result is for
+        result.structuredContent.currency: 'CHF: Swiss francs'
+        result.structuredContent.balance: the balance from the REST API, unchanged
+    - heading: Outcome
+      sentence: A failed tool would still answer, with isError true and a message the model can explain.
+      paths:
+      - result.isError
+      values:
+        result.isError: 'false: the tool succeeded'
+    - heading: Server metadata
+      sentence: MCP keeps the server's self-reported identity in _meta, apart from the result's data.
+      paths:
+      - result._meta
+      values:
+        result._meta["io.modelcontextprotocol/serverInfo"]: name and version the server reports about
+          itself; not proof of who it is
   - id: mcp-24
     scenario_id: mcp-balance
     phase: tool
@@ -1014,6 +1327,54 @@ scenarios:
       action: set
       value_ref: payload
       description: Tool result becomes model-visible for the first time
+    carries:
+    - 'the whole conversation again: system prompt, question and tool call'
+    - the tool result with the balance, seen by the model for the first time
+    - the same tool definitions
+    annotations:
+    - heading: System prompt
+      sentence: The agent's own instructions come first and tell the model who the customer is and how
+        to use the tools.
+      paths:
+      - messages.0
+      values:
+        messages.0.role: 'system: written by the agent, not by the user'
+        messages.0.content: includes customer ID 123 from the signed-in session
+    - heading: Question
+      sentence: The user's words reach the model unchanged, as a user message.
+      paths:
+      - messages.1
+      values:
+        messages.1.role: 'user: the person asking'
+        messages.1.content: the question as the user typed it
+    - heading: Earlier tool call
+      sentence: The model's own tool call is sent back, because the model API keeps no memory between
+        requests.
+      paths:
+      - messages.2
+      values:
+        messages.2.role: 'assistant: the model''s earlier turn'
+        messages.2.tool_calls.0.id: the call id the tool message below refers to
+        messages.2.tool_calls.0.arguments.customerId: the customer the tool was called for
+    - heading: Tool result
+      sentence: The tool's result reaches the model only now, as a tool message that names the call it
+        answers.
+      paths:
+      - messages.3
+      values:
+        messages.3.role: 'tool: a result the agent adds, not words of the user'
+        messages.3.tool_call_id: matches the id of the tool call above
+        messages.3.content: the text content of the tools/call result, with the balance
+    - heading: Tool definitions
+      sentence: The model can only ask for the tools listed here, and it sees only their name, description
+        and input schema.
+      paths:
+      - tools
+      values:
+        tools.0.name: a tool for the customer's profile
+        tools.1.name: a tool for the account balance
+        tools.1.description: what the model reads to decide whether to use the tool
+        tools.1.parameters: 'JSON Schema the arguments must match: one customerId string'
   - id: mcp-27
     scenario_id: mcp-balance
     phase: generation
@@ -1035,6 +1396,23 @@ scenarios:
     tracked_values:
       customerId: '123'
       balance: 12500.75
+    carries:
+    - the final answer, with the balance the tool returned
+    - 'end_turn: the model asks for no further tool'
+    annotations:
+    - heading: Answer
+      sentence: The model's last turn is plain text for the user, written from the tool result.
+      paths:
+      - message
+      values:
+        message.role: 'assistant: the model''s turn'
+        message.content: states the balance from the tool result; simulated output
+    - heading: Stop reason
+      sentence: The stop reason tells the agent why the model stopped and what it expects next.
+      paths:
+      - stop_reason
+      values:
+        stop_reason: 'end_turn: the model is done and asks for nothing more'
   - id: mcp-28
     scenario_id: mcp-balance
     phase: answer

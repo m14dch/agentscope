@@ -93,6 +93,190 @@ MCP_RES = {"server/discover": "DiscoverResultResponse", "tools/list": "ListTools
            "tools/call": "CallToolResultResponse"}
 
 
+# ---------------------------------------------------------------- annotations
+# 03 annotation_rules; mirrors src/scenarios/annotations.ts with the same messages.
+ANNOTATED_PROTOCOLS = ("MCP", "LLM_API", "HTTP")
+_STRING = re.compile(r'"(?:[^"\\]|\\.)*"')
+_PLAIN = re.compile(r"[^.\[\]]+")
+_INDEX = re.compile(r"(0|[1-9][0-9]*)$")
+
+
+def parse_path(path):
+    """A JSON path ('$', 'a.b.0', 'a["x.y"].c') as its segments, or None."""
+    if path == "$":
+        return []
+    out, rest, first = [], path, True
+    while rest:
+        if rest.startswith("["):
+            m = _STRING.match(rest, 1)
+            if not m or rest[m.end():m.end() + 1] != "]":
+                return None
+            out.append(json.loads(m.group(0)))
+            rest = rest[m.end() + 1:]
+        else:
+            if not first:
+                if not rest.startswith("."):
+                    return None
+                rest = rest[1:]
+            m = _PLAIN.match(rest)
+            if not m:
+                return None
+            out.append(m.group(0))
+            rest = rest[m.end():]
+        first = False
+    return out or None
+
+
+def format_path(segments):
+    if not segments:
+        return "$"
+    out = ""
+    for i, s in enumerate(segments):
+        if not s or re.search(r'[.\[\]"]', s):
+            out += "[" + json.dumps(s, ensure_ascii=False) + "]"
+        else:
+            out += ("." + s) if i else s
+    return out
+
+
+def resolve_path(value, segments):
+    """(True, value) when the path exists, else (False, None)."""
+    node = value
+    for s in segments:
+        if isinstance(node, list):
+            if not _INDEX.match(s) or int(s) >= len(node):
+                return False, None
+            node = node[int(s)]
+        elif isinstance(node, dict) and s in node:
+            node = node[s]
+        else:
+            return False, None
+    return True, node
+
+
+def _starts_with(path, prefix):
+    return len(prefix) <= len(path) and list(path[:len(prefix)]) == list(prefix)
+
+
+def _members(value):
+    if isinstance(value, list):
+        return [(str(i), v) for i, v in enumerate(value)]
+    if isinstance(value, dict):
+        return list(value.items())
+    return []
+
+
+def _one_sentence(s):
+    t = s.strip()
+    return t.endswith(".") and not re.search(r"[.!?]\s+\S", t)
+
+
+_GROUP_KEYS = ("heading", "sentence", "paths", "values")
+
+
+def _document_order(payload, a, b):
+    """Negative when path a comes before path b in the payload's text."""
+    for i in range(min(len(a), len(b))):
+        if a[i] == b[i]:
+            continue
+        keys = [k for k, _ in _members(resolve_path(payload, a[:i])[1])]
+        return keys.index(a[i]) - keys.index(b[i])
+    return len(a) - len(b)
+
+
+def _q(text):
+    return json.dumps(text, ensure_ascii=False)
+
+
+def carries_problem(carries):
+    ok = isinstance(carries, list) and carries and all(
+        isinstance(c, str) and c.strip() and len(c) <= 100 and not c.rstrip().endswith(".") for c in carries)
+    return None if ok else ("carries must be a non-empty list of phrases of at most 100 characters "
+                            "without a final full stop")
+
+
+def annotation_problems(payload, annotations):
+    if not isinstance(annotations, list) or not annotations:
+        return ["annotations must be a non-empty list of groups"]
+    if payload is None:
+        return ["annotations need a payload"]
+    problems, paths = [], []
+    for g, raw in enumerate(annotations):
+        at = f"annotations[{g}]"
+        if not isinstance(raw, dict):
+            problems.append(f"{at} must be a group {{heading, sentence, paths, values}}")
+            continue
+        for key in raw:
+            if key not in _GROUP_KEYS:
+                problems.append(f"{at} has unknown key {_q(key)}")
+        heading = raw.get("heading")
+        if not isinstance(heading, str) or not heading.strip() or len(heading) > 40:
+            problems.append(f"{at} heading must be a phrase of 1 to 40 characters")
+        sentence = raw.get("sentence")
+        if not isinstance(sentence, str) or not _one_sentence(sentence):
+            problems.append(f"{at} sentence must be one sentence ending with a full stop")
+        lst = raw.get("paths")
+        if not isinstance(lst, list) or not lst or not all(isinstance(p, str) for p in lst):
+            problems.append(f"{at} needs a non-empty list of paths")
+            continue
+        own = []
+        for text in lst:
+            segments = parse_path(text)
+            if segments is None:
+                problems.append(f"{at} path {_q(text)} is not a JSON path")
+            elif not resolve_path(payload, segments)[0]:
+                problems.append(f"{at} path {_q(text)} does not exist in the payload")
+            else:
+                paths.append((g, text, segments))
+                own.append(segments)
+        if "values" not in raw:
+            continue
+        values = raw["values"]
+        if not isinstance(values, dict):
+            problems.append(f"{at} values must map paths to meanings")
+            continue
+        previous = None
+        for text, meaning in values.items():
+            segments = parse_path(text)
+            if segments is None:
+                problems.append(f"{at} value path {_q(text)} is not a JSON path")
+            elif not resolve_path(payload, segments)[0]:
+                problems.append(f"{at} value path {_q(text)} does not exist in the payload")
+            elif not any(_starts_with(segments, p) for p in own):
+                problems.append(f"{at} value path {_q(text)} lies outside the group's paths")
+            else:
+                if previous is not None and _document_order(payload, previous, segments) > 0:
+                    problems.append(f"{at} value path {_q(text)} comes before the value above it in the payload")
+                previous = segments
+            if not isinstance(meaning, str) or not meaning.strip():
+                problems.append(f"{at} value {_q(text)} needs a meaning")
+    for i, (ga, ta, sa) in enumerate(paths):
+        for gb, tb, sb in paths[i + 1:]:
+            if _starts_with(sa, sb) or _starts_with(sb, sa):
+                problems.append(f"annotations[{ga}] path {_q(ta)} overlaps annotations[{gb}] path {_q(tb)}")
+    if problems:
+        return problems
+    state = {"last": -1, "ordered": True}
+
+    def walk(value, segments):
+        held = next((p for p in paths if _starts_with(segments, p[2])), None)
+        if held:
+            if held[0] < state["last"] and state["ordered"]:
+                state["ordered"] = False
+                problems.append(f"annotations[{held[0]}] follows annotations[{state['last']}] in the payload: "
+                                "groups must be in payload order")
+            state["last"] = max(state["last"], held[0])
+            return
+        if not any(_starts_with(p[2], segments) for p in paths):
+            problems.append(f"{format_path(segments)} lies under no group's path (a gap)")
+            return
+        for k, v in _members(value):
+            walk(v, segments + [k])
+
+    walk(payload, [])
+    return problems
+
+
 def check_scenario(scn, ctx):
     sid = scn["id"]
     events = scn["events"]
@@ -165,6 +349,16 @@ def check_scenario(scn, ctx):
             if ch.get("target") == "model_visible_messages" and (
                     e["protocol"] != "LLM_API" or e["message_type"] != "REQUEST"):
                 err(where, "model_visible_messages changes only on LLM requests")
+        if "carries" in e and (problem := carries_problem(e["carries"])):
+            err(where, problem)
+        if "annotations" in e:
+            for problem in annotation_problems(e.get("payload"), e["annotations"]):
+                err(where, problem)
+        if e["protocol"] in ANNOTATED_PROTOCOLS:
+            if "carries" not in e:
+                err(where, "missing carries")
+            if isinstance(e.get("payload"), (dict, list)) and "annotations" not in e:
+                err(where, "missing annotations")
         for ch in e.get("state_changes", []) + e.get("context_changes", []):
             if "value_ref" in ch:
                 try:
@@ -871,6 +1065,13 @@ def main():
     if "DiscoverRequest" not in ctx["schema"].get("$defs", {}):
         err("--mcp-schema", "schema lacks DiscoverRequest; it is not revision 2026-07-28 or later")
 
+    # Origins in the initial state (03 lineage.origins); mirrors src/scenarios/validate.ts.
+    for key, origin in engine["lineage"].get("origins", {}).items():
+        if key not in engine["lineage"]["tracked"]:
+            err("03 lineage.origins", f"{key} is not a tracked key")
+        o = origin if isinstance(origin, dict) else {}
+        if not str(o.get("state") or "").strip() or not str(o.get("label") or "").strip():
+            err("03 lineage.origins", f"{key} needs a state and a label")
     # One scenario per use case (03 scenario_format.one_scenario_per_use_case): no variants.
     for where, doc in (("04", mcp), ("05", rag), ("06 combined", cmp_["combined"])):
         if "variants" in doc:

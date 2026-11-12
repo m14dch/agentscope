@@ -557,6 +557,20 @@ test.describe('at 390 × 844', () => {
     expect(prompt && message && prompt.y + prompt.height <= message.y).toBe(true);
   });
 
+  // 08-acceptance-tests.yaml e2e_tests: annotated-payload, on the phone.
+  test('annotations open inside step details, wrap in one column and keep 44 px targets', async ({
+    page,
+  }) => {
+    await page.goto('./#/mcp/mcp-balance/14/protocol');
+    await list(page).and(page.locator('[data-measured]')).waitFor();
+    await expect(page.locator('.inspector .carries li')).toHaveCount(4);
+    await page.getByRole('button', { name: 'Step details' }).click();
+    await page.getByRole('button', { name: 'Annotations' }).click();
+    await expect(page.locator('#inspector-json').getByRole('heading', { level: 3 })).toHaveCount(4);
+    expect(await overflow(page)).toEqual([]);
+    expect(await smallTargets(page)).toEqual([]);
+  });
+
   test('architecture groups expand from the step list by touch and keyboard', async ({ page }) => {
     await page.goto('./#/mcp/mcp-balance/14/architecture');
     await list(page).and(page.locator('[data-measured]')).waitFor();

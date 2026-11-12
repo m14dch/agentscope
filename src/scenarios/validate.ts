@@ -4,6 +4,7 @@
  * specifications/tools/validate_specs.py). Every problem names its scenario and event.
  */
 import { applyEvent, EngineError, initialSnapshot } from '../engine/reducer.ts';
+import { annotationProblems, carriesProblem } from './annotations.ts';
 import { buildRegistry, getPath } from './expand.ts';
 import type { Json, Registry, Scenario, ScenarioEvent, SpecSources } from './types.ts';
 
@@ -17,7 +18,12 @@ export interface ValidationContext {
   /** Allowed values of the enum event fields. */
   enums: Record<string, string[]>;
   revision: string;
+  /** Protocols whose events need carries and, with a body, annotations (03 annotation_rules.required). */
+  annotated?: readonly string[];
 }
+
+/** 03 annotation_rules.required. */
+export const ANNOTATED_PROTOCOLS = ['MCP', 'LLM_API', 'HTTP'];
 
 /** agent_state is an append-only log; model_visible_messages is replaced by each LLM request. */
 const CONTEXT_ACTIONS: Record<string, string> = {
@@ -45,6 +51,7 @@ export function contextFrom(sources: SpecSources): ValidationContext {
       ]),
     ),
     revision: sources.mcp.protocol.revision,
+    annotated: ANNOTATED_PROTOCOLS,
   };
 }
 
@@ -220,6 +227,17 @@ function checkScenario(
         err(where, 'model_visible_messages changes only on LLM requests');
       }
     }
+    if (Object.hasOwn(e, 'carries')) {
+      const problem = carriesProblem(e.carries);
+      if (problem) err(where, problem);
+    }
+    if (Object.hasOwn(e, 'annotations'))
+      for (const problem of annotationProblems(e.payload, e.annotations)) err(where, problem);
+    if (ctx.annotated?.includes(e.protocol)) {
+      if (!Object.hasOwn(e, 'carries')) err(where, 'missing carries');
+      if (e.payload !== null && typeof e.payload === 'object' && !Object.hasOwn(e, 'annotations'))
+        err(where, 'missing annotations');
+    }
     for (const ch of [...list(e.state_changes), ...list(e.context_changes)].map(obj)) {
       const ref = ch['value_ref'];
       if (ref !== undefined && getPath(e as unknown as Json, text(ref)) === undefined) {
@@ -390,6 +408,14 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
   const { registry, problems } = buildRegistry(sources);
   problems.push(...validateRegistry(registry, contextFrom(sources)));
   const err = (where: string, msg: string): void => void problems.push(`${where}: ${msg}`);
+  // Origins in the initial state (03 lineage.origins); mirrors validate_specs.py.
+  const { tracked, origins = {} } = sources.engine.lineage;
+  for (const [key, origin] of Object.entries(origins)) {
+    if (!tracked.includes(key)) err('03 lineage.origins', `${key} is not a tracked key`);
+    const o = obj(origin);
+    if (!text(o['state']).trim() || !text(o['label']).trim())
+      err('03 lineage.origins', `${key} needs a state and a label`);
+  }
   // One scenario per use case (03 scenario_format.one_scenario_per_use_case): no variants.
   for (const [where, doc] of [
     ['04', sources.mcp],

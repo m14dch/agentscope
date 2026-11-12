@@ -7,7 +7,8 @@
 import type { Player } from '../engine/player.ts';
 import { levelAnnouncement, setZoom, zoomControl } from '../app/controls.ts';
 import { type Level, stageSpans, zoomCursor, zoomed } from '../diagram/zoom.ts';
-import { type Boundary, Inspector, occurrences, type Selection } from '../inspector/inspector.ts';
+import { type Boundary, Inspector } from '../inspector/inspector.ts';
+import type { TravelSources } from '../inspector/annotated.ts';
 import type { EarlierRevision, Scenario, ScenarioEvent } from '../scenarios/types.ts';
 import { type EventRow, eventRows, groupAt, type GroupRow, groupRows, stageItems } from './rows.ts';
 import { allButtons, el, fold, groupEvent, rowItem, setOpen, stepNumber } from './dom.ts';
@@ -34,6 +35,8 @@ export interface PhoneStepsOptions {
   level: Level;
   boundaries: readonly Boundary[];
   earlierRevision?: EarlierRevision | undefined;
+  /** The initial state and 03 lineage.origins, for the travel lines (inspector.annotations.travel). */
+  travel?: TravelSources | undefined;
   /** The parameter controls, when the scenario has parameters (rag_controls). */
   parameters?: HTMLElement | undefined;
   /** The panels the event at `step` holds, as of that step. */
@@ -52,8 +55,6 @@ interface Row {
   /** Builds the body's content; returns what to dispose of when it closes. */
   fill: (reveal: boolean) => (() => void)[];
   dispose: (() => void)[];
-  /** The step's inspector while open (Protocol), for a lineage selection. */
-  inspector?: { view: Inspector; step: number } | undefined;
 }
 
 export class PhoneSteps {
@@ -64,7 +65,8 @@ export class PhoneSteps {
   /** Keys of rows whose prediction prompt was answered with "Show the step". */
   private readonly revealed = new Set<string>();
   private rows: Row[] = [];
-  private selection: Selection | undefined;
+  /** The Annotations toggle, kept as the learner left it for every row (inspector.annotations.phone). */
+  private readonly toggles = { annotated: false };
   private readonly zoom: HTMLElement;
   private readonly announcer: HTMLElement;
   private readonly headline: HTMLElement;
@@ -149,8 +151,6 @@ export class PhoneSteps {
 
   /** After a parameter change: the rows of events still played stay open. */
   rebuild(): void {
-    if (this.selection && !occurrences(this.options.player.playback.events, this.selection).length)
-      this.selection = undefined;
     this.render();
   }
 
@@ -292,15 +292,15 @@ export class PhoneSteps {
       boundaries: this.options.boundaries,
       earlierRevision: this.options.earlierRevision,
       jump: (k) => this.jump(k),
-      select: (selection) => this.select(selection),
+      travel: this.options.travel,
+      toggles: this.toggles,
       id: `step-${r.step}-inspector`,
       name: `Step ${r.step} details`,
       route: false,
     });
-    view.update({ events: this.events, cursor: r.step, selection: this.selection });
+    view.update({ events: this.events, cursor: r.step });
     // The message can take focus after "Show the step", so the reader continues there.
     holder.querySelector('.message')?.setAttribute('tabindex', '-1');
-    row.inspector = { view, step: r.step };
     const panels = this.panelsAt(row, r);
     row.body.replaceChildren(...before, holder, ...panels.map((p) => p.root));
     return panels.flatMap((p) => (p.destroy ? [p.destroy] : []));
@@ -351,7 +351,6 @@ export class PhoneSteps {
   private close(row: Row): void {
     for (const d of row.dispose) d();
     row.dispose = [];
-    row.inspector = undefined;
     setOpen(row, false);
     row.body.replaceChildren();
   }
@@ -399,14 +398,5 @@ export class PhoneSteps {
     this.options.player.jump(step);
     this.openAt(step, true);
     this.rowAt(step)?.button.focus({ preventScroll: true });
-  }
-
-  /** A lineage selection marks the fields in the open payloads (02 lineage_selection.payload). */
-  private select(selection: Selection | undefined): void {
-    this.selection = selection;
-    for (const row of this.rows) {
-      const i = row.inspector;
-      if (i) i.view.update({ events: this.events, cursor: i.step, selection });
-    }
   }
 }

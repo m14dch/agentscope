@@ -101,10 +101,6 @@ export interface Arrow {
   visibility: Visibility;
   /** Current step or its pair. */
   emphasized: boolean;
-  /** Carries the selected lineage value (02 lineage_selection.diagram). */
-  selected: boolean;
-  /** Measured label width, for the selection mark behind it. */
-  labelWidth: number;
 }
 
 export interface Group {
@@ -125,10 +121,6 @@ export interface Group {
   current: boolean;
   /** Arrows shown inside the group when expanded (events up to the cursor). */
   arrows: Arrow[];
-  /** A reached member carries the selected lineage value. */
-  selected: boolean;
-  /** Measured caption width, for the selection mark behind it. */
-  captionWidth: number;
   /** Width of the widest line of the takeaway and caption, for the paper behind them. */
   textWidth: number;
 }
@@ -171,8 +163,6 @@ export interface LayoutInput {
   level: Level;
   /** Text measurement; defaults to a conservative estimate. */
   measure?: Measure;
-  /** Indices of events whose tracked values include the selected lineage value. */
-  selected?: ReadonlySet<number>;
   /** 0 to events.length (03 state_model.cursor). */
   cursor: number;
   expanded: ReadonlySet<string>;
@@ -365,7 +355,6 @@ export function layout(input: LayoutInput): DiagramLayout {
     const shown = visibility(index, cursor);
     const vis = input.held && shown === 'current' ? 'past' : shown;
     const emphasized = vis === 'current' || (index === pair && index < cursor);
-    const labelWidth = measure(label, emphasized);
     return {
       index,
       event: e,
@@ -379,8 +368,6 @@ export function layout(input: LayoutInput): DiagramLayout {
       line: lineKind(e),
       visibility: vis,
       emphasized,
-      selected: index < cursor && !!input.selected?.has(index),
-      labelWidth,
     };
   };
 
@@ -442,8 +429,6 @@ export function layout(input: LayoutInput): DiagramLayout {
         x2: Math.max(spanRight, textRight + SIZES.groupPad),
         expanded: open,
         current: isCurrent,
-        selected: members.some(([, i]) => i < cursor && !!input.selected?.has(i)),
-        captionWidth: measure(caption),
         textWidth,
         arrows: shown,
       });

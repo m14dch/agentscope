@@ -9,7 +9,6 @@
 import { type Chunk, type IndexedDocument, sourceLines, words } from '../rag/engine.ts';
 import { thresholdText } from '../rag/derive.ts';
 import type { Json, ScenarioEvent } from '../scenarios/types.ts';
-import type { Selection } from './inspector.ts';
 
 type Obj = Record<string, Json>;
 const obj = (v: Json | undefined): Obj =>
@@ -750,7 +749,6 @@ export class RetrievalPanel {
   readonly root: HTMLElement;
   private readonly context: RetrievalContext;
   private model: RetrievalModel | undefined;
-  private selection: Selection | undefined;
   /** The open citation's number. */
   private open: number | undefined;
   private shown = '';
@@ -790,13 +788,12 @@ export class RetrievalPanel {
     return !this.context.sections || this.context.sections.includes(section);
   }
 
-  update(model: RetrievalModel | undefined, selection: Selection | undefined): void {
+  update(model: RetrievalModel | undefined): void {
     this.model = model;
-    this.selection = selection?.key === 'chunkId' ? selection : undefined;
     // A citation that no longer exists closes.
     if (this.open !== undefined && !model?.answer?.sources.some((s) => s.citation === this.open))
       this.open = undefined;
-    const key = JSON.stringify([model, this.selection, this.open]);
+    const key = JSON.stringify([model, this.open]);
     if (key === this.shown) return;
     this.shown = key;
     const active = document.activeElement;
@@ -854,7 +851,6 @@ export class RetrievalPanel {
 
   private scores(model: RetrievalModel): HTMLElement {
     const sel = model.selection;
-    const marked = this.selection?.value;
     const items = model.rows.map((r) => {
       const retained = r.outcome?.retained === true;
       const li = el('li', retained ? 'retained' : undefined);
@@ -868,7 +864,7 @@ export class RetrievalPanel {
       // The value sits on the side away from the threshold, so the line stays continuous.
       const below = sel !== undefined && r.score < sel.threshold;
       li.append(
-        el('span', `name${r.chunkId === marked ? ' chunk-mark' : ''}`, r.chunkId),
+        el('span', 'name', r.chunkId),
         el(
           'span',
           'track',
@@ -948,7 +944,6 @@ export class RetrievalPanel {
         'A fixed 2D projection: x = cost − rules, y = product − technical. Conceptual only: the scores are computed in all four dimensions.',
       ),
     );
-    const marked = this.selection?.value;
     const points = projectedPoints(model);
     const draw = (): void => {
       this.lastWidth = node.clientWidth;
@@ -1020,31 +1015,10 @@ export class RetrievalPanel {
           const [x1, y1, x2, y2] = l.leader;
           g.append(svg('line', { class: 'leader', x1, y1, x2, y2 }));
         }
-        const selected = !!p.id && p.id === marked;
-        if (l && selected) {
-          // Selection background plus an ink underline (02 design.colour.use).
-          const { left, right, top, bottom } = l.box;
-          g.append(
-            svg('rect', {
-              class: 'label-mark',
-              x: left - 2,
-              y: top,
-              width: right - left + 4,
-              height: bottom - top,
-            }),
-            svg('line', {
-              class: 'label-underline',
-              x1: left - 2,
-              y1: bottom - 0.5,
-              x2: right + 2,
-              y2: bottom - 0.5,
-            }),
-          );
-        }
-        // The compact form: the pressed line's point, and the lineage-selected one, get an
-        // ink ring; tapping a point presses its line.
+        // The compact form: the pressed line's point gets an ink ring; tapping a point
+        // presses its line.
         if (layout.compact && p.id) {
-          if (p.id === this.pointed || selected)
+          if (p.id === this.pointed)
             g.append(svg('circle', { class: 'point-ring', cx: at.x, cy: at.y, r: 9 }));
           g.addEventListener('click', () => point(p.id));
         }
@@ -1071,15 +1045,9 @@ export class RetrievalPanel {
               ...points
                 .filter((p) => p.id)
                 .map((p) => {
-                  const selected = p.id === marked;
                   const [label, rest] = [p.label, positionLine(p).slice(p.label.length)];
                   const toggle = focusKey(
-                    el(
-                      'button',
-                      'projection-item',
-                      el('span', selected ? 'chunk-mark' : undefined, label),
-                      rest,
-                    ),
+                    el('button', 'projection-item', el('span', undefined, label), rest),
                     `point:${p.id}`,
                   );
                   toggle.type = 'button';
@@ -1167,7 +1135,7 @@ export class RetrievalPanel {
     appendCited(text, answer.text, new Map(), (n, nth) =>
       citationButton(n, nth, sources.get(n), this.open === n, `${this.prefix}-evidence`, () => {
         this.open = this.open === n ? undefined : n;
-        this.update(this.model, this.selection);
+        this.update(this.model);
       }),
     );
     const lines = answer.sources.length

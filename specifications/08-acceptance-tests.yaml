@@ -45,6 +45,14 @@ unit_tests:
 - Every LLM request after a tool call contains the full conversation including the
   assistant tool-call message
 - Tracked customerId and balance remain consistent
+- Annotation validators (Python and TypeScript, with the same messages) reject paths that do
+  not exist, overlapping groups, gaps, groups out of order, values outside their group and
+  sentences that are not one sentence
+- Every MCP, LLM_API and HTTP event of the scenarios has carries, and annotations when it has
+  a body; the annotations of every derived event fit its payload at every parameter combination
+  of 03 annotation_rules.derived_events
+- With annotations closed the payload tree's text equals JSON.stringify(payload, null, 2); with
+  them open the concatenated group lines equal it
 - Chunk IDs, vectors, scores and selections reproduce 05-rag-scenarios.yaml reference_results
 - Cosine similarity computed correctly
 - Retrieval selection respects topK and threshold
@@ -128,6 +136,16 @@ e2e_tests:
   - Verify the exact combined question.
   - Trace MCP tool use and RAG evidence separately.
   - Verify CHF 12,500.75 and cited fee, interest and access trade-offs.
+- id: annotated-payload
+  steps:
+  - Open mcp-balance at the tools/call request in protocol mode at 1440 px; the carries list is
+    under the message line.
+  - Open Annotations; verify the groups' headings, that the lines of all groups read as the
+    payload, and that the customer ID bullet links to the step where it was first seen.
+  - Follow that link and verify the cursor moves there; the toggle stays open on the next
+    annotated step.
+  - At 390 px open the same step's row and its annotations; nothing scrolls sideways.
+  - axe reports no violations with annotations open.
 - id: phone-steps
   steps:
   - At 390 × 844 and 360 × 800, open each kept scenario (mcp-balance, rag-query, rag-index,

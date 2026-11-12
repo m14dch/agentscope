@@ -46,6 +46,16 @@ event_schema:
       only on LLM requests. Both need a value_ref.'
     prediction: 'Optional {prompt}: a question shown before this event runs, ending with
       "?"; the event itself answers it'
+    carries: 'Optional list of short phrases (each at most 100 characters, no final full
+      stop) naming what the message carries, shown under its explanation (02 inspector.carries).
+      Example for tools/call: the tool name the model chose; the customer ID the agent checked
+      against the signed-in customer; the JSON-RPC id the response repeats.'
+    annotations: 'Optional list of annotation groups that explain the payload field by field
+      (02 inspector.annotations; rules in annotation_rules). Each group is {heading, sentence,
+      paths, values?}: heading names the group ("JSON-RPC envelope"), sentence says in one
+      sentence why the group exists, paths lists the JSON paths of the payload members the
+      group holds, and values maps a JSON path inside the group to its meaning, one bullet
+      each.'
 phase_schema:
   fields:
     id: Unique within the scenario
@@ -116,7 +126,57 @@ lineage:
   - sourceDocumentId
   - chunkId
   - retrievedText
-  presentation: Highlight value occurrences and transformations across event payloads
+  presentation: 'Tracked values are highlighted in the payload, and the annotation bullet of
+    a tracked value says where it travels, with links to those steps (02 inspector.annotations.travel).
+    There is no separate lineage view (issue 49).'
+  origins_rule: 'origins lists the tracked keys whose values can come from the scenario''s
+    initial state rather than from an event: {<tracked key>: {state, label}}. A value of that
+    key equal to initial_state[state] originates there, and its travel line starts "From
+    <label>". Keys must be tracked; state and label are non-empty strings.'
+  origins:
+    customerId:
+      state: authenticated_demo_customer_id
+      label: the signed-in session
+annotation_rules:
+  paths: 'A JSON path is written in dots from the payload''s root: params.arguments.customerId,
+    messages.0.content (array elements by index). A member name that contains a dot or a
+    bracket is written as a JSON string in brackets: params._meta["io.modelcontextprotocol/protocolVersion"].
+    $ alone is the whole payload (for example a string payload).'
+  lines: 'The payload''s text is JSON.stringify(payload, null, 2), one member or element per
+    line. A line of a member a group''s path holds (at any depth) belongs to that group. The
+    line that opens an object or array not held by any path belongs to the group of the first
+    line after it, the line that closes one to the group of the line before it.'
+  checks:
+  - Every path in paths and values exists in the payload.
+  - No path is the same as or lies inside another path, in the same group or in another
+    one (groups do not overlap).
+  - 'Every leaf value and every empty object or array lies under exactly one path (no gaps),
+    and they belong to the groups in the groups'' order, so the lines of the groups, taken
+    in order, are exactly the payload''s text.'
+  - Every key of values lies at or inside one of its own group's paths, and the keys follow
+    the payload's order, so the bullets read in the order of the lines above them.
+  - A group has only the keys heading, sentence, paths and values.
+  - The heading is a non-empty phrase of at most 40 characters; the sentence is exactly one
+    sentence ending with a full stop (no full stop, question or exclamation mark followed by
+    a space and more text inside it).
+  - Each carries entry is a non-empty phrase of at most 100 characters (Unicode code points,
+    in both validators) without a final full stop.
+  required: 'In the scenarios of 04, 05 and 06, every event with protocol MCP, LLM_API or HTTP
+    has carries, and annotations when its payload is an object or an array (a GET request has
+    no body to annotate). Other events may have them; the RAG pipeline''s requests and responses
+    do.'
+  derived_events: 'A derived event keeps the carries and annotations written in the YAML.
+    Its paths therefore address only members that exist at every parameter value: an array
+    whose length depends on the parameters is held and explained as a whole (chunks, matches,
+    sources), never by an index that may not exist. The validators check annotations at the
+    default parameters; a TypeScript unit test checks every derived event''s annotations
+    against the payloads the RAG engine derives for every combination of option and boolean
+    parameters and for top_k 1 to 8 with the similarity thresholds 0, 0.5, 0.7, 0.9 and 1.
+    If the annotations still do not fit a derived payload, the inspector shows the payload
+    without them (02 inspector.annotations.toggle). Their wording is parameter-neutral as
+    well: carries and annotations of a derived event state no count and promise no chunk,
+    citation or document that a parameter can remove (no evidence at a threshold of 1, whole
+    documents with fetch_full_documents), which a unit test checks at those extremes.'
 scenario_format:
   required:
   - id
@@ -170,7 +230,8 @@ scenario_format:
     sequence and scenario_id; declared phases and participants; reciprocal pairs; a
     correlation_id only on MCP requests and responses, equal to the JSON-RPC id; MCP
     headers mirroring the body; model-visible context rules; security boundary IDs;
-    lineage keys; value_ref paths; learning fields and prediction prompts; derived_events
+    lineage keys; value_ref paths; carries and annotations (annotation_rules); learning
+    fields and prediction prompts; derived_events
     and optional_steps naming the scenario''s events, each optional step enabled by a
     boolean parameter and holding both events of a pair; the overview (overview_fields: 2 to 4
     parties that partition the participants, 3 to 5 stages that partition the phases in

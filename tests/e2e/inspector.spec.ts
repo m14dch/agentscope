@@ -29,12 +29,7 @@ test('the message comes first, then only the tabs the step has content for', asy
   await expect(inspector(page).locator('.message')).toHaveText(
     'Call the balance tool over Streamable HTTP.',
   );
-  await expect(tablist(page).getByRole('tab')).toHaveText([
-    'Payload',
-    'Transport',
-    'Security',
-    'Lineage',
-  ]);
+  await expect(tablist(page).getByRole('tab')).toHaveText(['Payload', 'Transport', 'Security']);
   await open(page, '#/mcp/mcp-balance/13/protocol');
   await expect(tab(page, 'Transport')).toHaveCount(0);
 });
@@ -94,15 +89,57 @@ test('security lists each boundary with its risk and mitigation', async ({ page 
   await expect(page.getByRole('tabpanel')).toContainText('Risk: Unauthorized tool invocation');
 });
 
-test('lineage links each tracked value to the step where it first appeared', async ({ page }) => {
-  await open(page, '#/mcp/mcp-balance/23/protocol');
-  await tab(page, 'Lineage').click();
-  const row = page.locator('.lineage-row').filter({ hasText: 'balance' });
-  await expect(row).toContainText('12500.75');
-  const link = row.getByRole('button', { name: /first at step \d+/ });
-  const target = Number((await link.textContent())?.match(/\d+/)?.[0]);
-  await link.click();
-  await expect(page.locator('.status')).toContainText(`Step ${target} of 28`);
+// 08-acceptance-tests.yaml e2e_tests: annotated-payload (02 inspector.carries, annotations).
+test('annotated-payload: carries, groups that read as the payload, and where values travel', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page, '#/mcp/mcp-balance/14/protocol');
+  await expect(inspector(page).locator('.carries li')).toHaveText([
+    'the tool name the model chose',
+    'the customer ID, which the agent checked against the signed-in customer',
+    'the protocol revision, which the MCP-Protocol-Version header repeats',
+    'JSON-RPC id 3, which the result repeats',
+  ]);
+  const toggle = page.getByRole('button', { name: 'Annotations' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle).toBeFocused();
+  const annotated = page.locator('#inspector-json');
+  await expect(annotated.getByRole('heading', { level: 3 })).toHaveText([
+    'JSON-RPC envelope',
+    'Tool call',
+    'Arguments',
+    'Request metadata',
+  ]);
+  // The groups' lines, indentation restored, are exactly the payload's text.
+  const text = await annotated
+    .locator('.json-line')
+    .evaluateAll((lines) =>
+      lines
+        .map((l) => '  '.repeat(Number((l as HTMLElement).dataset['depth'])) + l.textContent)
+        .join('\n'),
+    );
+  // Copy still copies the raw payload, which is the same text.
+  await page.getByRole('button', { name: 'Copy' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Copied' })).toBeVisible();
+  expect(text).toBe(await page.evaluate(() => navigator.clipboard.readText()));
+  // The customer ID's bullet says where the value comes from and links there.
+  const bullet = annotated.locator('li').filter({ hasText: 'whose balance to read' });
+  await expect(bullet.locator('.travel')).toHaveText(
+    'From the signed-in session · reaches the model at step 10 · the model repeats it at step 11 · the agent checks it at step 12 · sent to Example Bank MCP server here',
+  );
+  await bullet.getByRole('button', { name: 'step 10' }).click();
+  await expect(page.locator('.status')).toContainText('Step 10 of 28');
+  // The toggle stays open on the next annotated step.
+  await expect(page.getByRole('button', { name: 'Annotations' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  await expect(annotated.getByRole('heading', { level: 3 }).first()).toHaveText('System prompt');
 });
 
 test('the pair link jumps between request and response', async ({ page }) => {
@@ -129,13 +166,15 @@ test('tabs follow the ARIA pattern and the choice survives stepping', async ({ p
   await expect(tab(page, 'Transport')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.status')).toContainText('Step 14 of 28');
   await page.keyboard.press('End');
-  await expect(tab(page, 'Lineage')).toHaveAttribute('aria-selected', 'true');
-  // Step 15 has nothing to trace: the first tab shows. Step 16 does: the choice returns.
+  await expect(tab(page, 'Security')).toHaveAttribute('aria-selected', 'true');
+  // Step 16 has no boundary: the first tab shows. Step 17 has one: the choice returns.
+  await open(page, '#/mcp/mcp-balance/15/protocol');
+  await tab(page, 'Security').click();
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(tab(page, 'Lineage')).toHaveCount(0);
+  await expect(tab(page, 'Security')).toHaveCount(0);
   await expect(tab(page, 'Payload')).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(tab(page, 'Lineage')).toHaveAttribute('aria-selected', 'true');
+  await expect(tab(page, 'Security')).toHaveAttribute('aria-selected', 'true');
 });
 
 test('code stays readable at 200% zoom without horizontal scrolling', async ({ page }) => {
@@ -152,6 +191,15 @@ test('code stays readable at 200% zoom without horizontal scrolling', async ({ p
     .locator('.tab-panel .json')
     .evaluate((el) => el.scrollWidth - el.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+  ).toBeLessThanOrEqual(0);
+  // Annotations open: the groups' lines and their callouts wrap too (02 inspector.annotations.phone).
+  await page.getByRole('button', { name: 'Annotations' }).click();
+  const wide = await page
+    .locator('#inspector-json, #inspector-json .json')
+    .evaluateAll((els) => Math.max(...els.map((el) => el.scrollWidth - el.clientWidth)));
+  expect(wide).toBeLessThanOrEqual(1);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
   ).toBeLessThanOrEqual(0);
@@ -176,14 +224,4 @@ test('focus stays on the equivalent control when the step changes', async ({ pag
   await open(page, '#/mcp/mcp-balance/14/protocol');
   await page.getByRole('button', { name: 'Response: step 23' }).click();
   await expect(page.getByRole('button', { name: 'Request: step 14' })).toBeFocused();
-});
-
-test('lineage lists each key once with all its values', async ({ page }) => {
-  await open(page, '#/rag/rag-query/8/protocol');
-  await tab(page, 'Lineage').click();
-  const rows = page.locator('.lineage-row');
-  const keys = await rows.locator('> .json-key').allTextContents();
-  expect(new Set(keys).size).toBe(keys.length);
-  const retrieved = rows.filter({ hasText: 'retrievedText' });
-  await expect(retrieved.locator('li')).toHaveCount(5);
 });
