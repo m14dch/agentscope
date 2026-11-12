@@ -234,7 +234,7 @@ scenarios:
       - method
       values:
         jsonrpc: the JSON-RPC version, the same in every message
-        id: request number 1; the response carries the same id
+        id: unique per request; the response repeats it
         method: asks the server to describe itself; optional
     - heading: Request metadata
       sentence: Revision 2026-07-28 has no handshake that would remember the client, so every request
@@ -245,8 +245,7 @@ scenarios:
         params._meta["io.modelcontextprotocol/protocolVersion"]: the protocol revision; the MCP-Protocol-Version
           header must repeat it
         params._meta["io.modelcontextprotocol/clientInfo"]: the client's self-reported name and version
-        params._meta["io.modelcontextprotocol/clientCapabilities"]: optional features the client supports;
-          none here
+        params._meta["io.modelcontextprotocol/clientCapabilities"]: '{} declares no optional client features'
   - id: mcp-03
     scenario_id: mcp-balance
     phase: setup
@@ -306,11 +305,15 @@ scenarios:
       paths:
       - jsonrpc
       - id
-      - result.resultType
       values:
         jsonrpc: the JSON-RPC version, the same in every message
-        id: 1, the id of the server/discover request
-        result.resultType: 'complete: the whole result is in this response'
+        id: the id of the server/discover request, repeated
+    - heading: Result type
+      sentence: MCP says whether the request is finished or the server still needs input from the client.
+      paths:
+      - result.resultType
+      values:
+        result.resultType: 'complete: the request finished; the server needs nothing more from the client'
     - heading: Server capabilities
       sentence: The result tells the client which revisions and features the server supports before it
         uses any of them.
@@ -320,8 +323,9 @@ scenarios:
       - result.instructions
       values:
         result.supportedVersions: revisions the server speaks; the client uses 2026-07-28
-        result.capabilities.tools: the server offers tools
-        result.capabilities.resources: the server offers resources, such as documents
+        result.capabilities.tools: '{} means supported, with no further options: the server offers tools'
+        result.capabilities.resources: '{} means supported, with no further options: the server offers
+          resources'
         result.instructions: text for the model; lower trust than the agent's own prompt
     - heading: Caching
       sentence: The client may reuse this answer instead of asking again, within these limits.
@@ -401,7 +405,7 @@ scenarios:
       - method
       values:
         jsonrpc: the JSON-RPC version, the same in every message
-        id: request number 2; the response carries the same id
+        id: unique per request; the response repeats it
         method: asks for the server's tool catalogue
     - heading: Request metadata
       sentence: Revision 2026-07-28 has no handshake that would remember the client, so every request
@@ -412,8 +416,7 @@ scenarios:
         params._meta["io.modelcontextprotocol/protocolVersion"]: the protocol revision; the MCP-Protocol-Version
           header must repeat it
         params._meta["io.modelcontextprotocol/clientInfo"]: the client's self-reported name and version
-        params._meta["io.modelcontextprotocol/clientCapabilities"]: optional features the client supports;
-          none here
+        params._meta["io.modelcontextprotocol/clientCapabilities"]: '{} declares no optional client features'
   - id: mcp-06
     scenario_id: mcp-balance
     phase: discovery
@@ -519,11 +522,15 @@ scenarios:
       paths:
       - jsonrpc
       - id
-      - result.resultType
       values:
         jsonrpc: the JSON-RPC version, the same in every message
-        id: 2, the id of the tools/list request
-        result.resultType: 'complete: the whole result is in this response'
+        id: the id of the tools/list request, repeated
+    - heading: Result type
+      sentence: MCP says whether the request is finished or the server still needs input from the client.
+      paths:
+      - result.resultType
+      values:
+        result.resultType: 'complete: the request finished; the server needs nothing more from the client'
     - heading: 'Tool: get_customer'
       sentence: Each tool has a name the model will use, a description it reads and schemas for its arguments
         and its result.
@@ -712,7 +719,7 @@ scenarios:
       - tools
       values:
         tools.0.name: a tool for the customer's profile
-        tools.1.name: the balance tool, the one this question needs
+        tools.1.name: a tool for the account balance
         tools.1.description: what the model reads to decide whether to use the tool
         tools.1.parameters: 'JSON Schema the arguments must match: one customerId string'
   - id: mcp-11
@@ -876,7 +883,7 @@ scenarios:
       - method
       values:
         jsonrpc: the JSON-RPC version, the same in every message
-        id: request number 3; the response carries the same id
+        id: unique per request; the response repeats it
         method: 'tools/call: run one tool; the Mcp-Method header repeats it'
     - heading: Tool call
       sentence: The client names the tool to run exactly as the server listed it.
@@ -900,8 +907,7 @@ scenarios:
         params._meta["io.modelcontextprotocol/protocolVersion"]: the protocol revision; the MCP-Protocol-Version
           header must repeat it
         params._meta["io.modelcontextprotocol/clientInfo"]: the client's self-reported name and version
-        params._meta["io.modelcontextprotocol/clientCapabilities"]: optional features the client supports;
-          none here
+        params._meta["io.modelcontextprotocol/clientCapabilities"]: '{} declares no optional client features'
   - id: mcp-15
     scenario_id: mcp-balance
     phase: tool
@@ -1139,11 +1145,15 @@ scenarios:
       paths:
       - jsonrpc
       - id
-      - result.resultType
       values:
         jsonrpc: the JSON-RPC version, the same in every message
-        id: 3, the id of the tools/call request
-        result.resultType: 'complete: the whole result is in this response'
+        id: the id of the tools/call request, repeated
+    - heading: Result type
+      sentence: MCP says whether the request is finished or the server still needs input from the client.
+      paths:
+      - result.resultType
+      values:
+        result.resultType: 'complete: the request finished; the server needs nothing more from the client'
     - heading: Result content
       sentence: Content is what a client can pass on to a model, here the backend's JSON as one text block.
       paths:
@@ -1338,7 +1348,7 @@ scenarios:
       - tools
       values:
         tools.0.name: a tool for the customer's profile
-        tools.1.name: the balance tool, the one this question needs
+        tools.1.name: a tool for the account balance
         tools.1.description: what the model reads to decide whether to use the tool
         tools.1.parameters: 'JSON Schema the arguments must match: one customerId string'
   - id: mcp-27

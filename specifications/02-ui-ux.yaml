@@ -496,8 +496,10 @@ inspector:
       step that has annotations. Closed, the payload shows as before (folding). An event
       without annotations, or whose annotations do not fit its derived payload, shows no toggle.'
     open: 'Open, the payload is split into its annotation groups in order. Each group shows its
-      JSON lines first, exactly as in the closed payload (syntax colours, indentation, the
-      marks of changed_fields), unfolded, so the raw message still reads top to bottom; the
+      JSON lines first, as in the closed payload (syntax colours, indentation) but unfolded,
+      so the raw message still reads top to bottom. A line inside a changed message or member
+      (changed_fields) is marked as a whole line, since there is no branch to mark; tracked
+      values are marked as in the closed payload. The
       concatenated lines of all groups are exactly JSON.stringify(payload, null, 2). Below
       the lines comes the group''s callout: a text block set off by a hairline rule on its left
       and indented 16 px, with no card, fill, shadow, rounded corner or illustration. It holds
@@ -505,18 +507,25 @@ inspector:
       between groups), the sentence, then one bullet per value in the order written: the value
       in the code face, then a dash and its meaning. A string value longer than 40 characters
       is cut to its first 36 and an ellipsis; an object or array shows as {…} or […] with its
-      member count ("[…] 2 items"). Boilerplate (jsonrpc, _meta) is a group of its own with its
+      member count ("[…] 2 items"), an empty one as {} or []. Boilerplate (jsonrpc, _meta) is a group of its own with its
       sentence instead of a silent fold.'
     travel: 'A bullet whose value equals one of the event''s tracked values (03 lineage) ends
-      with a second line in small text that says where the value travels: "First seen at step
-      <k> (<sender> → <receiver>)", or "First seen here", for the first played event that
-      tracks the value (participants by their registry label without its parenthetical, the
-      participant alone for a self-call); then, in step order, " · reaches the model at step
-      <m>" for the first played LLM request that tracks it and " · sent to <receiver> at step
-      <t>" for the first played MCP or HTTP event that tracks it, each only when it is a later
-      step than k, with "here" for the current step. Each step number is a link that jumps
-      there. Later steps are named too: where a value goes is what the line teaches, and no
-      prediction prompt asks about it. Values inside a longer string are not matched.'
+      with a second line in small text that says where the value travels. It starts with the
+      origin: "From <origin>" when the value comes from the scenario''s initial state (03
+      lineage.origins, for example "From the signed-in session"), else "First seen at step <k>
+      (<sender> → <receiver>)", or "First seen here", for the first played event that tracks
+      the value (participants by their registry label without its parenthetical, the
+      participant alone for a self-call). Then, in step order and each only when it is a later
+      step than k (any step for an origin in the initial state), the steps that matter: " ·
+      reaches the model at step <m>" for the first played LLM request that tracks it, " · the
+      model writes it at step <w>" for the first LLM response that tracks it, " · the agent
+      checks it at step <c>" for the first event after w that is the agent''s own action
+      (INTERNAL, agent to agent) and tracks it, and " · sent to <receiver> at step <t>" for the
+      first MCP or HTTP event that tracks it; "here" stands for the current step. Each step
+      number is a link that jumps there. Later steps are named too, because where a value goes
+      is what the line teaches, except a later step that carries a prediction prompt: a link
+      never answers a question before it is asked. Values inside a longer string are not
+      matched.'
     phone: 'The same on phones, inside "Step details": lines and callouts wrap and stack in
       one column, nothing scrolls sideways at 390 px or at 200% zoom, and the toggle is at
       least 44 × 44 px (layout.phone.touch_targets).'

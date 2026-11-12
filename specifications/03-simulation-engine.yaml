@@ -129,6 +129,14 @@ lineage:
   presentation: 'Tracked values are highlighted in the payload, and the annotation bullet of
     a tracked value says where it travels, with links to those steps (02 inspector.annotations.travel).
     There is no separate lineage view (issue 49).'
+  origins:
+    description: 'Tracked keys whose values can come from the scenario''s initial state rather
+      than from an event: {<tracked key>: {state, label}}. A value of that key equal to
+      initial_state[state] originates there, and its travel line starts "From <label>". Keys
+      must be tracked; state and label are non-empty strings.'
+    customerId:
+      state: authenticated_demo_customer_id
+      label: the signed-in session
 annotation_rules:
   paths: 'A JSON path is written in dots from the payload''s root: params.arguments.customerId,
     messages.0.content (array elements by index). A member name that contains a dot or a
@@ -145,11 +153,14 @@ annotation_rules:
   - 'Every leaf value and every empty object or array lies under exactly one path (no gaps),
     and they belong to the groups in the groups'' order, so the lines of the groups, taken
     in order, are exactly the payload''s text.'
-  - Every key of values lies at or inside one of its own group's paths.
+  - Every key of values lies at or inside one of its own group's paths, and the keys follow
+    the payload's order, so the bullets read in the order of the lines above them.
+  - A group has only the keys heading, sentence, paths and values.
   - The heading is a non-empty phrase of at most 40 characters; the sentence is exactly one
     sentence ending with a full stop (no full stop, question or exclamation mark followed by
-    a space and a capital letter inside it).
-  - Each carries entry is a non-empty phrase of at most 100 characters without a final full stop.
+    a space and more text inside it).
+  - Each carries entry is a non-empty phrase of at most 100 characters (Unicode code points,
+    in both validators) without a final full stop.
   required: 'In the scenarios of 04, 05 and 06, every event with protocol MCP, LLM_API or HTTP
     has carries, and annotations when its payload is an object or an array (a GET request has
     no body to annotate). Other events may have them; the RAG pipeline''s requests and responses
@@ -162,7 +173,10 @@ annotation_rules:
     against the payloads the RAG engine derives for every combination of option and boolean
     parameters and for top_k 1 to 8 with the similarity thresholds 0, 0.5, 0.7, 0.9 and 1.
     If the annotations still do not fit a derived payload, the inspector shows the payload
-    without them (02 inspector.annotations.toggle).'
+    without them (02 inspector.annotations.toggle). Their wording is parameter-neutral as
+    well: carries and annotations of a derived event state no count and promise no chunk,
+    citation or document that a parameter can remove (no evidence at a threshold of 1, whole
+    documents with fetch_full_documents), which a unit test checks at those extremes.'
 scenario_format:
   required:
   - id

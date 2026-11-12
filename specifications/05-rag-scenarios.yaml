@@ -813,7 +813,7 @@ scenarios:
       paths:
       - chunks
       values:
-        chunks: one entry per chunk; how many depends on the chunk size
+        chunks: one entry per chunk; how many depends on the chunk size and overlap
   - id: index-06
     scenario_id: rag-index
     phase: embed
@@ -958,7 +958,7 @@ scenarios:
       - embeddings
       values:
         model: the model that made the vectors
-        dimensions: four numbers per vector; real models use hundreds
+        dimensions: four numbers per vector; real models use hundreds to thousands
         embeddings: one vector per chunk ID
   - id: index-08
     scenario_id: rag-index
@@ -1245,7 +1245,8 @@ scenarios:
     - 'an access filter: public documents only'
     annotations:
     - heading: Search
-      sentence: The search compares the query vector with every stored vector by cosine similarity.
+      sentence: The search compares the query vector by cosine similarity with every stored vector the
+        access filter lets through.
       paths:
       - collection
       - vector
@@ -1255,7 +1256,7 @@ scenarios:
         vector: the query vector from the embedding model
         metric: 'cosine: compares directions, not lengths'
     - heading: Access filter
-      sentence: The filter limits the search to documents this user may read, before any score is computed.
+      sentence: The filter limits the search to documents this user may read, so no other vector is scored.
       paths:
       - filter
       values:
@@ -1790,7 +1791,7 @@ scenarios:
     carries:
     - grounding rules in the system prompt
     - the question
-    - the retained chunks as document blocks with source and trust level
+    - any retrieved evidence as document blocks with source and trust level
     annotations:
     - heading: System prompt
       sentence: The system prompt tells the model to answer only from the documents, to cite them and
@@ -1801,13 +1802,13 @@ scenarios:
         messages.0.role: 'system: written by the agent, not by the user'
         messages.0.content: grounding rules and the citation format
     - heading: Question and documents
-      sentence: The question and the retrieved text travel together in one user message, each piece in
-        a document block that names its source.
+      sentence: The question and any retrieved evidence travel together in one user message, each piece
+        in a document block that names its source.
       paths:
       - messages.1
       values:
         messages.1.role: 'user: the question and its evidence'
-        messages.1.content: the question, then one document block per piece of evidence
+        messages.1.content: the question, then one document block per piece of evidence, or (none)
   - id: retrieve-11
     scenario_id: rag-query
     phase: generation
@@ -1846,16 +1847,18 @@ scenarios:
       - account-opening@1.2-c50o10-002
       - savings-account@1.2-c50o10-001
     carries:
-    - the grounded answer
-    - numbered citations of the document blocks
+    - an answer written only from the documents provided
+    - citations by number with a source list, or a statement that nothing relevant was found
     annotations:
     - heading: Answer
-      sentence: The simulated model answers in text and cites each statement by number.
+      sentence: The simulated model answers in text and cites the evidence by number, or says it found
+        none.
       paths:
       - message
       values:
         message.role: 'assistant: the model''s turn'
-        message.content: the answer with numbered citations and a source list
+        message.content: the answer and its numbered sources, or a statement that nothing relevant was
+          found
     - heading: Stop reason
       sentence: The stop reason tells the agent why the model stopped and what it expects next.
       paths:

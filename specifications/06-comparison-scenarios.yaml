@@ -342,7 +342,7 @@ combined:
         - tools
         values:
           tools.0.name: a tool for the customer's profile
-          tools.1.name: the balance tool, the one this question needs
+          tools.1.name: a tool for the account balance
           tools.1.description: what the model reads to decide whether to use the tool
           tools.1.parameters: 'JSON Schema the arguments must match: one customerId string'
     - id: c-05
@@ -527,7 +527,7 @@ combined:
         - tools
         values:
           tools.0.name: a tool for the customer's profile
-          tools.1.name: the balance tool, the one this question needs
+          tools.1.name: a tool for the account balance
           tools.1.description: what the model reads to decide whether to use the tool
           tools.1.parameters: 'JSON Schema the arguments must match: one customerId string'
     - id: c-07
