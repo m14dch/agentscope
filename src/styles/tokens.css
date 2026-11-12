@@ -1,7 +1,7 @@
 /* Design tokens: the only place colour values may appear (02-ui-ux.yaml → design). */
 :root {
   /* Colour: Sanzo Wada No. 303 plus supporting colours (02-ui-ux.yaml → design.colour) */
-  --color-paper: #fff9ea; /* Cream: page */
+  --color-paper: #ffffff; /* White: page */
   --color-ink: #253122; /* Deep Slate Olive: text and data */
   --color-ink-muted: #5c6658; /* derived: secondary text */
   --color-rule: #b6bfc1; /* Neutral Gray: structure only */
@@ -15,6 +15,7 @@
   --font-code: 'JetBrains Mono Variable', ui-monospace, monospace;
   --size-small: 0.8125rem; /* 13 px */
   --leading-small: 1rem; /* 16 px */
+  --leading-small-sentence: 1.25rem; /* 20 px: small text read as a sentence */
   --size-text: 1rem; /* 16 px */
   --leading-text: 1.5rem; /* 24 px */
   --size-title: 1.5rem; /* 24 px */
@@ -29,6 +30,12 @@
   --space-4: 2rem;
   --space-6: 3rem;
   --space-8: 4rem;
+
+  /* Width: the page's content and the measure of running text (02 layout.max_width) */
+  --content-max: 90rem;
+  /* The column inside the page's side margins. */
+  --content-inner: calc(var(--content-max) - 2 * var(--page-margin));
+  --measure: 36rem;
 
   /* Grid */
   --grid-columns: 12;

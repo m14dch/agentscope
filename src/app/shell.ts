@@ -59,6 +59,8 @@ import '../styles/phone.css';
 const SIMULATED = 'Everything here is simulated. Nothing leaves your browser.';
 /** The approved wordmark for the light paper (02 layout brand); the app is light only. */
 const WORDMARK = 'brand/agentscope-silver-light.svg';
+/** The source repository, linked at the end of the header (02 layout.source_link). */
+const SOURCE_URL = 'https://github.com/m14dch/agentscope';
 
 /** A parameter control (02 rag_controls.control_kinds). */
 type ParameterControl =
@@ -190,7 +192,14 @@ export class Shell {
   /** Removes the document listeners of the current header. */
   private headerListeners: AbortController | undefined;
   /** The header's menu on phones (02 layout.phone.header). */
-  private menu: { toggle: HTMLButtonElement; body: HTMLElement } | undefined;
+  private menu:
+    | {
+        toggle: HTMLButtonElement;
+        body: HTMLElement;
+        /** The GitHub link until something else is in the menu; it then follows (toMenu). */
+        source?: HTMLElement | undefined;
+      }
+    | undefined;
   /** Whether a page has been shown; the first one does not take focus. */
   private shown = false;
   private route: Route | undefined;
@@ -313,6 +322,12 @@ export class Shell {
     const brand = el('h1', { class: 'brand' }, el('a', { href: '#/' }, wordmark));
     const row = el('div', { class: 'shell-bar' }, brand, nav);
     this.menu = this.phoneMenu(row);
+    // The GitHub link ends the header row (02 layout.source_link); its slot keeps it last
+    // when controls join the row later. On phones it joins the menu, last, once something
+    // else is in it; alone it stays at the end of the wordmark row (toMenu).
+    const source = el('a', { class: 'source-link', href: SOURCE_URL }, 'GitHub');
+    row.append(el('span', { class: 'source-slot' }, source));
+    this.menu.source = source;
     if (scenario && this.tabs[tab].length > 1) {
       const picker = this.picker(tab, scenario);
       row.append(picker);
@@ -397,11 +412,27 @@ export class Shell {
   private toMenu(label: string | undefined, nodes: Element[], parent?: Element): HTMLElement {
     const row = this.menuRow(label);
     if (!this.menu) return row;
-    parent?.append(...nodes);
-    // The scenario list, the longest, comes last.
-    this.menu.body.insertBefore(row, this.menu.body.querySelector('.menu-row--scenarios'));
+    // The GitHub link stays last in the header row.
+    const slot = parent?.querySelector(':scope > .source-slot');
+    if (slot) slot.before(...nodes);
+    else parent?.append(...nodes);
+    // The scenario list, the longest, comes last but for the GitHub link.
+    this.menu.body.insertBefore(
+      row,
+      this.menu.body.querySelector('.menu-row--scenarios, .menu-row--source'),
+    );
     this.menu.toggle.hidden = false;
-    relocate(nodes, row, (this.headerListeners ??= new AbortController()).signal);
+    const signal = (this.headerListeners ??= new AbortController()).signal;
+    relocate(nodes, row, signal);
+    // The menu holds something now, so the GitHub link moves in too, as its last entry.
+    const source = this.menu.source;
+    if (source) {
+      this.menu.source = undefined;
+      const sourceRow = this.menuRow(undefined);
+      sourceRow.classList.add('menu-row--source');
+      this.menu.body.append(sourceRow);
+      relocate([source], sourceRow, signal);
+    }
     return row;
   }
 
@@ -648,7 +679,7 @@ export class Shell {
     /** The step and prompt last rendered, to tell a change of step from other renders. */
     let rendered: string | undefined;
     const workspace = el('div', { class: 'workspace' }, diagram, splitter, inspector);
-    this.attachSplitter(workspace, splitter);
+    this.attachSplitter(workspace, splitter, inspector);
 
     // The model-context panel, collapsed at start (02 layout, context_panel).
     const contextBody = el('div', { id: 'context-panel', class: 'context-panel', hidden: '' });
@@ -690,6 +721,7 @@ export class Shell {
       labels: this.labels,
       level: route.level,
       name: 'Sequence diagram',
+      onNaturalWidth: (px) => workspace.style.setProperty('--diagram-width', `${px}px`),
     });
     const state: ScenarioView = {
       scenario,
@@ -894,31 +926,56 @@ export class Shell {
     c.render();
   }
 
-  private attachSplitter(workspace: HTMLElement, splitter: HTMLElement): void {
+  private attachSplitter(
+    workspace: HTMLElement,
+    splitter: HTMLElement,
+    inspector: HTMLElement,
+  ): void {
     const MIN_REM = 20;
     const MAX_SHARE = 60;
     const rem = (): number => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const minShare = (): number =>
-      Math.min(MAX_SHARE, ((MIN_REM * rem()) / Math.max(1, workspace.clientWidth)) * 100);
+    // The inspector's width is a share of the workspace up to the column's width, the
+    // header's, so a widened workspace gives its extra width to the diagram (02 layout.splitter).
+    const base = (): number =>
+      Math.max(1, Math.min(workspace.clientWidth, this.header.clientWidth));
+    const minShare = (): number => Math.min(MAX_SHARE, ((MIN_REM * rem()) / base()) * 100);
     let share = 30;
-    // The width is a share of the workspace, clamped in CSS too, so it stays within limits
-    // when the window is resized (02 layout.splitter).
+    // shell.css turns the share into the inspector's width, clamped to 20rem and 60% of the
+    // workspace, so it stays within limits when the window is resized.
     const set = (value: number): void => {
       share = Math.round(Math.min(Math.max(value, minShare()), MAX_SHARE));
-      workspace.style.setProperty(
-        '--inspector-width',
-        `clamp(${MIN_REM}rem, ${share}%, ${MAX_SHARE}%)`,
-      );
-      splitter.setAttribute('aria-valuenow', String(share));
-      splitter.setAttribute('aria-valuemin', String(Math.round(minShare())));
-      splitter.setAttribute('aria-valuemax', String(MAX_SHARE));
-      splitter.setAttribute('aria-valuetext', `Inspector ${share}% of the width`);
+      workspace.style.setProperty('--inspector-share', String(share / 100));
     };
-    requestAnimationFrame(() => set(share));
+    // The value and label give the share the inspector takes on screen, measured after each
+    // layout: in a widened workspace it is less than the share of the column.
+    const describe = (): void => {
+      const total = workspace.clientWidth;
+      if (!total) return;
+      const shown = String(Math.round((inspector.offsetWidth / total) * 100));
+      splitter.setAttribute('aria-valuenow', shown);
+      splitter.setAttribute(
+        'aria-valuemin',
+        String(Math.round(Math.min(MAX_SHARE, ((MIN_REM * rem()) / total) * 100))),
+      );
+      splitter.setAttribute('aria-valuemax', String(MAX_SHARE));
+      splitter.setAttribute('aria-valuetext', `Inspector ${shown}% of the width`);
+    };
+    if (typeof ResizeObserver === 'function') {
+      const observer = new ResizeObserver(describe);
+      observer.observe(workspace);
+      observer.observe(inspector);
+      (this.headerListeners ??= new AbortController()).signal.addEventListener('abort', () =>
+        observer.disconnect(),
+      );
+    }
+    requestAnimationFrame(() => {
+      set(share);
+      describe();
+    });
     splitter.addEventListener('pointerdown', (down) => {
       splitter.setPointerCapture(down.pointerId);
-      const box = workspace.getBoundingClientRect();
-      const move = (e: PointerEvent): void => set(((box.right - e.clientX) / box.width) * 100);
+      const move = (e: PointerEvent): void =>
+        set(((workspace.getBoundingClientRect().right - e.clientX) / base()) * 100);
       const up = (): void => {
         splitter.removeEventListener('pointermove', move);
         splitter.removeEventListener('pointerup', up);

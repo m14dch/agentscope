@@ -136,6 +136,18 @@
     margin-top: 0;
   }
 
+  /* The GitHub link: last in the menu, or alone at the end of the wordmark row. */
+  .source-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .menu-row .source-link {
+    margin-left: 0;
+  }
+
   /* The bottom bar: the position, the step slider, then Reset, Previous step, Play or Pause
      and Next step in equal widths (02 layout.phone.controls). */
   .controls {

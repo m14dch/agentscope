@@ -98,6 +98,8 @@ pre {
 }
 
 .page {
+  max-width: var(--content-max);
+  margin-inline: auto;
   padding: var(--space-4) var(--page-margin) var(--space-8);
 }
 
