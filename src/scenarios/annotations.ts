@@ -127,7 +127,7 @@ export function annotationProblems(payload: Json | undefined, annotations: unkno
     for (const key of Object.keys(raw))
       if (!GROUP_KEYS.has(key)) problems.push(`${at} has unknown key ${JSON.stringify(key)}`);
     const heading = raw['heading'];
-    if (typeof heading !== 'string' || !heading.trim() || heading.length > 40)
+    if (typeof heading !== 'string' || !heading.trim() || [...heading].length > 40)
       problems.push(`${at} heading must be a phrase of 1 to 40 characters`);
     const sentence = raw['sentence'];
     if (typeof sentence !== 'string' || !ONE_SENTENCE(sentence))

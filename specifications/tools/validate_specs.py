@@ -975,8 +975,6 @@ def main():
 
     # Origins in the initial state (03 lineage.origins); mirrors src/scenarios/validate.ts.
     for key, origin in engine["lineage"].get("origins", {}).items():
-        if key == "description":
-            continue
         if key not in engine["lineage"]["tracked"]:
             err("03 lineage.origins", f"{key} is not a tracked key")
         o = origin if isinstance(origin, dict) else {}

@@ -199,30 +199,33 @@ describe('annotation bullets', () => {
       origin: { label: 'the signed-in session' },
       hops: [
         { index: at('mcp-10'), kind: 'model' },
-        { index: at('mcp-11'), kind: 'writes' },
+        { index: at('mcp-11'), kind: 'repeats' },
         { index: at('mcp-12'), kind: 'checks' },
         { index: at('mcp-14'), kind: 'sent' },
       ],
     });
-    // The balance comes from the core ledger. Step 26 asks a prediction, so step 23 does not
-    // name it; step 27 does.
+    // The balance comes from the core ledger. Step 26 asks a prediction about statelessness,
+    // which "reaches the model" does not answer, so it is named.
     expect(travel(events, at('mcp-23'), 12500.75, sources)).toEqual({
       origin: { index: at('mcp-20') },
       hops: [
         { index: at('mcp-21'), kind: 'sent' },
-        { index: at('mcp-27'), kind: 'writes' },
+        { index: at('mcp-26'), kind: 'model' },
+        { index: at('mcp-27'), kind: 'repeats' },
       ],
     });
-    expect(travel(events, at('mcp-27'), 12500.75, sources)?.hops).toContainEqual({
-      index: at('mcp-26'),
-      kind: 'model',
-    });
+    // Step 14 asks who sends the tool call: from step 11 its "sent to" hop is left out.
+    expect(travel(events, at('mcp-11'), '123', sources)?.hops.map((h) => h.kind)).toEqual([
+      'model',
+      'repeats',
+      'checks',
+    ]);
     // Untracked values and values inside longer strings get no travel line.
     expect(travel(events, at('mcp-14'), 'tools/call', sources)).toBeUndefined();
     expect(travel(events, at('mcp-23'), '{"customerId":"123"}', sources)).toBeUndefined();
   });
 
-  it("never link from a step before a prediction to that prediction's step", () => {
+  it("never link from a step before a prediction to that prediction's step, except to say the value reaches the model", () => {
     let lines = 0;
     for (const s of Object.values(registry)) {
       const src = { initialState: s.initial_state, origins };
@@ -235,7 +238,7 @@ describe('annotation bullets', () => {
             lines += 1;
             const linked = [
               ...('index' in where.origin ? [where.origin.index] : []),
-              ...where.hops.map((h) => h.index),
+              ...where.hops.filter((h) => h.kind !== 'model').map((h) => h.index),
             ];
             for (const i of linked)
               expect(i > index && !!s.events[i]?.prediction, `${e.id} links to ${i + 1}`).toBe(

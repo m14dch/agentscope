@@ -130,7 +130,7 @@ test('annotated-payload: carries, groups that read as the payload, and where val
   // The customer ID's bullet says where the value comes from and links there.
   const bullet = annotated.locator('li').filter({ hasText: 'whose balance to read' });
   await expect(bullet.locator('.travel')).toHaveText(
-    'From the signed-in session · reaches the model at step 10 · the model writes it at step 11 · the agent checks it at step 12 · sent to Example Bank MCP server here',
+    'From the signed-in session · reaches the model at step 10 · the model repeats it at step 11 · the agent checks it at step 12 · sent to Example Bank MCP server here',
   );
   await bullet.getByRole('button', { name: 'step 10' }).click();
   await expect(page.locator('.status')).toContainText('Step 10 of 28');

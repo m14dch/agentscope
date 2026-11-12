@@ -311,7 +311,6 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
   // Origins in the initial state (03 lineage.origins); mirrors validate_specs.py.
   const { tracked, origins = {} } = sources.engine.lineage;
   for (const [key, origin] of Object.entries(origins)) {
-    if (key === 'description') continue;
     if (!tracked.includes(key)) err('03 lineage.origins', `${key} is not a tracked key`);
     const o = obj(origin);
     if (!text(o['state']).trim() || !text(o['label']).trim())

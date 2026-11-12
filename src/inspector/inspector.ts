@@ -474,7 +474,7 @@ export class Inspector {
   }
 
   /**
-   * "From the signed-in session · reaches the model at step m · the model writes it at step w
+   * "From the signed-in session · reaches the model at step m · the model repeats it at step w
    * · the agent checks it at step c · sent to C at step t" (02 inspector.annotations.travel).
    */
   private travelLine(
@@ -506,8 +506,8 @@ export class Inspector {
       const what =
         hop.kind === 'model'
           ? 'reaches the model'
-          : hop.kind === 'writes'
-            ? 'the model writes it'
+          : hop.kind === 'repeats'
+            ? 'the model repeats it'
             : hop.kind === 'checks'
               ? 'the agent checks it'
               : `sent to ${short(step.events[hop.index]?.receiver ?? '')}`;

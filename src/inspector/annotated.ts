@@ -27,7 +27,7 @@ export interface TravelSources {
   origins: Readonly<Record<string, unknown>>;
 }
 
-export type HopKind = 'model' | 'writes' | 'checks' | 'sent';
+export type HopKind = 'model' | 'repeats' | 'checks' | 'sent';
 
 /** Where a tracked value travels; indices are 0-based into the played events. */
 export interface Travel {
@@ -63,8 +63,9 @@ function stateOrigin(
 
 /**
  * The travel of `value` if the event at `index` tracks it (02 inspector.annotations.travel),
- * else undefined. Only whole values match, never a value inside a longer string. A later step
- * that asks a prediction is never named, so a link does not answer it before it is asked.
+ * else undefined. Only whole values match, never a value inside a longer string. A hop to a
+ * later step that asks a prediction is left out, except "reaches the model": that says only
+ * that the model receives the value, which no prediction asks, so no link answers one early.
  */
 export function travel(
   events: readonly ScenarioEvent[],
@@ -81,23 +82,23 @@ export function travel(
     const i = events.findIndex((e, n) => n > after && match(e) && tracks(e, value));
     return i >= 0 ? i : undefined;
   };
-  const writes = next(from, (e) => e.protocol === 'LLM_API' && e.message_type === 'RESPONSE');
+  const repeats = next(from, (e) => e.protocol === 'LLM_API' && e.message_type === 'RESPONSE');
   const checks =
-    writes === undefined
+    repeats === undefined
       ? undefined
       : next(
-          writes,
+          repeats,
           (e) => e.protocol === 'INTERNAL' && e.sender === 'agent' && e.receiver === 'agent',
         );
   const found: [number | undefined, HopKind][] = [
     [next(from, (e) => e.protocol === 'LLM_API' && e.message_type === 'REQUEST'), 'model'],
-    [writes, 'writes'],
+    [repeats, 'repeats'],
     [checks, 'checks'],
     [next(from, (e) => e.protocol === 'MCP' || e.protocol === 'HTTP'), 'sent'],
   ];
   const hops = found
     .filter((h): h is [number, HopKind] => h[0] !== undefined)
-    .filter(([i]) => !(i > index && events[i]?.prediction))
+    .filter(([i, kind]) => kind === 'model' || !(i > index && events[i]?.prediction))
     .map(([i, kind]) => ({ index: i, kind }))
     .sort((a, b) => a.index - b.index);
   return { origin: label === undefined ? { index: from } : { label }, hops };
