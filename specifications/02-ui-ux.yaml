@@ -173,14 +173,15 @@ navigation:
     is the Overview. Missing parts take defaults: the tab''s first scenario, step 0, the Overview.
     The step always numbers events, at every level; at the Overview the cursor rests at the end of
     a stage, so a step inside a stage opens the Overview at the end of that stage and the address
-    is replaced with it (zoom_levels.cursor_mapping). A step beyond the scenario is clamped. An unknown tab or
+    is replaced with it (zoom_levels.cursor_mapping). An address ending in /overview opens the
+    Overview and is replaced with the address without a level. A step beyond the scenario is clamped. An unknown tab or
     scenario shows an error naming it, with a link to the tab. Stepping replaces the
     history entry; changing tab or scenario adds one. Parameters are not part of the route,
     so a step number refers to the events played at the scenario''s default parameters.'
-  earlier_routes: 'Before issue 51 an address without a level meant architecture mode. It now
-    means the Overview, the level new learners start at: such an old link opens the stage holding
-    its step, from which zooming in returns to the stage''s events. Old /protocol addresses keep
-    their meaning; /architecture is new.'
+  earlier_routes: 'Before issue 51 an address without a level meant the architecture view. It
+    now means the Overview, the level new learners start at: such an old link opens the stage
+    holding its step, on every tab Compare included, from which zooming in returns to the stage''s
+    events. Old /protocol addresses keep their meaning; /architecture is new.'
   removed_scenarios: 'Addresses of the variants removed in issue 46 still open: a removed scenario
     shows its base scenario at step 0 at the same zoom level, and the address is replaced with the
     base scenario''s (step 0, because a variant''s step numbers named other events). On MCP,
@@ -401,13 +402,17 @@ zoom_levels:
   default_level: overview
   overview: 'The very basics, before any protocol name: the scenario''s parties (03
     overview_fields.parties) as merged lifelines labelled by party, and its 3 to 5 stages (03
-    overview_fields.stages) as blocks in order, each holding its sentence. A stage block spans the
-    lifelines of the parties its events touch, as a group does, and widens only to fit its sentence;
-    lifelines pass under its text. The current stage, the one holding the cursor''s event, is marked
+    overview_fields.stages) as blocks in order, each holding its sentence. The parties'' names head
+    the diagram as its "Parties" (where the other levels name their participants), and the parties
+    spread across the width of the diagram region: the gap between two lifelines grows from 200 px
+    to fill the region, up to 360 px, so a wide workspace (layout.max_width) does not leave the
+    Overview in one corner. A stage block spans the lifelines of the parties its events touch, as
+    a group does, and widens only to fit its sentence; lifelines pass under its text. The current stage, the one holding the cursor''s event, is marked
     like the current group: a 3 px accent bar along its left edge and its sentence in weight 600. All
     stages are shown from step 0, so the whole story reads at once; there are no arrows, protocol
     names, step numbers or payloads. The inspector shows the current stage''s sentence as its message
-    line (before the first stage, the scenario''s question) and no step details; the parameters, the
+    line (before the first stage, the scenario''s question and "Nothing has happened yet. Next runs
+    the first stage.") and no step details; the parameters, the
     prediction prompts and the panels below the workspace (model context, ingestion, retrieval, the
     Combined answer) appear from Architecture on. The learning question heads the page at every level.
     The headline names the mechanism and its protocol (for example MCP), so it is shown from
@@ -454,7 +459,8 @@ zoom_levels:
     keys + (or =) zoom in and - zooms out (controls.keyboard). A change of level keeps focus on the
     control that made it, and a polite live region announces the level and the position, for example
     "Architecture. Step 9 of 28 · Model chooses a tool; agent validates." or "Overview. Stage 2 of
-    4."; stepping announces nothing there.'
+    4."; stepping announces nothing there. Where that control is hidden (in the closed menu on
+    phones) and focus sat in what the level hides, focus moves to the menu''s toggle.'
   scrolling: Only a cursor change or a change of level scrolls, and only the diagram's own
     scroll region, never the page (on phones the page also scrolls to keep the stepping area
     in view, layout.phone.stepping_area); toggling a group or laying out again keeps the scroll
@@ -633,11 +639,13 @@ lineage_selection:
     so a long list adds no information. Steps after the current one are not revealed.
 compare_view:
   shown_in: The Compare tab (navigation.tab_contents), built from 06-comparison-scenarios.yaml compare.
-  layout: 'The headline, the shared control row (controls.row, with the shared slider and the
+  layout: 'The headline (at the Overview compare.overview_headline, which names no protocol), the
+    shared control row (controls.row, with the shared slider and the
     compare step as its timeline), the semantic phase labels, then two panes: the left scenario
     (rag-query, headed RAG) and the right scenario (mcp-balance, headed MCP), side by side from 64rem
-    and stacked below, left first. Then one row per entry of compare.aspects: its label in small
-    ink-muted text beside its sentence, the label above the sentence below 48rem. Nothing makes the
+    and stacked below, left first. Then, from Architecture on (the aspects name the protocols), one
+    row per entry of compare.aspects: its label in small ink-muted text beside its sentence, the label
+    above the sentence below 48rem. Nothing makes the
     page scroll horizontally at any width; each diagram scrolls inside its own region, and below
     48rem each pane''s diagram is the step list (diagram.phone_list), the shared Previous, Play or
     Pause and Next sit with Reset in the bottom bar and the play speed and the zoom control in the
@@ -646,8 +654,9 @@ compare_view:
     label>", at the Overview "Stage <s> of <m>", or "No stage in <phase> · <s> of <m> played" for a
     waiting pane) with its own step slider, over the stages at the Overview, the current event''s
     explanation with sender → receiver and operation (inspector.message_line; at the Overview the
-    current stage''s sentence), its sequence diagram, and a link "Inspect step <k> in <tab>"
-    to the scenario''s own route at that step and zoom level, where the inspector, the context panel and the
+    current stage''s sentence), its sequence diagram, and a link "Inspect step <k> in <tab>" (at the
+    Overview "Inspect in <tab>", without a step number) to the scenario''s own route at that step and
+    zoom level, where the inspector, the context panel and the
     RAG panels are. Compare has no inspector, panels or splitter of its own.'
   timeline: 'The shared timeline follows 06 semantic_phases in order. Compare step 0 is before any
     event, both panes at step 0. Each semantic phase then lasts as many compare steps as the pane with
@@ -662,7 +671,12 @@ compare_view:
     test checks. At the Overview the panes step by stage: each stage counts as one event of the
     semantic phase of its first phase, and a pane rests at the last event of its stage, so the two
     stories run side by side stage by stage under the same rules and placeholders (for example MCP
-    learns the bank''s actions while RAG shows "Index built earlier by rag-index.").'
+    learns the bank''s actions while RAG shows "Index built earlier by rag-index."). A stage can
+    cover several semantic phases (the answer stage: context assembly, model generation and answer),
+    so at the Overview a compare step is labelled with every semantic phase its panes'' stages cover,
+    from the first to the last: the position line reads "Stage <s> of <m> · Context assembly to
+    Answer", every covered phase of the phase line is in weight 600 and marked current, and the live
+    region names the same range.'
   controls: 'One set of shared controls drives the timeline, in the order and form of controls.row:
     Reset, Previous step, Play or Pause, Next step, the play speed, the shared slider and the compare
     step, with the keys of controls.keyboard, under controls.action_rules (Play advances one compare
@@ -670,8 +684,8 @@ compare_view:
     the current phase, and moves both to the next phase once neither has. A shared slider jumps to any
     compare step. A pane''s own slider moves that pane: the position becomes the first compare step at
     which that pane is at the chosen step, and the other pane follows to the same semantic phase.'
-  phase_line: 'Above the panes, the compare step ("Step <s> of <m> · <phase label>", in the control
-    row) and below the row the semantic phase labels in order, the current one in weight 600 and marked as the current step for assistive
+  phase_line: 'Above the panes, the compare step ("Step <s> of <m> · <phase label>", at the
+    Overview "Stage <s> of <m> · <phase range>", in the control row) and below the row the semantic phase labels in order, the current one in weight 600 and marked as the current step for assistive
     technology; the others in ink-muted. Before step 1 no phase is current.'
   defaults: 'Both scenarios play at their default parameters; Compare offers no parameter controls.
     Prediction prompts are not shown in Compare, since a shared step would answer a question asked in
@@ -681,7 +695,13 @@ compare_view:
     left unless it waits), mapped as in zoom_levels.cursor_mapping; the other pane follows to the
     same semantic phase, as with a pane''s own slider.'
   route: '#/compare/<compare id>/<compare step>[/architecture|/protocol], for example
-    #/compare/compare-rag-mcp/12/architecture; the compare step counts the timeline of the zoom level.
+    #/compare/compare-rag-mcp/12/architecture. The compare step counts the timeline of events at every
+    level, as a scenario''s step counts events (navigation.routes): at the Overview the address holds
+    the first compare step of events at which the leading pane (zoom_levels mapping above) is at the
+    end of its current stage, and a step read from an address opens the Overview at the stage that
+    holds the leading pane''s event there. An earlier address without a level, which meant
+    Architecture, therefore opens the stage containing its step and is replaced with it
+    (navigation.earlier_routes).
     Missing parts take defaults and a step beyond the timeline is clamped (navigation.routes); stepping
     replaces the history entry.'
   accessibility: 'Each pane is a region named by its tab label (RAG, MCP); each pane''s slider is

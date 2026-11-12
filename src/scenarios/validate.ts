@@ -239,8 +239,15 @@ function checkScenario(
   for (const problem of overviewProblems(scn)) err(problem.where, problem.message);
 }
 
-/** Party labels and stage sentences name no protocol (03 overview_fields.plain_words). */
-const PROTOCOL_WORDS = /\b(MCP|HTTP|REST|JSON|RPC|LLM|API)\b/;
+/** Words a first-time visitor would have to look up (03 overview_fields.plain_words). */
+const JARGON =
+  /\b(mcp\w*|https?|json\w*|rpcs?|llms?|apis?|tools?|servers?|vectors?|embed\w*|chunk\w*|prompts?|tokens?|schemas?|models?)\b/i;
+const REST = /\bREST\b/;
+
+/** The first technical word in `value`, or undefined; mirrors jargon of validate_specs.py. */
+export function jargon(value: string): string | undefined {
+  return (JARGON.exec(value) ?? REST.exec(value))?.[0];
+}
 
 /** One plain sentence: it ends with a period and holds no other sentence end. */
 function oneSentence(value: string): boolean {
@@ -279,7 +286,7 @@ export function overviewProblems(scn: Scenario): { where: string; message: strin
     if (!pid || ids.has(pid)) err(`overview party ${i} needs a unique id`);
     ids.add(pid);
     if (typeof label !== 'string' || !label.trim()) err(`overview party ${pid} needs a label`);
-    else if (PROTOCOL_WORDS.test(label)) err(`overview party ${pid} names a protocol`);
+    else if (jargon(label)) err(`overview party ${pid} uses the technical word ${jargon(label)}`);
     const group = party['members'];
     if (!Array.isArray(group) || !group.length) err(`overview party ${pid} needs members`);
     else members.push(...group.map(text));
@@ -298,7 +305,8 @@ export function overviewProblems(scn: Scenario): { where: string; message: strin
     stageIds.add(tid);
     if (typeof sentence !== 'string' || !oneSentence(sentence))
       err(`overview stage ${tid} needs one sentence ending with a period`);
-    else if (PROTOCOL_WORDS.test(sentence)) err(`overview stage ${tid} names a protocol`);
+    else if (jargon(sentence))
+      err(`overview stage ${tid} uses the technical word ${jargon(sentence)}`);
     const phases = stage['phases'];
     if (!Array.isArray(phases) || !phases.length) {
       err(`overview stage ${tid} needs phases`);
@@ -477,6 +485,11 @@ function compareProblems(sources: SpecSources, registry: Registry): string[] {
       }
     }
   }
+  const headline = compare['overview_headline'];
+  if (typeof headline !== 'string' || !oneSentence(headline))
+    err('compare.overview_headline', 'needs one sentence ending with a period');
+  else if (jargon(headline))
+    err('compare.overview_headline', `uses the technical word ${jargon(headline)}`);
   const aspects = compare['aspects'];
   if (!Array.isArray(aspects) || !aspects.length) {
     err('compare.aspects', 'needs at least one aspect');

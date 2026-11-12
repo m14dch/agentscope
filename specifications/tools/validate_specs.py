@@ -187,7 +187,16 @@ def check_scenario(scn, ctx):
             err(sid, "question must be a string")
 
 
-PROTOCOL_WORDS = re.compile(r"\b(MCP|HTTP|REST|JSON|RPC|LLM|API)\b")
+# Words a first-time visitor would have to look up (03 overview_fields.plain_words).
+JARGON = re.compile(r"\b(mcp\w*|https?|json\w*|rpcs?|llms?|apis?|tools?|servers?|vectors?|embed\w*"
+                    r"|chunk\w*|prompts?|tokens?|schemas?|models?)\b", re.I | re.A)
+REST = re.compile(r"\bREST\b")
+
+
+def jargon(text):
+    """The first technical word in text, or None (03 overview_fields.plain_words)."""
+    m = JARGON.search(text) or REST.search(text)
+    return m.group(0) if m else None
 
 
 def one_sentence(text):
@@ -221,8 +230,8 @@ def check_overview(scn):
         ids.add(pid)
         if not isinstance(label, str) or not label.strip():
             err(sid, f"overview party {pid} needs a label")
-        elif PROTOCOL_WORDS.search(label):
-            err(sid, f"overview party {pid} names a protocol")
+        elif jargon(label):
+            err(sid, f"overview party {pid} uses the technical word {jargon(label)}")
         group = party.get("members")
         if not isinstance(group, list) or not group:
             err(sid, f"overview party {pid} needs members")
@@ -242,8 +251,8 @@ def check_overview(scn):
         stage_ids.add(tid)
         if not isinstance(sentence, str) or not one_sentence(sentence):
             err(sid, f"overview stage {tid} needs one sentence ending with a period")
-        elif PROTOCOL_WORDS.search(sentence):
-            err(sid, f"overview stage {tid} names a protocol")
+        elif jargon(sentence):
+            err(sid, f"overview stage {tid} uses the technical word {jargon(sentence)}")
         phases = stage.get("phases")
         if not isinstance(phases, list) or not phases:
             err(sid, f"overview stage {tid} needs phases")
@@ -664,6 +673,11 @@ def check_compare(cmp_, registry):
         for phase, text in given.items():
             if not isinstance(text, str) or not text.strip():
                 err("compare.placeholders", f"{sid} placeholder for {phase} is empty")
+    headline = compare.get("overview_headline")
+    if not isinstance(headline, str) or not one_sentence(headline):
+        err("compare.overview_headline", "needs one sentence ending with a period")
+    elif jargon(headline):
+        err("compare.overview_headline", f"uses the technical word {jargon(headline)}")
     aspects = compare.get("aspects")
     if not isinstance(aspects, list) or not aspects:
         err("compare.aspects", "needs at least one aspect")

@@ -505,7 +505,7 @@ scenarios:
     stages:
     - id: read
       phases: [load, parse]
-      sentence: The pipeline reads the bank's documents and keeps only their text.
+      sentence: The pipeline reads the bank's documents and keeps their text and where it came from.
     - id: split
       phases: [chunk]
       sentence: Each document is cut into short passages that overlap a little.

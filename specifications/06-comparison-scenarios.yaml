@@ -46,6 +46,8 @@ compare:
   placeholders:
     rag-query:
       preparation: Index built earlier by rag-index.
+  overview_headline: Two assistants answer two questions, one by asking the bank's systems for your
+    live balance and the other by finding the account conditions in the bank's documents.
   aspects:
   - label: Data source
     sentence: RAG answers from the bank's published documents, held as chunks in an index; MCP answers

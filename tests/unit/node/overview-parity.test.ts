@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { overviewProblems } from '../../../src/scenarios/validate.ts';
+import { jargon, overviewProblems } from '../../../src/scenarios/validate.ts';
 import type { Scenario } from '../../../src/scenarios/types.ts';
 import { readSpecSources } from '../../../scripts/spec-sources.ts';
 
@@ -45,7 +45,7 @@ describe('overview checks (03 scenario_format.overview_fields)', () => {
         s.overview.parties = [{ id: 'all', label: 'Everyone', members: s.participants }];
       }),
       variant((s) => {
-        (s.overview.parties[2] as { label: string }).label = 'MCP server';
+        (s.overview.parties[2] as { label: string }).label = 'Mcp servers';
       }),
       variant((s) => {
         (s.overview.parties[1] as { id: string }).id = 'you';
@@ -61,7 +61,7 @@ describe('overview checks (03 scenario_format.overview_fields)', () => {
         (s.overview.stages[1] as { sentence: string }).sentence = 'Do you ask?';
       }),
       variant((s) => {
-        (s.overview.stages[2] as { sentence: string }).sentence = 'The assistant calls the API.';
+        (s.overview.stages[2] as { sentence: string }).sentence = 'The assistant calls the APIs.';
       }),
       variant((s) => {
         s.overview.stages = s.phases.slice(0, 6).map((p) => ({
@@ -83,5 +83,52 @@ describe('overview checks (03 scenario_format.overview_fields)', () => {
     // Every malformed overview reports at least one problem.
     expect(app.slice(1).every((p) => p.length > 0)).toBe(true);
     expect(pythonProblems(inputs)).toEqual(app);
+  });
+
+  it('both validators find the same technical words, in any case and with endings', () => {
+    const texts = [
+      'You ask the assistant for your balance.',
+      'The assistant calls the APIs.',
+      'It speaks JSON-RPC.',
+      'The mcp client asks.',
+      'The LLMs answer.',
+      'The tool is called.',
+      'Embedding the passages.',
+      'The chunks are stored.',
+      'The prompt is sent.',
+      'The model answers.',
+      'Servers and vectors.',
+      'A token and a schema.',
+      'It calls the REST interface.',
+      'The rest of the answer follows.',
+    ];
+    const app = texts.map((t) => jargon(t) ?? null);
+    expect(app).toEqual([
+      null,
+      'APIs',
+      'JSON',
+      'mcp',
+      'LLMs',
+      'tool',
+      'Embedding',
+      'chunks',
+      'prompt',
+      'model',
+      'Servers',
+      'token',
+      'REST',
+      null,
+    ]);
+    const script = [
+      'import json, sys',
+      'sys.path.insert(0, sys.argv[1])',
+      'import validate_specs as v',
+      'print(json.dumps([v.jargon(t) for t in json.load(sys.stdin)]))',
+    ].join('\n');
+    const out = execFileSync('python3', ['-c', script, TOOLS], {
+      encoding: 'utf8',
+      input: JSON.stringify(texts),
+    });
+    expect(JSON.parse(out)).toEqual(app);
   });
 });

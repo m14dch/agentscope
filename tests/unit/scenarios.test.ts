@@ -45,7 +45,7 @@ function overview(phases: string[]): Scenario['overview'] {
   return {
     parties: [
       { id: 'a', label: 'Assistant', members: ['agent'] },
-      { id: 'm', label: 'Model', members: ['llm'] },
+      { id: 'm', label: 'Helper', members: ['llm'] },
     ],
     stages: phases.map((id) => ({ id, phases: [id], sentence: `Stage ${id} happens.` })),
   };

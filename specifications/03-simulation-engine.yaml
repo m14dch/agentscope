@@ -143,8 +143,12 @@ scenario_format:
       every phase in exactly one stage), and the scenario''s events visit the stages in order, so each
       stage''s events are one consecutive run. sentence is one plain sentence (it ends with a period
       and holds no other sentence end) without protocol names or payloads.'
-    plain_words: Party labels and stage sentences name no protocol, so none of MCP, HTTP, REST, JSON,
-      RPC, LLM and API appears in them as a word.
+    plain_words: 'Party labels and stage sentences are for a first-time visitor: they name no
+      protocol and use no technical term a newcomer would have to look up. None of these words
+      appears in them, in any letter case and with its plural or other endings: MCP, HTTP(S), JSON
+      (also in JSON-RPC), RPC, LLM, API, tool, server, vector, embed (embedding, embedded),
+      chunk, prompt, token, schema and model; nor REST in capitals (the English word rest stays
+      allowed). The same rule holds for 06 compare.overview_headline.'
   optional:
   - question
   - parameters
