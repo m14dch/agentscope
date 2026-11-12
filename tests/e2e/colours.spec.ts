@@ -123,8 +123,8 @@ function offenders(found: Found): string[] {
     .map(([value, where]) => `${value}: ${where.slice(0, 3).join(', ')}`);
 }
 
-// Below 48rem the diagram is the step list, the controls the bottom bar and the menu holds
-// the switches (02 layout.phone); those pages are checked at a phone's width too.
+// Below 48rem each page is the column of steps (02 phone_steps); those pages are checked at a
+// phone's width too, with their rows open.
 const PHONE_ROUTES = new Set([
   './#/mcp/mcp-balance/23/protocol',
   './#/mcp/mcp-balance/14/architecture',

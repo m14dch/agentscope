@@ -27,51 +27,67 @@ modules:
   rag_visualizer: Chunking and simplified 2D embedding projection
   comparison_view: Synchronizes two simulations by semantic phase
 participants:
-  description: Single registry. Scenarios reference these IDs only.
+  description: Single registry. Scenarios reference these IDs only. Each participant has a
+    label and a unique short_label, which names it where room is scarce (02 phone_steps.rows);
+    both validators require both, non-empty, and the short labels unique.
   registry:
   - id: user
     label: User
+    short_label: User
     kind: person
   - id: agent
     label: Agent (host application / RAG orchestrator)
+    short_label: Agent
     kind: application
     note: The same participant runs MCP tool calls and RAG retrieval.
   - id: llm
     label: LLM provider
+    short_label: LLM provider
     kind: external_service
   - id: mcp-client
     label: MCP client
+    short_label: MCP client
     kind: library
     note: Runs inside the agent process in these scenarios.
   - id: mcp-server
     label: Example Bank MCP server
+    short_label: MCP server
     kind: service
   - id: rest-api
     label: Example Bank REST API
+    short_label: REST API
     kind: service
   - id: database
     label: Core ledger
+    short_label: Core ledger
     kind: datastore
   - id: embedding-model
     label: Embedding model
+    short_label: Embedding model
     kind: external_service
   - id: vector-db
     label: Vector database
+    short_label: Vector database
     kind: datastore
   - id: document-store
     label: Document store
+    short_label: Document store
     kind: datastore
   - id: repository
     label: Document repository
+    short_label: Repository
     kind: datastore
   - id: pipeline
     label: Ingestion pipeline
+    short_label: Pipeline
     kind: application
   - id: parser
     label: Parser
+    short_label: Parser
     kind: library
   - id: chunker
     label: Chunker
+    short_label: Chunker
     kind: library
 boundaries:
 - from: user

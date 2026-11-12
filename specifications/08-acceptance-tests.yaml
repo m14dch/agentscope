@@ -144,38 +144,31 @@ e2e_tests:
     payload, and that the customer ID bullet links to the step where it was first seen.
   - Follow that link and verify the cursor moves there; the toggle stays open on the next
     annotated step.
-  - At 390 px open the same step's details and annotations; nothing scrolls sideways.
+  - At 390 px open the same step's row and its annotations; nothing scrolls sideways.
   - axe reports no violations with annotations open.
-- id: phone-layout
+- id: phone-steps
   steps:
-  - At 390 × 844 and 360 × 800, open every scenario of the MCP, RAG and Combined tabs at
-    Architecture and Protocol and step through it with the inspector's step details and the model context open,
-    then every group expanded at its last step, and verify that nothing scrolls horizontally,
-    on the page or inside any element, and that no element extends past the screen's edges.
-  - Verify the diagram is the step list, every reached step names its sender and receiver, and
-    the current step is highlighted and inside its region.
-  - Step through the longest scenario with Next in the bottom bar and verify that Reset,
-    Previous, Play/Pause and Next stay inside the viewport, uncovered, at every step without
-    scrolling.
-  - At both sizes, for every scenario at Architecture and Protocol, step from the top of the page with Next
-    in the bottom bar through every step and verify that the current row or group, any
-    prediction prompt and the message line are entirely on screen above the bar.
-  - Play a scenario with its step details open and verify that without scrolling each step
-    keeps the stepping area on screen, that after the learner scrolls the page it stays where
-    it is while Play steps on, and that the next explicit step brings the stepping area back.
-  - At 360 × 800, play Compare at Architecture and Protocol and combined-balance-explanation at
-    Protocol to the end without any input and verify at every step that the stepping area is on
-    screen above the bar.
-  - Step through Compare with Next from the top of the page at Architecture and Protocol and verify that the
-    current row of each pane whose step changed is on screen above the bar when both fit, else
-    the lower changed pane's current row.
-  - Verify every control outside running text is at least 44 × 44 px on MCP, RAG, Combined
-    and Compare with the step details and the menu open, and the menu holds the scenario
-    list (on RAG), the zoom control and the play speed, and last the GitHub link, and the
-    bottom bar holds the position line, the step slider and Reset, Previous, Play/Pause and
-    Next as named icon buttons.
-  - Step through Compare at Architecture and Protocol and verify both panes use the step list without
-    horizontal scrolling; verify the RAG projection takes its compact form.
+  - At 390 × 844 and 360 × 800, open each kept scenario (mcp-balance, rag-query, rag-index,
+    combined-balance-explanation) and Compare at each zoom level, press Open all where rows open,
+    and verify that every row's body is shown, that nothing scrolls horizontally, on the page or
+    inside any element, that no element other than the page scrolls vertically and that nothing
+    is fixed to the screen.
+  - Verify the rows of each level (stages at the Overview; one row per group at Architecture; one
+    row per played event at Protocol with its step number, glyph, operation label and both
+    participants, the glyph hidden from assistive technology and its meaning in words), that rows
+    are buttons with aria-expanded, and that Compare marks each row RAG or MCP under its semantic
+    phase.
+  - Open and close rows by touch and with the keyboard (Tab, Enter, Space) and verify that
+    several stay open, focus stays on the row, Close all closes every row, and the address names
+    the last row opened.
+  - Verify a prediction prompt comes before its step's content until "Show the step", and that
+    the panels sit in the rows of their steps (scores and projection at retrieve-06, prompt at
+    retrieve-10, answer at retrieve-12, the Combined answer at c-08, the model context at LLM
+    requests) with the projection in its compact form.
+  - Open a deep link and verify its row is open at the top of the screen; zoom and verify the
+    mapped row opens.
+  - Verify every control outside running text is at least 44 × 44 px, that there is no menu,
+    bottom bar or step slider, and that from 48rem the diagram and the control row are unchanged.
 - id: pages
   steps:
   - Build and serve dist under a repository subpath.
@@ -187,7 +180,7 @@ e2e_tests:
   steps:
   - At desktop, tablet and phone width, scan every tab and representative scenarios and steps at every zoom
     level with axe-core, as loaded and with the step details, the model context, a group and the scenario
-    picker or the menu open, and fail on any serious or critical finding.
+    picker open (on phones, with every row open), and fail on any serious or critical finding.
   - At desktop and tablet width, on every tab at Architecture and Protocol, move through the page with Tab and verify
     that every control is reached, on screen and shows a visible focus indicator, that each playback
     icon button shows its name while focused, and that the arrow keys and Enter on Next step.

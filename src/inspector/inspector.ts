@@ -46,6 +46,19 @@ export interface InspectorContext {
   travel?: TravelSources | undefined;
   /** 04-mcp-scenarios.yaml protocol.earlier_revision_handshake, for server/discover. */
   earlierRevision?: EarlierRevision | undefined;
+  /** Prefix of the element IDs, unique per page (several inspectors on phones); "inspector". */
+  id?: string;
+  /** The tab list's name; "Step details". */
+  name?: string;
+  /**
+   * Whether the message line names sender → receiver and operation; false in a phone row,
+   * which already shows them (02 phone_steps.body).
+   */
+  route?: boolean;
+  /** The state of the Annotations toggle, when several inspectors share it. */
+  toggles?: { annotated: boolean };
+  /** Called after this inspector's Annotations toggle changed the shared state. */
+  onAnnotations?: () => void;
 }
 
 /** Whether a step offers the earlier-revision comparison (02 inspector.earlier_revision). */
@@ -212,16 +225,18 @@ export class Inspector {
   private readonly root: HTMLElement;
   private readonly context: InspectorContext;
   private chosen: TabId = 'payload';
-  /** Phones fold the tabs behind "Step details" (02 layout.phone.inspector); kept while stepping. */
-  private collapsed = true;
-  /** The Annotations toggle (02 inspector.annotations.toggle): closed at start, kept while stepping. */
-  private annotated = false;
+  /**
+   * The Annotations toggle (02 inspector.annotations.toggle): closed at start, kept while
+   * stepping; shared by the inspectors of a phone's rows (inspector.annotations.phone).
+   */
+  private readonly toggles: { annotated: boolean };
   /** The step last rendered, so unrelated player changes keep folds and focus. */
   private rendered: InspectorStep | undefined;
 
   constructor(root: HTMLElement, context: InspectorContext) {
     this.root = root;
     this.context = context;
+    this.toggles = context.toggles ?? { annotated: false };
     root.classList.add('inspector-body');
   }
 
@@ -265,17 +280,18 @@ export class Inspector {
     const shown: TabId = panels.has(this.chosen) ? this.chosen : (available[0] as TabId);
     const tablist = el('div', 'tabs-bar');
     tablist.setAttribute('role', 'tablist');
-    tablist.setAttribute('aria-label', 'Step details');
+    tablist.setAttribute('aria-label', this.context.name ?? 'Step details');
+    const prefix = this.context.id ?? 'inspector';
     const panel = el('div', 'tab-panel');
     panel.setAttribute('role', 'tabpanel');
-    panel.id = 'inspector-panel';
+    panel.id = `${prefix}-panel`;
     // Reachable by keyboard even when it holds nothing focusable (Security).
     panel.tabIndex = 0;
     focusKey(panel, 'panel');
     for (const id of available) {
       const tab = focusKey(el('button', 'tab', TAB_LABELS[id]), `tab:${id}`);
       tab.type = 'button';
-      tab.id = `inspector-tab-${id}`;
+      tab.id = `${prefix}-tab-${id}`;
       tab.dataset['tab'] = id;
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-selected', String(id === shown));
@@ -285,24 +301,10 @@ export class Inspector {
       tab.addEventListener('keydown', (e) => this.onTabKey(e, available, step));
       tablist.append(tab);
     }
-    panel.setAttribute('aria-labelledby', `inspector-tab-${shown}`);
+    panel.setAttribute('aria-labelledby', `${prefix}-tab-${shown}`);
     panel.replaceChildren(...(panels.get(shown)?.() ?? []));
-    // From 48rem the toggle is not shown and the tabs always are (src/styles/inspector.css).
     const details = el('div', 'inspector-details', tablist, panel);
-    details.id = 'inspector-details';
-    const toggle = focusKey(el('button', 'details-toggle', 'Step details'), 'details-toggle');
-    toggle.type = 'button';
-    toggle.setAttribute('aria-controls', details.id);
-    const fold = (): void => {
-      toggle.setAttribute('aria-expanded', String(!this.collapsed));
-      details.toggleAttribute('data-collapsed', this.collapsed);
-    };
-    fold();
-    toggle.addEventListener('click', () => {
-      this.collapsed = !this.collapsed;
-      fold();
-    });
-    this.root.replaceChildren(...message, toggle, details);
+    this.root.replaceChildren(...message, details);
   }
 
   private choose(id: TabId, step: InspectorStep, focus = false): void {
@@ -331,8 +333,7 @@ export class Inspector {
   private message(event: ScenarioEvent): Node[] {
     const from = this.context.labels[event.sender] ?? event.sender;
     const to = this.context.labels[event.receiver] ?? event.receiver;
-    // What the message carries, under its explanation (02 inspector.carries). Not a <p>, so
-    // the phone's stepping area still ends at the message line.
+    // What the message carries, under its explanation (02 inspector.carries).
     const carries = event.carries?.length
       ? [
           el(
@@ -343,8 +344,10 @@ export class Inspector {
           ),
         ]
       : [];
+    const message = el('p', 'message', event.explanation);
+    if (this.context.route === false) return [message, ...carries];
     return [
-      el('p', 'message', event.explanation),
+      message,
       el('p', 'small muted', `${from} → ${to} · ${operationLabel(event)}`),
       ...carries,
     ];
@@ -388,15 +391,17 @@ export class Inspector {
       );
     });
     const split = splitPayload(event.payload, event.annotations);
-    const block = 'inspector-json';
+    const block = `${this.context.id ?? 'inspector'}-json`;
     if (split) {
       const toggle = focusKey(el('button', 'annotations-toggle', 'Annotations'), 'annotations');
       toggle.type = 'button';
-      toggle.setAttribute('aria-expanded', String(this.annotated));
+      toggle.setAttribute('aria-expanded', String(this.toggles.annotated));
       toggle.setAttribute('aria-controls', block);
       toggle.addEventListener('click', () => {
-        this.annotated = !this.annotated;
+        // From what this toggle shows, so a shared state never flips against it.
+        this.toggles.annotated = toggle.getAttribute('aria-expanded') !== 'true';
         this.update(step, true);
+        this.context.onAnnotations?.();
       });
       tools.append(toggle);
     }
@@ -415,7 +420,7 @@ export class Inspector {
         ? [this.earlierRevision(this.context.earlierRevision)]
         : [];
     let body: HTMLElement;
-    if (split && this.annotated) {
+    if (split && this.toggles.annotated) {
       body = el(
         'div',
         'annotated',

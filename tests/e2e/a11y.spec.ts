@@ -6,8 +6,8 @@ import { expect, test } from './fixtures';
 /**
  * Automated accessibility scan (issue 19): axe-core runs inside the page, so it sends no
  * request and the guard of fixtures.ts stays strict. Every tab and representative scenarios
- * and steps are scanned at Architecture and Protocol (the Overview in zoom-levels.spec.ts), at desktop, tablet and phone width, with the panels and the
- * menu open. Serious and critical findings fail the test; minor and moderate ones are left to
+ * and steps are scanned at Architecture and Protocol (the Overview in zoom-levels.spec.ts), at desktop, tablet and phone width, with the panels open
+ * (on phones every row of the column of steps). Serious and critical findings fail the test; minor and moderate ones are left to
  * review (axe marks some of them as best practice, not WCAG).
  */
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
@@ -60,22 +60,17 @@ for (const size of WIDTHS) {
         const url = `./${route}/${level}`;
         test(`${url} has no serious or critical issues`, async ({ page }) => {
           await page.goto(url);
-          await page.locator('[data-measured]').first().waitFor();
+          await page.locator('[data-measured], .steps-area > *').first().waitFor();
           await scan(page, `${url} as loaded`);
-          // The panels open: step details (phones), the payload's annotations, model context,
-          // an expanded group, the scenario picker on desktop or the menu on phones.
-          await expand(page, 'Step details');
+          // The panels open: every row on phones, the payload's annotations, model context, an
+          // expanded group, the scenario picker.
+          if (size.name === 'phone') await page.getByRole('button', { name: 'Open all' }).click();
           await expand(page, 'Annotations');
           await expand(page, 'Model context');
           const group = page.locator('[data-group][aria-expanded="false"]').first();
           if ((await group.count()) > 0 && (await group.isVisible())) await group.click();
-          if (size.name === 'phone') {
-            await page.getByRole('button', { name: 'Menu' }).click();
-            await expect(page.locator('#menu')).toBeVisible();
-          } else {
-            const picker = page.locator('.picker summary');
-            if (await picker.isVisible()) await picker.click();
-          }
+          const picker = page.locator('.picker summary');
+          if (await picker.isVisible()) await picker.click();
           await scan(page, `${url} with panels open`);
         });
       }

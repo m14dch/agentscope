@@ -1,35 +1,14 @@
 /*
- * The phone layout (02-ui-ux.yaml layout.phone): below 48rem one column, the header's menu,
- * a bottom bar for stepping, 44 px touch targets and nothing that scrolls sideways.
- * From 48rem the menu does not exist; its controls sit in their own places.
+ * The phone layout (02-ui-ux.yaml layout.phone, phone_steps): below 48rem one column of steps
+ * that only the page scrolls. Rows are separated by hairline rules; no frames, fills, rounded
+ * bars or shadows. Every control outside running text is at least 44 × 44 px.
  */
-.menu-toggle,
-.menu-body {
-  display: none;
-}
-
 @media (max-width: 47.99rem) {
-  :root {
-    /* The bottom bar's height: the position line, the slider, the buttons, gaps and padding. */
-    --bar-space: calc(var(--leading-small) + 2 * 44px + 4 * var(--space-1));
-    /* Focused elements scroll clear of the bar. */
-    scroll-padding-bottom: calc(
-      var(--bar-space) + var(--space-1) + env(safe-area-inset-bottom, 0px)
-    );
-  }
-
-  .shell {
-    padding-bottom: calc(var(--bar-space) + var(--space-3) + env(safe-area-inset-bottom, 0px));
-  }
-
-  /* Header: the wordmark and the menu on one row, then the tabs, then the statement. */
+  /* Header: the wordmark with the GitHub link at the end of its row, then the tabs, then the
+     scenario picker on RAG, then the statement (layout.phone.header). */
   .shell-bar {
     align-items: center;
     gap: 0 var(--space-2);
-  }
-
-  .brand {
-    order: 0;
   }
 
   .brand a {
@@ -43,83 +22,20 @@
     vertical-align: middle;
   }
 
-  .menu-toggle:not([hidden]) {
-    display: inline-block;
+  .source-slot {
+    display: contents;
+  }
+
+  .source-link {
     order: 1;
-    margin-left: auto;
-  }
-
-  .menu-toggle {
-    border: none;
-    padding-inline: var(--space-1) 0;
-    background: none;
-    text-decoration: underline dotted var(--color-ink-muted);
-    text-underline-offset: 0.25em;
-  }
-
-  .menu-toggle[aria-expanded='true'] {
-    font-weight: var(--weight-strong);
-  }
-
-  .menu-body:not([hidden]) {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    order: 2;
-    flex-basis: 100%;
-    padding-block: var(--space-1) var(--space-2);
-    border-block: var(--line-hair) solid var(--color-rule);
-  }
-
-  .menu-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1);
-  }
-
-  .menu-row > .small {
-    flex-basis: 100%;
-  }
-
-  .menu-row:empty {
-    display: none;
-  }
-
-  .menu-scenarios {
-    flex-basis: 100%;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .menu-scenarios li {
-    display: flex;
-    flex-direction: column;
-    padding-bottom: var(--space-1);
-  }
-
-  .menu-scenarios li + li {
-    border-top: var(--line-hair) solid var(--color-rule);
-  }
-
-  .menu-scenarios a {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     min-height: 44px;
-  }
-
-  .menu-scenarios a[aria-current='true'] {
-    font-weight: var(--weight-strong);
-  }
-
-  /* The scenario list is in the menu; the picker of wider screens is not shown. */
-  .shell-bar > .picker {
-    display: none;
+    min-width: 44px;
   }
 
   .tabs {
-    order: 3;
+    order: 2;
     flex-basis: 100%;
     flex-wrap: wrap;
     gap: 0 var(--space-3);
@@ -132,73 +48,32 @@
     min-width: 44px;
   }
 
-  .simulated {
-    margin-top: 0;
+  .picker {
+    order: 3;
+    flex-basis: 100%;
   }
 
-  /* The GitHub link: last in the menu, or alone at the end of the wordmark row. */
-  .source-link {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-    min-width: 44px;
+  .picker summary {
+    padding-block: 14px;
   }
 
-  .menu-row .source-link {
-    margin-left: 0;
-  }
-
-  /* The bottom bar: the position, the step slider, then Reset, Previous step, Play or Pause
-     and Next step in equal widths (02 layout.phone.controls). */
-  .controls {
-    position: fixed;
-    z-index: 2;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--space-1);
-    margin: 0;
-    padding: var(--space-1) var(--page-margin)
-      calc(var(--space-1) + env(safe-area-inset-bottom, 0px));
-    background: var(--color-paper);
-    border-top: var(--line-hair) solid var(--color-rule);
-  }
-
-  .controls > .status,
-  .controls > input {
-    order: -1;
-    grid-column: 1 / -1;
-    width: 100%;
-    margin: 0;
-  }
-
-  /* The focused button's name shows above the whole bar, clear of the position line. */
-  .controls .icon-button {
+  /* The list opens in place and pushes the page down; nothing covers the content. */
+  .picker ul {
     position: static;
     width: auto;
-  }
-
-  .controls .icon-button .control-label {
-    left: var(--page-margin);
-  }
-
-  .controls .icon-button:last-child .control-label {
-    left: auto;
-    right: var(--page-margin);
-  }
-
-  .controls .icon-button:focus-visible .control-label,
-  .controls .icon-button:hover .control-label {
-    top: auto;
-    bottom: calc(100% + var(--space-1) / 2);
-  }
-
-  /* Everything of the control row is in the bar or the menu; nothing stays in the page. */
-  .control-row {
-    display: block;
     margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  .picker a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .simulated {
+    margin-top: 0;
   }
 
   /* Touch targets of at least 44 × 44 px, except controls inside a sentence or code. */
@@ -213,8 +88,13 @@
     flex-wrap: wrap;
   }
 
+  .zoom button {
+    height: auto;
+  }
+
   .parameters {
     gap: var(--space-1) var(--space-2);
+    margin-top: var(--space-1);
   }
 
   .parameter {
@@ -229,7 +109,6 @@
   .tabs-bar {
     flex-wrap: wrap;
     gap: 0 var(--space-1);
-    margin-top: 0;
   }
 
   .earlier > summary,
@@ -237,54 +116,191 @@
     padding-block: 14px;
   }
 
-  /* The diagram region: the step list, 30% of the screen high, scrolling vertically only,
-     so the stepping area fits above the bar (02 layout.phone.presentation). */
-  .workspace .diagram-pane,
-  .compare-pane .diagram-pane {
-    height: max(9rem, 30svh);
-    min-height: 0;
-    max-height: none;
-    overflow: hidden auto;
-  }
-
-  .inspector {
-    min-height: 0;
-    padding-top: var(--space-1);
-  }
-
   /* Spaces at a line's end wrap instead of hanging past the edge. */
   .json-value {
     white-space: break-spaces;
   }
 
-  .inspector-details[data-collapsed] {
-    display: none;
+  /* The intro: the zoom control, the parameters fold, Open all and Close all. */
+  .phone-intro {
+    margin-bottom: var(--space-2);
   }
 
-  .details-toggle {
-    display: block;
-    margin-top: var(--space-1);
+  .fold-area {
+    margin-bottom: var(--space-2);
+  }
+
+  .fold,
+  .panel-toggle {
     border: none;
     padding: 0;
     background: none;
+    text-align: left;
     text-decoration: underline dotted var(--color-ink-muted);
     text-underline-offset: 0.25em;
   }
 
-  .details-toggle[aria-expanded='true'] {
+  .fold[aria-expanded='true'],
+  .panel-toggle[aria-expanded='true'] {
     font-weight: var(--weight-strong);
   }
 
-  .compare-pane > p:last-child a {
-    display: inline-flex;
+  .open-all {
+    display: flex;
+    gap: var(--space-1);
+    margin-bottom: var(--space-2);
+  }
+
+  /* The rows: a hairline rule between rows and at the column's ends, nothing else. */
+  .steps,
+  .stages,
+  .group-events {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .steps,
+  .stages {
+    border-bottom: var(--line-hair) solid var(--color-rule);
+  }
+
+  .step-item,
+  .stage-item {
+    border-top: var(--line-hair) solid var(--color-rule);
+  }
+
+  .stage-item {
+    padding-block: var(--space-1);
+  }
+
+  .stage-item p {
+    margin: 0;
+  }
+
+  /* A row: the step number (or RAG/MCP), the glyph, the title with its subline below, and
+     the disclosure marker at the end. */
+  .step-row,
+  .group-event-head {
+    display: grid;
+    grid-template-columns: 2.25rem 1.25rem minmax(0, 1fr) auto;
+    column-gap: var(--space-1);
+    align-items: baseline;
+    width: 100%;
+    margin: 0;
+    padding: var(--space-1) 0;
+    border: none;
+    background: none;
+    font-size: var(--size-text);
+    line-height: var(--leading-text);
+    text-align: left;
+  }
+
+  .step-lead {
+    grid-column: 1;
+  }
+
+  .step-glyph {
+    grid-column: 2;
+    font-family: var(--font-code);
+  }
+
+  .step-title {
+    grid-column: 3;
+    overflow-wrap: anywhere;
+  }
+
+  .step-sub {
+    grid-column: 3;
+    overflow-wrap: anywhere;
+  }
+
+  .step-marker {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  /* An Architecture group: the title from the left edge, its events below it in full width. */
+  .step-row--plain {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .step-row--plain .step-title,
+  .step-row--plain .step-sub {
+    grid-column: 1;
+  }
+
+  .step-row--plain .step-marker {
+    grid-column: 2;
+  }
+
+  /* A row named by the address stops 48 px below the top (phone_steps.address). */
+  .step-row {
+    scroll-margin-top: var(--space-6);
+  }
+
+  /* A prediction waiting for "Show the step" ends the body without a rule or gap below. */
+  .step-body > .prediction:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .inspect-link,
+  .full-participants {
+    display: flex;
     align-items: center;
+  }
+
+  .inspect-link {
     min-height: 44px;
   }
-}
 
-/* From 48rem the tabs always show; the toggle exists for phones only. */
-@media (min-width: 48rem) {
-  .details-toggle {
-    display: none;
+  .full-participants {
+    margin: 0 0 var(--space-1);
+  }
+
+  .step-row[aria-expanded='true'] .step-title {
+    font-weight: var(--weight-strong);
+  }
+
+  /* The body opens below its row in the column's full width, so payloads keep their room. */
+  .step-body {
+    padding: 0 0 var(--space-3);
+  }
+
+  .step-body .inspector-details {
+    margin-top: var(--space-1);
+  }
+
+  .group-event {
+    padding-bottom: var(--space-2);
+  }
+
+  /* Events in an opened group: number and glyph in their columns, the text aligned with the
+     titles. */
+  .group-event-head {
+    grid-template-columns: 2.25rem 1.25rem minmax(0, 1fr);
+  }
+
+  .group-event > :not(.group-event-head) {
+    margin: 0;
+    padding-left: calc(3.5rem + 2 * var(--space-1));
+  }
+
+  /* Panels inside a row stack into the body's width. */
+  .step-body .retrieval,
+  .step-body .ingestion,
+  .step-body .combined {
+    margin-top: var(--space-2);
+  }
+
+  .compare-phase h3 {
+    margin: var(--space-3) 0 var(--space-1);
+    font-size: var(--size-text);
+  }
+
+  .compare-aspects {
+    margin-top: var(--space-4);
   }
 }

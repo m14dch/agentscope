@@ -13,7 +13,8 @@ const PROTOCOL = /\b(MCP|HTTP|JSON-RPC|LLM API|REST|tools\/call)\b/;
 
 async function open(page: Page, hash: string): Promise<void> {
   await page.goto(`./${hash}`);
-  await page.locator('[data-measured]').first().waitFor();
+  // The diagram once measured, or below 48rem the column of steps (02 phone_steps).
+  await page.locator('[data-measured], .steps-area > *').first().waitFor();
 }
 
 test('a first-time visitor sees the Overview of mcp-balance before any protocol name', async ({
@@ -146,7 +147,9 @@ test('every tab offers the three levels; Compare tells both stories stage by sta
   await page.getByRole('button', { name: 'Next step' }).click();
   // Preparation: MCP learns the bank's actions; RAG's index was built earlier.
   await expect(shared).toHaveText('Stage 1 of 4 · Preparation');
-  await expect(rag.locator('.compare-message')).toHaveText('Index built earlier by rag-index.');
+  await expect(rag.locator('.compare-message')).toHaveText(
+    "The documents were indexed earlier, in the RAG tab's indexing scenario.",
+  );
   await expect(mcp.locator('.compare-position p')).toHaveText('Stage 1 of 4');
   await expect(mcp.getByRole('link', { name: 'Inspect in MCP' })).toBeVisible();
   await page.getByRole('button', { name: 'Next step' }).click();

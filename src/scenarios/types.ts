@@ -199,7 +199,9 @@ export interface EarlierRevision {
 /** The parsed specification files the app bundles (00, 01, 03, 04, 05, 06, 07). */
 export interface SpecSources {
   product: { primary_questions: { mcp: string; rag: string; combined: string } } & JsonObject;
-  architecture: { participants: { registry: { id: string }[] } } & JsonObject;
+  architecture: {
+    participants: { registry: { id: string; label?: string; short_label?: string }[] };
+  } & JsonObject;
   engine: {
     event_schema: { required: string[]; fields: Record<string, string> };
     scenario_format: { required: string[] };

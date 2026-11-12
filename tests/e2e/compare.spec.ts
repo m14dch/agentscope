@@ -29,7 +29,7 @@ const mcpPhases = semanticOf('mcp-balance');
 
 const rag = (page: Page) => page.getByRole('region', { name: 'RAG', exact: true });
 const mcp = (page: Page) => page.getByRole('region', { name: 'MCP', exact: true });
-// The compare step's line; on phones it moves into the bottom bar (02 layout.phone.controls).
+// The compare step's line.
 const status = (page: Page) => page.locator('.compare-status');
 
 async function open(page: Page, hash: string): Promise<void> {
@@ -68,7 +68,7 @@ test('compare-sync: Next keeps both panes on the same semantic phase, with the R
     if (phase === 'Preparation') {
       // RAG has nothing in preparation: it names no step of its own and says why.
       await expect(rag(page).locator('.compare-message')).toHaveText(
-        'Index built earlier by rag-index.',
+        "The documents were indexed earlier, in the RAG tab's indexing scenario.",
       );
       await expect(rag(page).locator('.compare-position p')).toHaveText(
         'No step in Preparation · 0 of 10 played',
@@ -104,10 +104,10 @@ test('compare-sync: stepping either pane moves the other to the same semantic ph
   await page.getByRole('slider', { name: 'MCP step' }).fill('4');
   await expect(status(page)).toHaveText('Step 4 of 28 · Preparation');
   await expect(rag(page).locator('.compare-message')).toHaveText(
-    'Index built earlier by rag-index.',
+    "The documents were indexed earlier, in the RAG tab's indexing scenario.",
   );
   await expect(page.locator('.compare-phase-line [aria-live="polite"]')).toHaveText(
-    'Preparation. RAG: Index built earlier by rag-index. MCP step 4 of 28.',
+    "Preparation. RAG: The documents were indexed earlier, in the RAG tab's indexing scenario. MCP step 4 of 28.",
   );
   // And forward to RAG's last retrieval step: MCP goes to the same offset of that phase.
   await ragSlider.fill('6');
@@ -186,12 +186,10 @@ test('compare: panes side by side on desktop, stacked on tablet, no page-level h
   const top = async (pane: Locator) => (await box(pane.locator('.diagram-pane'))).y;
   expect(Math.abs((await top(rag(page))) - (await top(mcp(page))))).toBeLessThan(2);
   expect(await pageScroll()).toBeLessThanOrEqual(0);
-  for (const width of [820, 390]) {
+  // At tablet width (below 48rem Compare is the column of steps, phone-steps.spec.ts).
+  for (const width of [820]) {
     await page.setViewportSize({ width, height: 1180 });
-    // Below 48rem both panes lay out again as step lists; measure only once they have.
-    await expect(
-      page.locator(`[data-presentation="${width < 768 ? 'list' : 'diagram'}"]`),
-    ).toHaveCount(2);
+    await expect(page.locator('[data-presentation="diagram"]')).toHaveCount(2);
     await expect
       .poll(async () => {
         r = await box(rag(page));

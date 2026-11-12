@@ -8,8 +8,6 @@ import { currentGroupKey, estimate, layout, type Level, type Measure } from './m
 import { stageAt, stageSpans, stageStops } from './zoom.ts';
 import { Expansion } from './expansion.ts';
 import { renderSvg } from './render.ts';
-import { renderList } from './list.ts';
-import { phoneQuery } from '../app/phone.ts';
 
 export interface DiagramOptions {
   labels: Readonly<Record<string, string>>;
@@ -20,8 +18,8 @@ export interface DiagramOptions {
   name?: string;
   /**
    * Called with the width the region needs to show the diagram without scrolling sideways
-   * (its natural width plus the region's scrollbar), whenever that changes; 0 in the step
-   * list. The workspace widens up to it (02 layout.max_width).
+   * (its natural width plus the region's scrollbar), whenever that changes. The workspace
+   * widens up to it (02 layout.max_width).
    */
   onNaturalWidth?: (px: number) => void;
 }
@@ -68,12 +66,6 @@ export class DiagramView {
   private widest: { events: readonly unknown[]; measure: Measure; width: number } | undefined;
   /** Level and cursor the region last scrolled to. */
   private scrolledTo = '';
-  /** Below 48rem the diagram is the step list (02 diagram.phone_list). */
-  private readonly phone = phoneQuery();
-  private readonly onPhoneChange = (): void => {
-    this.scrolledTo = '';
-    this.render();
-  };
 
   constructor(root: HTMLElement, player: Player, options: DiagramOptions) {
     this.root = root;
@@ -84,7 +76,6 @@ export class DiagramView {
     root.tabIndex = 0;
     root.addEventListener('click', this.onClick);
     root.addEventListener('keydown', this.onKey);
-    this.phone?.addEventListener('change', this.onPhoneChange);
     this.unsubscribe = player.subscribe(() => this.render());
     // The Overview spreads its parties across the region, so it follows the region's width.
     if (typeof ResizeObserver === 'function') {
@@ -141,7 +132,6 @@ export class DiagramView {
     this.unsubscribe();
     this.root.removeEventListener('click', this.onClick);
     this.root.removeEventListener('keydown', this.onKey);
-    this.phone?.removeEventListener('change', this.onPhoneChange);
     this.resize?.disconnect();
     this.root.replaceChildren();
   }
@@ -158,7 +148,6 @@ export class DiagramView {
       focused instanceof Element && focused !== this.root && this.root.contains(focused)
         ? (focused.closest<HTMLElement | SVGElement>('[data-group]')?.dataset['group'] ?? '')
         : undefined;
-    const list = this.phone?.matches ?? false;
     // The group the cursor enters expands; a waiting Compare pane has no current group, and the
     // Overview none at all, so zooming in enters the current group again.
     const architecture = this.viewLevel === 'architecture' && !this.held;
@@ -175,19 +164,19 @@ export class DiagramView {
     });
     this.laidOutWidth = this.root.clientWidth;
     const title = this.title(scenario);
-    this.root.innerHTML = list
-      ? renderList(model, title, this.options.labels)
-      : renderSvg(model, title, this.options.id ?? 'diagram', this.options.labels);
-    this.root.dataset['presentation'] = list ? 'list' : 'diagram';
-    this.reportWidth(list ? 0 : Math.max(model.width, this.widestWidth(scenario)));
+    this.root.innerHTML = renderSvg(
+      model,
+      title,
+      this.options.id ?? 'diagram',
+      this.options.labels,
+    );
+    this.root.dataset['presentation'] = 'diagram';
+    this.reportWidth(Math.max(model.width, this.widestWidth(scenario)));
     // Focus moved by the keyboard scrolls clear of the sticky participant names too.
     const header = this.headerHeight();
     this.root.style.scrollPaddingTop = header ? `${header}px` : '';
     const name = this.options.name ?? 'Sequence diagram';
-    this.root.setAttribute(
-      'aria-label',
-      list ? `${name}, a list of steps` : `${name}, scrolls in both directions`,
-    );
+    this.root.setAttribute('aria-label', `${name}, scrolls in both directions`);
     if (focusKey !== undefined) {
       const group = focusKey
         ? this.root.querySelector<HTMLElement | SVGElement>(
@@ -295,12 +284,10 @@ export class DiagramView {
     top = Math.max(0, top);
     left = Math.max(0, left);
     if (top === this.root.scrollTop && left === this.root.scrollLeft) return;
-    // The step list scrolls at once, so the page can follow it (02 layout.phone.stepping_area).
-    const instant = reducedMotion() || this.root.dataset['presentation'] === 'list';
-    this.root.scrollTo({ top, left, behavior: instant ? 'instant' : 'smooth' });
+    this.root.scrollTo({ top, left, behavior: reducedMotion() ? 'instant' : 'smooth' });
   }
 
-  /** Height of the participant names' band, 0 in the step list. */
+  /** Height of the participant names' band. */
   private headerHeight(): number {
     const header = this.root.querySelector<HTMLElement>('.diagram-head');
     return header ? Number(header.dataset['header'] ?? 0) : 0;
@@ -315,8 +302,6 @@ export class DiagramView {
 
   private readonly onKey = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
-    // A button in the step list activates itself, through onClick.
-    if (event.target instanceof HTMLButtonElement) return;
     const group = (event.target as Element).closest<SVGGElement>('[data-group]');
     if (!group?.dataset['group']) return;
     event.preventDefault();

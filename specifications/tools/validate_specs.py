@@ -904,6 +904,23 @@ def answer_composition_problem(composition):
     return None
 
 
+def participant_label_problems(registry):
+    """Labels of the participant registry (01 participants): each has a label and a short_label,
+    and no two share a short label. Mirrors participantLabelProblems of src/scenarios/validate.ts."""
+    def text(v):
+        return v if isinstance(v, str) else ""
+    problems, shorts = [], set()
+    for p in registry:
+        p = p if isinstance(p, dict) else {}
+        short = text(p.get("short_label")).strip()
+        if not text(p.get("label")).strip() or not short:
+            problems.append(f"{text(p.get('id'))} needs a label and a short_label")
+        elif short in shorts:
+            problems.append(f"short_label {short} is not unique")
+        shorts.add(short)
+    return problems
+
+
 def check_rag(rag, comp, registry, ui):
     R = rag_engine(rag)
     refs = {k: v for k, v in rag["reference_results"].items() if k != "note"}
@@ -1072,6 +1089,8 @@ def main():
         o = origin if isinstance(origin, dict) else {}
         if not str(o.get("state") or "").strip() or not str(o.get("label") or "").strip():
             err("03 lineage.origins", f"{key} needs a state and a label")
+    for problem in participant_label_problems(arch["participants"]["registry"]):
+        err("01 participants", problem)
     # One scenario per use case (03 scenario_format.one_scenario_per_use_case): no variants.
     for where, doc in (("04", mcp), ("05", rag), ("06 combined", cmp_["combined"])):
         if "variants" in doc:

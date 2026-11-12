@@ -67,7 +67,7 @@ for (const [width, height, device] of [
   });
 }
 
-// From 48rem (tablets); below it the diagram is the step list (02 diagram.phone_list).
+// From 48rem (tablets); below it the page is the column of steps (02 phone_steps).
 test('the diagram scrolls horizontally on a narrow screen instead of squeezing', async ({
   page,
 }) => {
