@@ -12,7 +12,13 @@ describe('contrast', () => {
     expect(contrast('#fff', '#111')).toBeCloseTo(18.88, 2);
   });
 
-  it('rejects anything that is not a hex colour', () => {
+  it('reads an opaque computed rgb() like its hex (the browser reports colours so)', () => {
+    expect(luminance('rgb(92, 102, 88)')).toBe(luminance('#5c6658'));
+    expect(luminance('rgba(92, 102, 88, 1)')).toBe(luminance('#5c6658'));
+  });
+
+  it('rejects anything that is not an opaque hex or rgb() colour', () => {
     expect(() => luminance('red')).toThrow(/#rrggbb/);
+    expect(() => luminance('rgba(0, 0, 0, 0)')).toThrow(/opaque/);
   });
 });

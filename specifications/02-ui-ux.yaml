@@ -120,9 +120,27 @@ design:
     use:
     - Paper (white) is the page and the reading surface, and every band that hides what
       passes beneath it (the participant header, the group text in the diagram).
-    - Ink carries text and data. Ink-muted carries secondary text and past-step labels.
-      Rule (Neutral Gray) carries structure only (lifelines, axes, separators), never
-      text or meaning.
+    - Ink carries text and data. Ink-muted carries secondary text, past-step labels and the
+      boundary of every interactive control drawn with a border (buttons, the segmented zoom
+      control, toggles, selects). A hovered button takes a 1 px ink border. A pressed toggle
+      has a 2 px ink boundary (its ink border and an ink line just inside it) and weight 600,
+      so pressed differs from unpressed and from hovered by more than colour; while it has
+      keyboard focus the focus ring takes the place of the inner line. The segments of a
+      segmented control share their borders by overlapping them, so a pressed or hovered
+      segment shows its boundary on all four sides. Rule (Neutral Gray) carries structure
+      only (lifelines, axes, separators, section and row rules, table borders, the inspector
+      divider, the open picker list), never text, meaning or the boundary of a control
+      (WCAG 1.4.11).
+    - 'Controls drawn without a border (tabs, links, folds, the rows of phone_steps) are
+      identified by their text and its underline or weight, not by a boundary. The sliders
+      (the step slider, the RAG parameters) keep the browser''s own appearance with only
+      accent-color set to ink: thumb and filled part are ink, and the unfilled track is the
+      user agent''s, which WCAG 1.4.11 exempts as appearance determined by the user agent.
+      Each slider''s value is also given as text (the position line "Step k of n", the
+      parameter''s output beside it), so nothing depends on seeing the track.'
+    - 'The focus ring is a 2 px outline 2 px outside the control, in accent (3.36:1 on paper).
+      On or inside a selection background it is ink, because accent reaches only 2.71:1 on
+      Naples Yellow: the focus indicator reaches 3:1 against every background it sits on.'
     - 'Accent (Peach Red) marks what to look at now: the current step and its pair, and
       retained chunks. It is used for lines and marks; text in that role uses accent-text.'
     - Selection (Naples Yellow) is a background for what the learner selected or tracks,
@@ -134,7 +152,9 @@ design:
       only exception is the approved brand images (layout brand); their colours stay inside
       those image files and never appear in styles, scripts or markup.
     - 'Contrast on paper: ink, ink-muted, accent-text and error reach 4.5:1; accent reaches
-      3:1 for marks. Ink on selection reaches 4.5:1.'
+      3:1 for marks. Ink on selection reaches 4.5:1. Every visible border of a button, select
+      or tab reaches 3:1 against the background behind it (WCAG 1.4.11); rule (1.87:1) does
+      not, which is why it never draws a control.'
     - Enforcement - the source is scanned for hex values and colour functions outside the
       tokens, and a browser test checks every computed colour on rendered pages (default,
       focused and selected states, pseudo-elements and SVG gradient stops) is a token or

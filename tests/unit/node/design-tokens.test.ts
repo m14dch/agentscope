@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
-import { contrast } from '../../../src/design/contrast';
+import { contrast, NON_TEXT_CONTRAST } from '../../../src/design/contrast';
 
 const ROOT = new URL('../../../', import.meta.url).pathname;
 const TOKENS_CSS = 'src/styles/tokens.css';
@@ -23,6 +23,26 @@ function files(dir: string): string[] {
     const path = join(dir, name);
     return statSync(path).isDirectory() ? files(path) : [path];
   });
+}
+
+/** Every innermost CSS rule under src/: its file, selector and declarations, without comments. */
+function cssRules(): { path: string; selector: string; body: string }[] {
+  return files(join(ROOT, 'src'))
+    .filter((path) => path.endsWith('.css'))
+    .flatMap((path) =>
+      [...withoutComments(path, readFileSync(path, 'utf8')).matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+        (m) => ({
+          path: path.slice(ROOT.length),
+          selector: (m[1] ?? '').trim().replace(/\s+/g, ' '),
+          body: m[2] ?? '',
+        }),
+      ),
+    );
+}
+
+/** A colour of 02-ui-ux.yaml by token name. */
+function token(name: string): string {
+  return specTokens[name] ?? '';
 }
 
 // ---------------------------------------------------------------- colour guard
@@ -127,6 +147,73 @@ describe('design tokens', () => {
     }
     expect(contrast(t('accent'), t('paper')), 'accent on paper').toBeGreaterThanOrEqual(3);
     expect(contrast(t('ink'), t('selection')), 'ink on selection').toBeGreaterThanOrEqual(4.5);
+  });
+
+  // 02 design.colour.use: a control's border is its boundary and reaches 3:1 (WCAG 1.4.11);
+  // rule is structure only. tests/e2e/colours.spec.ts checks the computed borders as rendered.
+  it('draws the borders and outlines of controls only in tokens that reach 3:1', () => {
+    const CONTROL = new RegExp(
+      [
+        String.raw`(?:^|[\s,>+~(])(?:button|select|input)(?![\w-])`,
+        String.raw`\[aria-pressed`,
+        ...[
+          'tab',
+          'icon-button',
+          'chunk-select',
+          'citation',
+          'balance',
+          'panel-toggle',
+          'fold',
+          'step-row',
+          'projection-item',
+        ].map((name) => String.raw`\.${name}(?![\w-])`),
+      ].join('|'),
+    );
+    const found = cssRules()
+      .filter((r) => CONTROL.test(r.selector))
+      .flatMap((r) =>
+        [...r.body.matchAll(/\b(?:border|outline)[a-z-]*:[^;]*var\(--color-([a-z-]+)\)/g)].map(
+          (d) => ({ at: `${r.path} ${r.selector}`, token: d[1] ?? '' }),
+        ),
+      );
+    expect(found.map((f) => f.at)).toContain('src/styles/base.css button');
+    const offenders = found
+      .filter((f) => contrast(token(f.token), token('paper')) < NON_TEXT_CONTRAST)
+      .map((f) => `${f.at}: ${f.token}`);
+    expect(offenders).toEqual([]);
+  });
+
+  // 02 design.colour.use: the focus ring reaches 3:1 on every background it can sit on. The
+  // accent ring does on paper but not on Naples Yellow, so every selection background sets a
+  // ring of its own, for itself and for the controls inside it.
+  it('gives every selection background a focus ring that reaches 3:1 on it', () => {
+    const rules = cssRules();
+    const ring = (selector: string) =>
+      /outline(?:-color)?:[^;]*var\(--color-([a-z-]+)\)/.exec(
+        rules
+          .filter((r) => r.selector.split(',').some((s) => s.trim() === selector))
+          .map((r) => r.body)
+          .join(';'),
+      )?.[1];
+    const reaches = (name: string | undefined) =>
+      name !== undefined &&
+      contrast(token(name), token('paper')) >= NON_TEXT_CONTRAST &&
+      contrast(token(name), token('selection')) >= NON_TEXT_CONTRAST;
+    expect(contrast(token(ring(':focus-visible') ?? ''), token('paper'))).toBeGreaterThanOrEqual(
+      NON_TEXT_CONTRAST,
+    );
+    const selected = rules
+      .filter((r) => /background(?:-color)?:\s*var\(--color-selection\)/.test(r.body))
+      .flatMap((r) => r.selector.split(',').map((s) => s.trim()));
+    expect(selected).toContain('.json-mark');
+    const offenders = selected
+      .flatMap((s) => [
+        `${s}:focus-visible`,
+        ...(s.includes('[aria-pressed') ? [] : [`${s} :focus-visible`]),
+      ])
+      .filter((f) => !reaches(ring(f)))
+      .map((f) => `${f}: ${ring(f) ?? 'no ring of its own'}`);
+    expect(offenders).toEqual([]);
   });
 });
 

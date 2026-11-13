@@ -3,8 +3,8 @@
   /* Colour: Sanzo Wada No. 303 plus supporting colours (02-ui-ux.yaml → design.colour) */
   --color-paper: #ffffff; /* White: page */
   --color-ink: #253122; /* Deep Slate Olive: text and data */
-  --color-ink-muted: #5c6658; /* derived: secondary text */
-  --color-rule: #b6bfc1; /* Neutral Gray: structure only */
+  --color-ink-muted: #5c6658; /* derived: secondary text and control borders */
+  --color-rule: #b6bfc1; /* Neutral Gray: structure only, never a control's border (1.87:1) */
   --color-accent: #f15a30; /* Peach Red: current step, lines and marks */
   --color-accent-text: #bc4625; /* darker Peach Red: small text in the accent role */
   --color-selection: #fbe6a0; /* Naples Yellow: selected or tracked, as a background */
