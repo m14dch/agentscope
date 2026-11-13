@@ -17,7 +17,7 @@ design:
     Naples Yellow marks what the learner selected or tracks. Error red is close to Peach Red in hue, so errors always carry a × and a text
     naming them.
   - The RAG question changes to the handover's question and the communication layer
-    (learning questions, takeaways, prediction prompts) was added to the scenario data
+    (learning questions, takeaways) was added to the scenario data
     (issue 22).
   - Self-hosted fonts stay because the app must work offline; no other dependency is
     added for the design.
@@ -372,8 +372,8 @@ zoom_levels:
     stages are shown from step 0, so the whole story reads at once; there are no arrows, protocol
     names, step numbers or payloads. The inspector shows the current stage''s sentence as its message
     line (before the first stage, the scenario''s question and "Nothing has happened yet. Next runs
-    the first stage.") and no step details; the parameters, the
-    prediction prompts and the panels below the workspace (model context, ingestion, retrieval, the
+    the first stage.") and no step details; the parameters and
+    the panels below the workspace (model context, ingestion, retrieval, the
     Combined answer) appear from Architecture on. The learning question heads the page at every level.
     The headline names the mechanism and its protocol (for example MCP), so it is shown from
     Architecture on, where it states what the groups show; at the Overview the stage sentences carry
@@ -471,19 +471,13 @@ phone_steps:
       closes every one; neither moves focus. An open row''s title is in weight 600. At start no
       row is open except the one the address names (address).'
   body:
-    protocol: 'In this order: the prediction prompt when the event has one (predictions); the
-      inspector for the event (inspector): its explanation without the sender → receiver line the
+    protocol: 'In this order: the inspector for the event (inspector): its explanation without the sender → receiver line the
       row already shows, the carries list (inspector.carries), then its tabs, the payload with its
       Annotations toggle (inspector.annotations); then the panels the event holds
       (inline_panels). The tabs show directly: the row is the fold.'
     architecture: 'The group''s events in order, each its step number, operation label and
       participants as in a Protocol row, and its explanation (inspector.message_line), as plain
       text; then the panels its events hold (inline_panels). Payloads are at Protocol.'
-  predictions: 'A Protocol row whose event carries a prediction prompt (learning.prediction)
-    opens with "Before this step" in small ink-muted text, the prompt, and a button "Show the
-    step"; the rest of its body appears once that is pressed, and focus moves to the body''s
-    message. Open all shows every body in full, each prompt above its step, and counts as having
-    pressed it: such a row opens in full from then on. Nothing is scored.'
   inline_panels: 'A panel sits in the row of the step it explains, not below the page, and shows
     what it shows at that step on wider screens: the model context (context_panel) as a fold
     "Model context" (aria-expanded, closed at start) in the row of every LLM API request; in
@@ -534,14 +528,9 @@ phone_steps:
     level suffix, and the compare step stays (compare_view.route).'
 learning:
   interaction: 'Each scenario follows the handover''s pattern (6.1): show the learning
-    question and headline, the participants, an optional prediction, one step, the highlighted
-    interaction, its message, then the technical details on demand.'
-  prediction: When the next event carries a prediction prompt, show the prompt before
-    the step runs, together with a Continue control. The step itself answers it; nothing
-    is scored and the prompt never blocks keyboard navigation.
-  prediction_rules: Next (button or →) on a step whose next event has a prediction shows
-    the prompt instead of advancing; Next or Continue then runs the step. Play pauses
-    there and shows the prompt. Previous, jump and reset never show a prompt.
+    question and headline, the participants, one step, the highlighted interaction, its
+    message, then the technical details on demand. No question interrupts the steps: Next
+    always runs exactly one step, and Play runs from the start to the end without stopping.'
   simulated_behaviour: Model output is labelled as simulated wherever it appears; nothing
     suggests a live decision. The explanation of every response the model sends (LLM API
     responses from the LLM provider, tool-call requests included) starts with "Simulated model
@@ -648,10 +637,7 @@ inspector:
       (INTERNAL, agent to agent) and tracks it, and " · sent to <receiver> at step <t>" for the
       first MCP or HTTP event that tracks it; "here" stands for the current step. Each step
       number is a link that jumps there. Later steps are named too, because where a value goes
-      is what the line teaches. A link never answers a prediction before it is asked: a hop
-      to a later step that carries a prediction prompt is left out, except "reaches the model",
-      which says only that the model receives the value; no prompt asks that, while "repeats",
-      "checks" and "sent to" say what such a step does (for example who sends the tool call). Values inside a longer string are not
+      is what the line teaches, and a link may point to any step. Values inside a longer string are not
       matched.'
     phone: 'The same on phones, inside an opened row (phone_steps.body): lines and callouts wrap
       and stack in one column, nothing scrolls sideways at 390 px or at 200% zoom, and the toggle
@@ -780,8 +766,7 @@ compare_view:
     Overview "Stage <s> of <m> · <phase range>", in the control row) and below the row the semantic phase labels in order, the current one in weight 600 and marked as the current step for assistive
     technology; the others in ink-muted. Before step 1 no phase is current.'
   defaults: 'Both scenarios play at their default parameters; Compare offers no parameter controls.
-    Prediction prompts are not shown in Compare, since a shared step would answer a question asked in
-    one pane only; each scenario''s own tab shows them. The zoom control in the control row sets both
+    The zoom control in the control row sets both
     diagrams; the Overview is the default, so Compare starts with the two stories side by side.
     Zooming keeps the place of the first pane that has a step in the current semantic phase (the
     left unless it waits), mapped as in zoom_levels.cursor_mapping; the other pane follows to the

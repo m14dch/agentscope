@@ -61,8 +61,7 @@ unit_tests:
 - Document citations resolve to source fixtures
 - No HTTP framing for in-process or simulated calls
 - All three primary questions match 00-product.yaml primary_questions
-- Every scenario has a learning question and headline, every phase a takeaway, and every
-  prediction prompt ends with a question mark
+- Every scenario has a learning question and headline, and every phase a takeaway
 - The composed scenario resolves scenario, participant, phase, event and pair references
 - Each tab offers exactly its scenarios of 02 navigation.tab_contents, and only RAG has a
   scenario picker
@@ -98,6 +97,8 @@ e2e_tests:
   - Inspect changed LLM prompt, answer and citations against reference_results
 - id: navigation
   steps:
+  - Play mcp-balance from step 0 and verify it reaches the last step without stopping, and that
+    Next from step 0 advances exactly one step per press
   - Jump to last step
   - Step backward
   - Switch to the Architecture level
@@ -161,8 +162,7 @@ e2e_tests:
   - Open and close rows by touch and with the keyboard (Tab, Enter, Space) and verify that
     several stay open, focus stays on the row, Close all closes every row, and the address names
     the last row opened.
-  - Verify a prediction prompt comes before its step's content until "Show the step", and that
-    the panels sit in the rows of their steps (scores and projection at retrieve-06, prompt at
+  - Verify that the panels sit in the rows of their steps (scores and projection at retrieve-06, prompt at
     retrieve-10, answer at retrieve-12, the Combined answer at c-08, the model context at LLM
     requests) with the projection in its compact form.
   - Open a deep link and verify its row is open at the top of the screen; zoom and verify the

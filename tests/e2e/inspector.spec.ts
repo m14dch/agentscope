@@ -179,10 +179,8 @@ test('tabs follow the ARIA pattern and the choice survives stepping', async ({ p
 
 test('code stays readable at 200% zoom without horizontal scrolling', async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 900 });
-  // At 720 px the phone column applies (02 phone_steps): the address's row is open, its
-  // prediction first.
+  // At 720 px the phone column applies (02 phone_steps): the address's row is open.
   await page.goto('./#/mcp/mcp-balance/26/protocol');
-  await page.getByRole('button', { name: 'Show the step' }).click();
   await expect(page.locator('.tab-panel .json')).toBeVisible();
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '200%';

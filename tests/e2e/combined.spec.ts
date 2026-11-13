@@ -39,20 +39,12 @@ async function jump(page: Page, step: number): Promise<void> {
   await expect(status(page)).toContainText(`Step ${step} of `);
 }
 
-/** Plays from the start to the last step at 4×, continuing past every prediction. */
+/** Plays from the start to the last step at 4×. */
 async function playThrough(page: Page): Promise<void> {
   const n = Number(await page.getByRole('slider', { name: 'Step' }).getAttribute('max'));
   await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
   await page.getByRole('button', { name: 'Play' }).click();
-  const end = status(page).filter({ hasText: new RegExp(`^Step ${n} of ${n}`) });
-  const prompt = page.getByRole('button', { name: 'Continue', exact: true });
-  while (!(await end.count())) {
-    await expect(end.or(prompt)).toBeVisible({ timeout: 10_000 });
-    if (await prompt.count()) {
-      await prompt.click();
-      await page.getByRole('button', { name: 'Play' }).click();
-    }
-  }
+  await expect(status(page)).toContainText(new RegExp(`^Step ${n} of ${n}`), { timeout: 30_000 });
 }
 
 /** The statements as [label, text] pairs. */

@@ -173,13 +173,11 @@ describe('validation', () => {
     const [e1, e2, e3] = scn.events as [ScenarioEvent, ScenarioEvent, ScenarioEvent];
     e1.phase = 'nowhere';
     e2.pair_id = 'e3';
-    e3.prediction = { prompt: 'No question' };
     e3.http = { method: 'POST' };
     e3.tracked_values = { secret: 'x' };
     e3.state_changes = [{ path: 'a', op: 'set', value_ref: 'payload.missing' }];
     expect(validateRegistry({ base: scn }, ctx)).toEqual([
       'base/e1: unknown phase nowhere',
-      "base/e3: prediction must be {prompt: <a question of at least 10 characters ending with '?'>}",
       'base/e3: HTTP envelope on non-network event',
       'base/e3: untracked lineage key secret',
       'base/e3: value_ref payload.missing does not resolve',
@@ -333,20 +331,18 @@ describe('more validation rules', () => {
     ]);
   });
 
-  it('checks boundaries, enums, correlation IDs, prediction length and scenario fields', () => {
+  it('checks boundaries, enums, correlation IDs, and scenario fields', () => {
     const scn = base();
     delete (scn as Partial<Scenario>).initial_state;
     const [e1, e2, e3] = scn.events as [ScenarioEvent, ScenarioEvent, ScenarioEvent];
     e1.security_boundaries = ['b1', 'nowhere'];
     (e2 as unknown as Record<string, unknown>)['protocol'] = 'MCPX';
     e3.correlation_id = '1';
-    e3.prediction = { prompt: 'Short?' };
     expect(validateRegistry({ base: scn }, ctx)).toEqual([
       'base: missing initial_state',
       'base/e1: unknown security boundary nowhere',
       'base/e2: protocol MCPX is not one of MCP | HTTP | LLM_API | RAG_INTERNAL | UI | DB | INTERNAL',
       'base/e3: correlation_id outside an MCP request or response',
-      "base/e3: prediction must be {prompt: <a question of at least 10 characters ending with '?'>}",
     ]);
   });
 
