@@ -35,8 +35,7 @@ async function ready(page: Page): Promise<void> {
 
 /**
  * Steps from the start to the last step with → and returns how long each key took to handle,
- * rendering and layout included (the app renders synchronously on the key). A prediction
- * prompt takes one more key.
+ * rendering and layout included (the app renders synchronously on the key).
  */
 async function stepThrough(page: Page): Promise<{ total: number; times: number[] }> {
   return page.evaluate(async () => {
@@ -232,7 +231,6 @@ for (const [width, height] of [
           await page.keyboard.press('ArrowLeft');
           await expect(line).not.toHaveText(before);
           await page.keyboard.press('ArrowRight');
-          if (await page.locator('.prediction').count()) await page.keyboard.press('ArrowRight');
           await expect(line).toHaveText(before);
           await page.keyboard.press('ArrowLeft');
           await page.keyboard.press(' ');

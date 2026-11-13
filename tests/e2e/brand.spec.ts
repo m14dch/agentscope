@@ -181,8 +181,6 @@ test('the widened workspace keeps its width while stepping and after a parameter
   await page.locator('body').click({ position: { x: 5, y: 5 } });
   for (let step = 1; step <= length; step++) {
     await page.keyboard.press('ArrowRight');
-    // A prediction prompt comes first; the next press runs the step.
-    if (await page.locator('.prediction').isVisible()) await page.keyboard.press('ArrowRight');
     await expect(status).toContainText(`Step ${step} of`);
     expect(await width(), `step ${step}`).toBe(wide);
   }

@@ -91,30 +91,25 @@ test('keyboard: → next, ← previous, Space plays and pauses, with visible foc
   expect(outline).toBe('solid');
 });
 
-test('a prediction appears before its step and the step answers it', async ({ page }) => {
-  // mcp-11 carries a prediction: at step 10, Next shows the prompt first.
-  await open(page, '#/mcp/mcp-balance/10/architecture');
-  await page.getByRole('button', { name: 'Next' }).click();
-  const prompt = page.locator('.prediction');
-  await expect(prompt).toContainText('What will it return');
-  await expect(status(page)).toContainText('Step 10 of 28');
-  await page.keyboard.press('ArrowRight');
-  await expect(status(page)).toContainText('Step 11 of 28');
-  await expect(prompt).toHaveCount(0);
-  // Previous never shows a prompt.
-  await page.getByRole('button', { name: 'Previous' }).click();
-  await expect(prompt).toHaveCount(0);
-});
-
-test('play pauses at a prediction', async ({ page }) => {
-  await open(page, '#/mcp/mcp-balance/9/architecture');
+test('nothing interrupts the steps: Play runs to the end, Next advances one step', async ({
+  page,
+}) => {
+  // 02 learning.interaction: no question interrupts the steps.
+  await page.clock.install();
+  await open(page, '#/mcp/mcp-balance/0/protocol');
   await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
   await page.getByRole('button', { name: 'Play' }).click();
-  await expect(page.locator('.prediction')).toBeVisible({ timeout: 5000 });
+  // At 4× a step takes 375 ms: 28 steps end by 10.5 s, unless Play stopped on the way.
+  await page.clock.runFor(28 * 375 + 100);
+  await expect(status(page)).toHaveText('Step 28 of 28 · Answer');
   await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
-  await expect(status(page)).toContainText('Step 10 of 28');
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(status(page)).toContainText('Step 11 of 28');
+  // Every press of Next is one step, the steps that used to ask a question included.
+  await page.getByRole('button', { name: 'Reset' }).click();
+  const next = page.getByRole('button', { name: 'Next' });
+  for (let step = 1; step <= 28; step++) {
+    await next.click();
+    await expect(status(page)).toContainText(`Step ${step} of 28`);
+  }
 });
 
 test('only RAG offers a scenario picker: the question and the index it searches', async ({
@@ -269,16 +264,6 @@ test('the control row: named icon buttons with their keys, one play speed, the t
   await buttons.nth(0).click();
   await expect(status(page)).toHaveText('Step 0 of 28');
   await expect(buttons.nth(2)).toHaveAccessibleName('Play');
-});
-
-test('Space during a prediction plays on, like the Play button', async ({ page }) => {
-  await open(page, '#/mcp/mcp-balance/10/architecture');
-  await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.locator('.prediction')).toBeVisible();
-  await page.locator('body').click({ position: { x: 5, y: 5 } });
-  await page.keyboard.press(' ');
-  await expect(page.locator('.status')).toContainText('Step 11 of 28', { timeout: 5000 });
-  await page.keyboard.press(' ');
 });
 
 test('after choosing a tab or a scenario, focus moves to the new page heading', async ({

@@ -136,11 +136,7 @@ test('the current group stays expanded while stepping; one the learner collapsed
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 1280, height: 720 });
   const next = page.getByRole('button', { name: 'Next' });
-  // Next, past a prediction prompt (02 learning.prediction_rules).
-  const forward = async (): Promise<void> => {
-    await next.click();
-    if (await page.locator('.prediction').count()) await next.click();
-  };
+  const forward = (): Promise<void> => next.click();
   const current = page.locator('.step[data-current]');
   // The current step lies wholly inside the region, below the pinned participant names.
   const inside = () =>

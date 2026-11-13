@@ -265,21 +265,8 @@ test.describe('rag-walkthrough', () => {
     await expect(retrieval(page)).toBeHidden();
     await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
     await page.getByRole('button', { name: 'Play' }).click();
-    // Play pauses before retrieve-05, whose prediction asks which document ranks first.
-    await expect(page.locator('.prediction')).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(retrieval(page)).toBeVisible();
-    await page.getByRole('button', { name: 'Play' }).click();
-    // Play pauses again before the model request (retrieve-10), whose prediction asks
-    // whether the model has seen the documents before.
-    await expect(page.locator('.prediction')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('.status')).toHaveText('Step 7 of 10 · Assemble grounded prompt');
-    await expect(retrieval(page).locator('.retrieval-prompt')).toContainText(
-      'the model has not seen it yet',
-    );
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByRole('button', { name: 'Play' }).click();
     await expect(page.locator('.status')).toHaveText('Step 10 of 10 · Answer', { timeout: 10_000 });
+    await expect(retrieval(page)).toBeVisible();
     expect(await onScreen(page)).toEqual(expected(reference('rag-query')));
 
     // Change top K to 4: scores, prompt and answer change at once, on the same step.

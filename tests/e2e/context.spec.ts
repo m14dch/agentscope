@@ -29,7 +29,7 @@ test('the balance is in agent state at the tool result and seen by the model onl
     'not yet seen by the model',
   );
   await expect(seen).not.toContainText('12500.75');
-  // Step 26 asks for a prediction first, so jump there.
+  // The model sees the balance at step 26.
   await page.getByRole('slider', { name: 'Step' }).fill('26');
   await expect(page.locator('.status')).toContainText('Step 26 of 28');
   await expect(seen).toContainText('12500.75');

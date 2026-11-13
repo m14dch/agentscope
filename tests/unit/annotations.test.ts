@@ -7,7 +7,6 @@ import {
   jsonLines,
   lineText,
   parsePath,
-  resolvePath,
   splitPayload,
 } from '../../src/scenarios/annotations.ts';
 import specs from 'virtual:agentscope-specs';
@@ -204,8 +203,7 @@ describe('annotation bullets', () => {
         { index: at('mcp-14'), kind: 'sent' },
       ],
     });
-    // The balance comes from the core ledger. Step 26 asks a prediction about statelessness,
-    // which "reaches the model" does not answer, so it is named.
+    // The balance comes from the core ledger.
     expect(travel(events, at('mcp-23'), 12500.75, sources)).toEqual({
       origin: { index: at('mcp-20') },
       hops: [
@@ -214,41 +212,16 @@ describe('annotation bullets', () => {
         { index: at('mcp-27'), kind: 'repeats' },
       ],
     });
-    // Step 14 asks who sends the tool call: from step 11 its "sent to" hop is left out.
+    // Links may point to any later step: from step 11 the "sent to" hop links to step 14.
     expect(travel(events, at('mcp-11'), '123', sources)?.hops.map((h) => h.kind)).toEqual([
       'model',
       'repeats',
       'checks',
+      'sent',
     ]);
     // Untracked values and values inside longer strings get no travel line.
     expect(travel(events, at('mcp-14'), 'tools/call', sources)).toBeUndefined();
     expect(travel(events, at('mcp-23'), '{"customerId":"123"}', sources)).toBeUndefined();
-  });
-
-  it("never link from a step before a prediction to that prediction's step, except to say the value reaches the model", () => {
-    let lines = 0;
-    for (const s of Object.values(registry)) {
-      const src = { initialState: s.initial_state, origins };
-      s.events.forEach((e, index) => {
-        for (const group of e.annotations ?? []) {
-          for (const path of Object.keys(group.values ?? {})) {
-            const value = resolvePath(e.payload ?? null, parsePath(path) ?? [])?.value ?? null;
-            const where = travel(s.events, index, value, src);
-            if (!where) continue;
-            lines += 1;
-            const linked = [
-              ...('index' in where.origin ? [where.origin.index] : []),
-              ...where.hops.filter((h) => h.kind !== 'model').map((h) => h.index),
-            ];
-            for (const i of linked)
-              expect(i > index && !!s.events[i]?.prediction, `${e.id} links to ${i + 1}`).toBe(
-                false,
-              );
-          }
-        }
-      });
-    }
-    expect(lines).toBeGreaterThan(5);
   });
 });
 
