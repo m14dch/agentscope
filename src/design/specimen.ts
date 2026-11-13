@@ -66,7 +66,7 @@ interface Arrow {
   label: string;
   kind: ArrowKind;
   response?: boolean;
-  state?: 'past' | 'current';
+  state?: 'past' | 'current' | 'future';
 }
 
 const ARROWS: Arrow[] = [
@@ -77,6 +77,9 @@ const ARROWS: Arrow[] = [
   { label: 'Similarity search', kind: 'simulated' },
   { label: 'LLM · submit conversation', kind: 'network', state: 'current' },
   { label: 'LLM · answer', kind: 'network', response: true, state: 'current' },
+  // Future steps: a hairline in rule, keeping the kind's dashes (02 diagram.visibility).
+  { label: 'Display answer', kind: 'network', state: 'future' },
+  { label: 'Similarity search', kind: 'simulated', state: 'future' },
 ];
 
 function arrows(): string {
@@ -90,7 +93,7 @@ function arrows(): string {
     const [x1, x2] = a.response ? [right, left] : [left, right];
     const line = ['arrow', `arrow--${a.kind}`];
     const label = ['arrow-label'];
-    if (a.state === 'current') line.push('arrow--current');
+    if (a.state) line.push(`arrow--${a.state}`);
     if (a.state) label.push(`arrow-label--${a.state}`);
     const head = a.response ? 'url(#head-response)' : 'url(#head-request)';
     const labelX = a.response ? right - 8 : left + 8;

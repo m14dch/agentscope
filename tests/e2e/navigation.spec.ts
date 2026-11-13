@@ -83,7 +83,7 @@ test('keyboard: → next, ← previous, Space plays and pauses, with visible foc
   await page.keyboard.press(' ');
   await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
   await page.keyboard.press(' ');
-  await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Next' }).focus();
   const outline = await page
     .getByRole('button', { name: 'Next' })
@@ -98,11 +98,11 @@ test('nothing interrupts the steps: Play runs to the end, Next advances one step
   await page.clock.install();
   await open(page, '#/mcp/mcp-balance/0/protocol');
   await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
-  await page.getByRole('button', { name: 'Play' }).click();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
   // At 4× a step takes 375 ms: 28 steps end by 10.5 s, unless Play stopped on the way.
   await page.clock.runFor(28 * 375 + 100);
   await expect(status(page)).toHaveText('Step 28 of 28 · Answer');
-  await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
   // Every press of Next is one step, the steps that used to ask a question included.
   await page.getByRole('button', { name: 'Reset' }).click();
   const next = page.getByRole('button', { name: 'Next' });

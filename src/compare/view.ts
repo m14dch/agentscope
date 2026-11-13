@@ -411,6 +411,8 @@ export class CompareView {
       level: this.level,
       name: `${label} sequence diagram`,
       id: `compare-${side === 0 ? 'left' : 'right'}`,
+      // An arrow steps its pane as the pane's own slider does (02 diagram.arrow_activation).
+      jump: (cursor) => this.stepPane(side, cursor),
     });
     const root = el(
       'section',

@@ -50,7 +50,36 @@
   stroke-dasharray: 4 3;
 }
 
+/* Future steps (02 diagram.visibility.future): a hairline in rule, keeping the kind's dash
+   pattern, so the dashes still say the line kind and only colour and width say "coming". */
+.arrow--future {
+  stroke: var(--color-rule);
+  stroke-width: var(--line-hair);
+}
+
 .arrow--current {
+  stroke: var(--color-accent);
+  stroke-width: var(--line-focus);
+}
+
+/* An arrow is a button that moves the cursor to its step (02 diagram.arrow_activation). Its
+   target is the box around line and label; while focused the box is the 2 px accent ring
+   (3.36:1 on paper). The diagram has no selection background, so the ring is never ink. */
+.step-button {
+  cursor: pointer;
+}
+
+.step-button:focus {
+  outline: none;
+}
+
+.step-target {
+  fill: none;
+  stroke: none;
+  pointer-events: all;
+}
+
+.step-button:focus-visible .step-target {
   stroke: var(--color-accent);
   stroke-width: var(--line-focus);
 }
@@ -78,8 +107,10 @@
   font-weight: var(--weight-strong);
 }
 
-/* Past steps keep their line style; only the label recedes. */
-.arrow-label--past {
+/* Past steps keep their line style; future ones are told apart by their line. Both labels
+   recede to ink-muted: text in rule would reach only 1.87:1. */
+.arrow-label--past,
+.arrow-label--future {
   fill: var(--color-ink-muted);
 }
 

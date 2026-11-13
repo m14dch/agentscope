@@ -22,6 +22,22 @@ export interface DiagramOptions {
    * widens up to it (02 layout.max_width).
    */
   onNaturalWidth?: (px: number) => void;
+  /**
+   * Moves the cursor to a step (1-based), by the same path as the step slider: called when the
+   * learner clicks or activates an arrow (02 diagram.arrow_activation).
+   */
+  jump?: (cursor: number) => void;
+}
+
+/** The arrows' buttons, in reading order. */
+const ARROW = '.step-button';
+
+/** The step index (0-based) of the arrow holding an element, if any. */
+function arrowIndex(target: EventTarget | null): number | undefined {
+  if (!(target instanceof Element)) return undefined;
+  const step = target.closest<SVGGElement>(ARROW)?.closest<SVGGElement>('[data-index]');
+  const index = step ? Number(step.dataset['index']) : NaN;
+  return Number.isInteger(index) ? index : undefined;
 }
 
 /** Measures text in the diagram's font with a canvas; falls back to the estimate. */
@@ -137,15 +153,18 @@ export class DiagramView {
   }
 
   /**
-   * Lays the diagram out again. Focus stays on the same group (or the region); the region
-   * scrolls to the current step only when the cursor or the level changed.
+   * Lays the diagram out again. Focus stays on the same group or arrow (or the region); the
+   * region scrolls to the current step only when the cursor or the level changed.
    */
   private render(): void {
     // The events as played: derived from the parameters, without disabled optional steps.
     const scenario = { ...this.player.playback.scenario, events: [...this.player.playback.events] };
     const focused = document.activeElement;
+    const inside =
+      focused instanceof Element && focused !== this.root && this.root.contains(focused);
+    const focusArrow = inside ? arrowIndex(focused) : undefined;
     const focusKey =
-      focused instanceof Element && focused !== this.root && this.root.contains(focused)
+      inside && focusArrow === undefined
         ? (focused.closest<HTMLElement | SVGElement>('[data-group]')?.dataset['group'] ?? '')
         : undefined;
     // The group the cursor enters expands; a waiting Compare pane has no current group, and the
@@ -177,6 +196,13 @@ export class DiagramView {
     this.root.style.scrollPaddingTop = header ? `${header}px` : '';
     const name = this.options.name ?? 'Sequence diagram';
     this.root.setAttribute('aria-label', `${name}, scrolls in both directions`);
+    // The focused arrow keeps focus and the tab stop; one the level no longer shows hands focus
+    // to the region, as a group does.
+    const arrow = this.rove(focusArrow);
+    if (focusArrow !== undefined) {
+      const kept = arrow && arrowIndex(arrow) === focusArrow ? arrow : this.root;
+      kept.focus({ preventScroll: true });
+    }
     if (focusKey !== undefined) {
       const group = focusKey
         ? this.root.querySelector<HTMLElement | SVGElement>(
@@ -287,6 +313,37 @@ export class DiagramView {
     this.root.scrollTo({ top, left, behavior: reducedMotion() ? 'instant' : 'smooth' });
   }
 
+  /**
+   * Makes one arrow the diagram's tab stop (02 diagram.arrow_activation): the arrow of step
+   * `index` when it is shown, else the current step's, else the first. Returns it.
+   */
+  private rove(index?: number): SVGGElement | undefined {
+    const arrows = [...this.root.querySelectorAll<SVGGElement>(ARROW)];
+    const at = (i: number | undefined) => arrows.find((a) => arrowIndex(a) === i);
+    const current = this.root.querySelector<SVGGElement>(`[data-current] > ${ARROW}`) ?? undefined;
+    const stop = at(index) ?? current ?? arrows[0];
+    for (const a of arrows) a.tabIndex = a === stop ? 0 : -1;
+    return stop;
+  }
+
+  /** Moves focus to another arrow and scrolls the region, not the page, to show it. */
+  private focusArrow(target: SVGGElement): void {
+    this.rove(arrowIndex(target));
+    target.focus({ preventScroll: true });
+    const region = this.root.getBoundingClientRect();
+    const box = target.getBoundingClientRect();
+    const margin = 8;
+    const top = region.top + this.headerHeight() + margin;
+    let dy = 0;
+    if (box.top < top) dy = box.top - top;
+    else if (box.bottom > region.bottom - margin) dy = box.bottom - region.bottom + margin;
+    let dx = 0;
+    if (box.left < region.left + margin) dx = box.left - region.left - margin;
+    else if (box.right > region.right - margin)
+      dx = Math.min(box.right - region.right + margin, box.left - region.left - margin);
+    if (dx || dy) this.root.scrollBy({ top: dy, left: dx, behavior: 'instant' });
+  }
+
   /** Height of the participant names' band. */
   private headerHeight(): number {
     const header = this.root.querySelector<HTMLElement>('.diagram-head');
@@ -294,6 +351,14 @@ export class DiagramView {
   }
 
   private readonly onClick = (event: Event): void => {
+    const index = arrowIndex(event.target);
+    if (index !== undefined) {
+      const arrow = (event.target as Element).closest<SVGGElement>(ARROW);
+      if (arrow) this.rove(index);
+      arrow?.focus({ preventScroll: true });
+      this.options.jump?.(index + 1);
+      return;
+    }
     const group = (event.target as Element).closest<HTMLElement | SVGElement>('[data-group]');
     if (!group?.dataset['group']) return;
     group.focus({ preventScroll: true });
@@ -301,10 +366,43 @@ export class DiagramView {
   };
 
   private readonly onKey = (event: KeyboardEvent): void => {
+    if (arrowIndex(event.target) !== undefined) {
+      this.arrowKey(event);
+      return;
+    }
     if (event.key !== 'Enter' && event.key !== ' ') return;
     const group = (event.target as Element).closest<SVGGElement>('[data-group]');
     if (!group?.dataset['group']) return;
     event.preventDefault();
     this.toggleGroup(group.dataset['group']);
   };
+
+  /** Keys on a focused arrow: Enter and Space jump to it; Up, Down, Home and End move focus. */
+  private arrowKey(event: KeyboardEvent): void {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const index = arrowIndex(event.target);
+    if (index === undefined) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.options.jump?.(index + 1);
+      return;
+    }
+    const arrows = [...this.root.querySelectorAll<SVGGElement>(ARROW)];
+    const at = arrows.findIndex((a) => arrowIndex(a) === index);
+    const to =
+      event.key === 'ArrowUp'
+        ? at - 1
+        : event.key === 'ArrowDown'
+          ? at + 1
+          : event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? arrows.length - 1
+              : undefined;
+    if (to === undefined) return;
+    // At the first or last arrow the key does nothing, rather than scrolling the region.
+    event.preventDefault();
+    const target = arrows[to];
+    if (target) this.focusArrow(target);
+  }
 }

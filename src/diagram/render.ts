@@ -17,22 +17,30 @@ function head(a: Arrow): 'request' | 'response' {
     : 'request';
 }
 
+/** The words that state an arrow's state in its name (02 diagram.visibility.accessible_name). */
+const STATE_WORD = { past: 'done', current: 'current', future: 'upcoming' } as const;
+
+/**
+ * One arrow: a list item holding a button that moves the cursor to its step (02
+ * diagram.arrow_activation). Its line and label carry the classes of its state; the current
+ * step's pair, once played, carries the current ones (02 diagram.visibility.classes). Every
+ * button starts outside the tab order; the view makes one of them the tab stop.
+ */
 function renderArrow(a: Arrow, ids: string, names: Readonly<Record<string, string>>): string {
-  const line = ['arrow', `arrow--${a.line}`];
-  const label = ['arrow-label'];
-  if (a.emphasized) {
-    line.push('arrow--current');
-    label.push('arrow-label--current');
-  } else label.push('arrow-label--past');
+  const state = a.emphasized ? 'current' : a.visibility;
+  const line = ['arrow', `arrow--${a.line}`, `arrow--${state}`];
+  const label = ['arrow-label', `arrow-label--${state}`];
   const marker = `url(#${ids}-${head(a)})`;
   const { x1, x2, y } = a;
   const shape = a.self
     ? `<path class="${line.join(' ')}" d="M ${x1} ${y} h ${SIZES.selfWidth} v ${SIZES.selfHeight} h ${-SIZES.selfWidth + 2}" marker-end="${marker}" />`
     : `<line class="${line.join(' ')}" x1="${x1}" y1="${y}" x2="${x2 + (x2 > x1 ? -1 : 1)}" y2="${y}" marker-end="${marker}" />`;
   const e = a.event;
-  const name = `Step ${a.index + 1}: ${names[e.sender] ?? e.sender} to ${names[e.receiver] ?? e.receiver}, ${a.label}`;
-  const current = a.visibility === 'current' ? ' data-current=""' : '';
-  return `<g class="step" data-index="${a.index}"${current} role="listitem" aria-label="${esc(name)}">${shape}<text class="${label.join(' ')}" x="${a.labelX}" y="${a.labelY}">${esc(a.label)}</text></g>`;
+  const name = `Step ${a.index + 1}, ${STATE_WORD[a.visibility]}: ${names[e.sender] ?? e.sender} to ${names[e.receiver] ?? e.receiver}, ${a.label}`;
+  const current = a.visibility === 'current';
+  const b = a.box;
+  const target = `<rect class="step-target" x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" />`;
+  return `<g class="step step--${a.visibility}" data-index="${a.index}"${current ? ' data-current=""' : ''} role="listitem"><g class="step-button" role="button" tabindex="-1" aria-label="${esc(name)}"${current ? ' aria-current="step"' : ''}>${target}${shape}<text class="${label.join(' ')}" x="${a.labelX}" y="${a.labelY}">${esc(a.label)}</text></g></g>`;
 }
 
 function renderGroup(g: Group, ids: string, names: Readonly<Record<string, string>>): string {

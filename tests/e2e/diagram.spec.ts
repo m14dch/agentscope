@@ -20,6 +20,18 @@ async function open(page: Page, hash: string): Promise<void> {
   await page.locator('[data-measured] svg.diagram').waitFor();
 }
 
+/** A colour token as the browser computes it, for example rgb(182, 191, 193). */
+function token(page: Page, name: string): Promise<string> {
+  return page.evaluate((n) => {
+    const probe = document.createElement('div');
+    probe.style.color = `var(--color-${n})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  }, name);
+}
+
 /** Pairs of overlapping text boxes inside the diagram, measured with the real font. */
 async function overlaps(page: Page): Promise<string[]> {
   return page.evaluate(() => {
@@ -100,14 +112,81 @@ test('zooming between Architecture and Protocol keeps the cursor on the same ste
   await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/15\/protocol$/);
 });
 
-test('future steps are hidden at the Protocol level', async ({ page }) => {
-  await open(page, route('mcp-balance', 3, 'protocol'));
-  await expect(page.locator('.step')).toHaveCount(3);
-  await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.step')).toHaveCount(4);
+// 08-acceptance-tests.yaml e2e_tests: protocol-look-ahead (issue #60, 02 diagram.visibility and
+// diagram.arrow_activation).
+test('Protocol shows the whole sequence: future steps muted, each kind keeping its dashes', async ({
+  page,
+}) => {
+  await open(page, route('mcp-balance', 1, 'protocol'));
+  await expect(page.locator('.step')).toHaveCount(28);
+  await expect(page.locator('.step--future')).toHaveCount(27);
+  await expect(page.locator('.step--current')).toHaveAttribute('data-index', '0');
+  const style = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { stroke: s.stroke, width: s.strokeWidth, dash: s.strokeDasharray, fill: s.fill };
+      });
+  const rule = await token(page, 'rule');
+  for (const kind of ['network', 'in-process', 'simulated']) {
+    const line = await style(`.arrow--${kind}.arrow--future`);
+    expect(line, kind).toMatchObject({ stroke: rule, width: '1px' });
+    // Dashes encode the line kind in every state, never the state (02 diagram.visibility.future).
+    expect(line.dash, kind).toBe(kind === 'simulated' ? '4px, 3px' : 'none');
+  }
+  // Labels of future steps stay readable (ink-muted, like past ones), not rule.
+  expect((await style('.arrow-label--future')).fill).not.toBe(rule);
+  // The state is in each arrow's name, not only in its colour.
+  await expect(page.getByRole('button', { name: /^Step 1, current: / })).toHaveAttribute(
+    'aria-current',
+    'step',
+  );
+  await expect(page.getByRole('button', { name: /^Step 28, upcoming: / })).toHaveCount(1);
+});
+
+test('clicking or activating an arrow moves the cursor to its step', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await open(page, route('mcp-balance', 1, 'protocol'));
+  const arrow = (n: number) => page.locator(`.step[data-index="${n - 1}"] .step-button`);
+  const inspector = page.locator('aside.inspector');
+  const first = (await inspector.textContent()) ?? '';
+  await arrow(20).click();
+  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/20\/protocol$/);
+  await expect(inspector).not.toHaveText(first);
+  await expect(page.locator('.status')).toContainText('Step 20 of 28');
+  await expect(page.locator('.step[data-current]')).toHaveAttribute('data-index', '19');
+  await expect(page.getByRole('button', { name: /^Step 19, done: / })).toHaveCount(1);
+  // One tab stop: the current step's arrow. ArrowUp moves focus, Enter jumps there and focus
+  // stays on the same arrow.
+  await expect(page.locator('.step-button[tabindex="0"]')).toHaveCount(1);
+  await expect(arrow(20)).toHaveAttribute('tabindex', '0');
+  await arrow(20).focus();
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await expect(arrow(18)).toBeFocused();
+  await expect(page.locator('.status')).toContainText('Step 20 of 28');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/18\/protocol$/);
+  await expect(arrow(18)).toBeFocused();
+  // The focus ring reaches 3:1 on paper (02 design.colour.use): accent, 2 px.
+  const ring = await arrow(18)
+    .locator('.step-target')
+    .evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { stroke: s.stroke, width: s.strokeWidth };
+    });
+  expect(ring).toEqual({ stroke: await token(page, 'accent'), width: '2px' });
+  // Space on a future arrow jumps forward; ArrowRight still steps, focus staying put.
+  await page.keyboard.press('End');
+  await expect(arrow(28)).toBeFocused();
+  await page.keyboard.press(' ');
+  await expect(page).toHaveURL(/#\/mcp\/mcp-balance\/28\/protocol$/);
+  await page.keyboard.press('Home');
   await page.keyboard.press('ArrowLeft');
-  await page.keyboard.press('ArrowLeft');
-  await expect(page.locator('.step')).toHaveCount(2);
+  await expect(page.locator('.status')).toContainText('Step 27 of 28');
+  await expect(arrow(1)).toBeFocused();
 });
 
 test('groups expand and collapse with the keyboard, and stay open while stepping', async ({
@@ -121,8 +200,15 @@ test('groups expand and collapse with the keyboard, and stay open while stepping
   await expect(group).toBeFocused();
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.locator('[data-group="setup"]')).toHaveAttribute('aria-expanded', 'true');
-  // Setup's three steps and the current group's three (tool: steps 13 to 15).
-  await expect(page.locator('.step')).toHaveCount(6);
+  // Setup's three steps and the current group's four (tool: steps 13 to 16), all of them,
+  // the ones ahead of the cursor as upcoming (02 diagram.visibility).
+  await expect(page.locator('.step')).toHaveCount(7);
+  await expect(page.locator('[data-index="15"].step--future')).toHaveCount(1);
+  // A group ahead of the cursor shows all its steps as upcoming.
+  await page.locator('[data-group="answer"] .group-label').click();
+  await expect(page.locator('[data-group="answer"]')).toHaveAttribute('aria-expanded', 'true');
+  expect(await page.locator('.step--future').count()).toBeGreaterThan(1);
+  await expect(page.locator('.step:not(.step--future)')).toHaveCount(6);
   await page.locator('[data-group="setup"]').focus();
   await page.keyboard.press(' ');
   await expect(page.locator('[data-group="setup"]')).toHaveAttribute('aria-expanded', 'false');

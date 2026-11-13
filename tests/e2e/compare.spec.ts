@@ -147,7 +147,7 @@ test('compare: shared controls, keys and the zoom control act on both panes', as
   await page.getByRole('slider', { name: 'Compare step' }).fill('20');
   await expect(live).toContainText('MCP step 20 of 28.');
   await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
-  await page.getByRole('button', { name: 'Play' }).click();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect(status(page)).toHaveText(/^Step 2[12] of 28/, { timeout: 3000 });
   await expect(live).toContainText('MCP step 20 of 28.');
   await page.getByRole('button', { name: 'Pause' }).click();
@@ -155,9 +155,9 @@ test('compare: shared controls, keys and the zoom control act on both panes', as
   await expect(live).toContainText(`MCP step ${paused} of 28.`);
   // From step 27 it plays to the end, pauses and says so.
   await page.getByRole('slider', { name: 'Compare step' }).fill('27');
-  await page.getByRole('button', { name: 'Play' }).click();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect(status(page)).toHaveText('Step 28 of 28 · Answer', { timeout: 3000 });
-  await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
   await expect(live).toHaveText('Answer. RAG step 10 of 10. MCP step 28 of 28.');
   // Every aspect is one sentence beside its label.
   await expect(page.locator('.compare-aspects dt')).toHaveText([

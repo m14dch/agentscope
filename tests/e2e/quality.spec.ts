@@ -116,10 +116,15 @@ async function markControls(page: Page): Promise<string[]> {
     ].join(',');
     // Anything else in the tab order (scroll regions, for example) counts too.
     const selector = `${interactive},[tabindex]:not([tabindex="-1"])`;
-    /** A tab of a roving group: out of the tab order while another tab of its list is in it. */
+    /**
+     * A member of a roving group: out of the tab order while another member is in it. The
+     * inspector's tabs, and a diagram's arrows (02 diagram.arrow_activation).
+     */
     const roving = (el: Element) =>
-      el.matches('[role="tab"]') &&
-      !!el.closest('[role="tablist"]')?.querySelector('[role="tab"][tabindex="0"]');
+      (el.matches('[role="tab"]') &&
+        !!el.closest('[role="tablist"]')?.querySelector('[role="tab"][tabindex="0"]')) ||
+      (el.matches('.step-button') &&
+        !!el.closest('.diagram')?.querySelector('.step-button[tabindex="0"]'));
     const controls = [...document.querySelectorAll<HTMLElement | SVGElement>(selector)].filter(
       (el) => {
         // An interactive control taken out of the tab order is a finding, unless it is roving.
@@ -156,9 +161,13 @@ async function tabOrder(page: Page): Promise<Stop[]> {
       const label = el.getAttribute('aria-label') ?? (el.textContent ?? '').trim();
       const what = `${el.tagName.toLowerCase()} "${label.replace(/\s+/g, ' ').slice(0, 40)}"`;
       // The focus indicator: the 2 px outline of :focus-visible, or, on a diagram group, its
-      // frame drawn 2 px in ink.
+      // frame drawn 2 px in ink, on a diagram arrow the 2 px ring around it.
       const style = getComputedStyle(el);
-      const frame = el.matches('.group') ? el.querySelector('.group-frame') : null;
+      const frame = el.matches('.group')
+        ? el.querySelector('.group-frame')
+        : el.matches('.step-button')
+          ? el.querySelector('.step-target')
+          : null;
       const visible = frame
         ? getComputedStyle(frame).strokeWidth === '2px'
         : style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;

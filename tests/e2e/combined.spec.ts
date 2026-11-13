@@ -43,7 +43,7 @@ async function jump(page: Page, step: number): Promise<void> {
 async function playThrough(page: Page): Promise<void> {
   const n = Number(await page.getByRole('slider', { name: 'Step' }).getAttribute('max'));
   await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
-  await page.getByRole('button', { name: 'Play' }).click();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect(status(page)).toContainText(new RegExp(`^Step ${n} of ${n}`), { timeout: 30_000 });
 }
 

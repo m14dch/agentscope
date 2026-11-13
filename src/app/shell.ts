@@ -708,6 +708,8 @@ export class Shell {
       level: route.level,
       name: 'Sequence diagram',
       onNaturalWidth: (px) => workspace.style.setProperty('--diagram-width', `${px}px`),
+      // An arrow moves the cursor by the slider's path (02 diagram.arrow_activation).
+      jump: (step) => this.go(() => player.jump(step)),
     });
     const state: ScenarioView = {
       scenario,

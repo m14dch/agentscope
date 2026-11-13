@@ -48,6 +48,8 @@ export const SIZES = {
   selfWidth: 28,
   selfHeight: 12,
   groupPad: 10,
+  /** Space between an arrow's line and label and its focus ring. */
+  boxPad: 4,
   groupGap: 8,
   groupMinText: 320,
   /** The Overview: text size 16/24 for the stage sentences, wider gaps between parties. */
@@ -101,6 +103,8 @@ export interface Arrow {
   visibility: Visibility;
   /** Current step or its pair. */
   emphasized: boolean;
+  /** The click target and focus ring: the line and its label (02 diagram.arrow_activation). */
+  box: { x: number; y: number; width: number; height: number };
 }
 
 export interface Group {
@@ -119,7 +123,7 @@ export interface Group {
   x2: number;
   expanded: boolean;
   current: boolean;
-  /** Arrows shown inside the group when expanded (events up to the cursor). */
+  /** Arrows shown inside the group when expanded: every event of its run. */
   arrows: Arrow[];
   /** Width of the widest line of the takeaway and caption, for the paper behind them. */
   textWidth: number;
@@ -149,7 +153,7 @@ export interface DiagramLayout {
   top: number;
   /** Participants, or at the Overview the parties. */
   lifelines: Lifeline[];
-  /** Protocol: every event up to the cursor. Otherwise empty. */
+  /** Protocol: every event, in its state (02 diagram.visibility). Otherwise empty. */
   arrows: Arrow[];
   /** Architecture only. */
   groups: Group[];
@@ -351,7 +355,15 @@ export function layout(input: LayoutInput): DiagramLayout {
         ? xr + SIZES.headRoom
         : xs + SIZES.labelGap;
     // The layout reserves the bold width, so nothing moves when a label becomes current.
-    right = Math.max(right, labelX + measure(label, true) + SIZES.margin);
+    const labelRight = labelX + measure(label, true);
+    right = Math.max(right, labelRight + SIZES.margin);
+    // The target spans the label (above the line, or beside a loop) and the line with its head.
+    const pad = SIZES.boxPad;
+    const x1 = Math.min(xs, xr, labelX) - pad;
+    const x2 = Math.max(self ? xs + SIZES.selfWidth : Math.max(xs, xr), labelRight) + pad;
+    const top = self ? y - pad - 1 : y - SIZES.labelGap - SIZES.fontSize - pad + 3;
+    const bottom = self ? y + SIZES.selfHeight + pad : y + pad + 4;
+    const box = { x: x1, y: top, width: x2 - x1, height: bottom - top };
     const shown = visibility(index, cursor);
     const vis = input.held && shown === 'current' ? 'past' : shown;
     const emphasized = vis === 'current' || (index === pair && index < cursor);
@@ -368,6 +380,7 @@ export function layout(input: LayoutInput): DiagramLayout {
       line: lineKind(e),
       visibility: vis,
       emphasized,
+      box,
     };
   };
 
@@ -377,7 +390,7 @@ export function layout(input: LayoutInput): DiagramLayout {
   if (level === 'protocol') {
     scenario.events.forEach((e, i) => {
       y += SIZES.row;
-      if (i < cursor) arrows.push(arrow(e, i, y));
+      arrows.push(arrow(e, i, y));
     });
   } else {
     const current = cursor >= 1 && !input.held ? cursor - 1 : -1;
@@ -410,7 +423,7 @@ export function layout(input: LayoutInput): DiagramLayout {
           inner += SIZES.row;
           const a = arrow(e, i, inner);
           labelsRight = Math.max(labelsRight, a.labelX + measure(a.label, true));
-          if (i < cursor) shown.push(a);
+          shown.push(a);
         }
         inner += SIZES.row / 2;
       }

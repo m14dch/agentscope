@@ -58,13 +58,35 @@ describe('labels', () => {
 describe('Protocol level', () => {
   const scn = scenario('mcp-balance');
 
-  it('shows events up to the cursor and keeps every row in place', () => {
+  it('shows every event in its state at every step, each row in place (02 diagram.visibility)', () => {
+    const at0 = build(scn, 'protocol', 0);
     const at5 = build(scn, 'protocol', 5);
     const at20 = build(scn, 'protocol', 20);
-    expect(at5.arrows).toHaveLength(5);
-    expect(at20.arrows.slice(0, 5).map((a) => a.y)).toEqual(at5.arrows.map((a) => a.y));
+    for (const model of [at0, at5, at20]) expect(model.arrows).toHaveLength(scn.events.length);
+    expect(at20.arrows.map((a) => a.y)).toEqual(at5.arrows.map((a) => a.y));
     expect(at5.height).toBe(at20.height);
-    expect(build(scn, 'protocol', 0).arrows).toHaveLength(0);
+    expect(at0.arrows.every((a) => a.visibility === 'future')).toBe(true);
+    expect(at5.arrows.map((a) => a.visibility)).toEqual([
+      ...Array<string>(4).fill('past'),
+      'current',
+      ...Array<string>(scn.events.length - 5).fill('future'),
+    ]);
+  });
+
+  it("gives each arrow a target around its line and label that no other arrow's overlaps", () => {
+    for (const s of scenarios) {
+      const model = build(s, 'protocol', 1);
+      model.arrows.forEach((a, i) => {
+        const { x, y, width, height } = a.box;
+        expect(x, s.id).toBeLessThanOrEqual(Math.min(a.x1, a.x2, a.labelX));
+        expect(x + width, s.id).toBeLessThanOrEqual(model.width);
+        expect(x + width, s.id).toBeGreaterThanOrEqual(a.labelX + estimate(a.label));
+        expect(y, s.id).toBeLessThan(a.labelY - SIZES.fontSize + 3);
+        expect(y + height, s.id).toBeGreaterThan(a.y);
+        const next = model.arrows[i + 1];
+        if (next) expect(y + height, `${s.id} ${a.event.id}`).toBeLessThanOrEqual(next.box.y);
+      });
+    }
   });
 
   it('emphasizes the current step and its pair, and nothing else', () => {
@@ -125,15 +147,23 @@ describe('Architecture level', () => {
     expect(model.groups[0]?.caption).toBe('▸ Client setup and optional discovery · 3 steps');
   });
 
-  it("shows an expanded group's events up to the cursor", () => {
+  it("shows all of an expanded group's events in their states", () => {
     const cursor = scn.events.findIndex((e) => e.id === 'mcp-14') + 1;
     const model = build(scn, 'architecture', cursor, ['tool', 'answer']);
     const tool = model.groups.find((g) => g.phase.id === 'tool');
-    expect(tool?.arrows.map((a) => a.event.id)).toEqual(['mcp-13', 'mcp-14']);
+    expect(tool?.arrows.map((a) => [a.event.id, a.visibility])).toEqual([
+      ['mcp-13', 'past'],
+      ['mcp-14', 'current'],
+      ['mcp-15', 'future'],
+      ['mcp-16', 'future'],
+    ]);
     // Expansion is per group: the resumed run stays collapsed.
     expect(model.groups.find((g) => g.key === 'tool#2')?.expanded).toBe(false);
     expect(tool?.caption.startsWith('▾ ')).toBe(true);
-    expect(model.groups.find((g) => g.phase.id === 'answer')?.arrows).toEqual([]);
+    // A group ahead of the cursor shows its steps as upcoming.
+    const answer = model.groups.find((g) => g.phase.id === 'answer');
+    expect(answer?.arrows.length).toBeGreaterThan(0);
+    expect(answer?.arrows.every((a) => a.visibility === 'future')).toBe(true);
   });
 });
 
@@ -222,6 +252,35 @@ describe('render', () => {
     expect(svg).toContain('aria-label="Title &lt;b&gt;"');
     expect(svg.match(/data-current=""/g)).toHaveLength(1);
     expect(svg).toContain('arrow--current');
+  });
+
+  it('marks each arrow past, current or future, in its classes and its name', () => {
+    const scn = scenario('mcp-balance');
+    // mcp-23 is current and its pair mcp-14 past; mcp-24 and later are future.
+    const cursor = scn.events.findIndex((e) => e.id === 'mcp-23') + 1;
+    const svg = renderSvg(build(scn, 'protocol', cursor), 'T', 'd', labels);
+    const items = [
+      ...svg.matchAll(/<g class="step step--(\w+)" data-index="(\d+)"[^>]*>(.*?)<\/g><\/g>/g),
+    ];
+    expect(items).toHaveLength(scn.events.length);
+    const item = (id: string) => items[scn.events.findIndex((e) => e.id === id)]?.[3] ?? '';
+    const past = item('mcp-13');
+    expect(past).toMatch(/class="arrow arrow--in-process arrow--past"/);
+    expect(past).toContain('arrow-label arrow-label--past');
+    expect(past).toMatch(/aria-label="Step 13, done: /);
+    // The pair keeps the current emphasis, and its name says it is done.
+    expect(item('mcp-14')).toContain('arrow--current');
+    expect(item('mcp-14')).toMatch(/aria-label="Step 14, done: /);
+    const current = item('mcp-23');
+    expect(current).toContain('arrow--current');
+    expect(current).toContain('aria-current="step"');
+    expect(current).toMatch(/aria-label="Step 23, current: /);
+    const future = items.at(-1)?.[3] ?? '';
+    expect(future).toMatch(/class="arrow arrow--\S+ arrow--future"/);
+    expect(future).toContain('arrow-label arrow-label--future');
+    expect(future).toContain(`aria-label="Step ${scn.events.length}, upcoming: `);
+    // Every arrow is a button outside the tab order until the view picks the tab stop.
+    expect(svg.match(/role="button" tabindex="-1"/g)).toHaveLength(scn.events.length);
   });
 
   it('gives requests a filled head and responses an open one', () => {

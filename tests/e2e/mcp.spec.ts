@@ -30,9 +30,9 @@ async function jump(page: Page, step: number): Promise<void> {
 async function playThrough(page: Page): Promise<void> {
   const n = await stepCount(page);
   await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
-  await page.getByRole('button', { name: 'Play' }).click();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect(status(page)).toContainText(new RegExp(`^Step ${n} of ${n}`), { timeout: 30_000 });
-  await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 }
 
 /** The transport tab's lines as text, folds opened. */

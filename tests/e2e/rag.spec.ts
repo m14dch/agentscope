@@ -126,7 +126,7 @@ test.describe('rag-walkthrough', () => {
     await expect(panel(page)).toBeHidden();
     // Run ingestion.
     await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
-    await page.getByRole('button', { name: 'Play' }).click();
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
     await expect(page.locator('.status')).toHaveText('Step 10 of 10 · Store', { timeout: 10_000 });
     await expect(panel(page)).toBeVisible();
 
@@ -264,7 +264,7 @@ test.describe('rag-walkthrough', () => {
     await open(page, '#/rag/rag-query/0/architecture');
     await expect(retrieval(page)).toBeHidden();
     await page.getByRole('combobox', { name: 'Play speed' }).selectOption('4');
-    await page.getByRole('button', { name: 'Play' }).click();
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
     await expect(page.locator('.status')).toHaveText('Step 10 of 10 · Answer', { timeout: 10_000 });
     await expect(retrieval(page)).toBeVisible();
     expect(await onScreen(page)).toEqual(expected(reference('rag-query')));
