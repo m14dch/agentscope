@@ -179,19 +179,6 @@ function checkScenario(
     if (!phases.has(e.phase)) err(where, `unknown phase ${e.phase}`);
     for (const p of [e.sender, e.receiver])
       if (!declared.has(p)) err(where, `participant ${p} not declared`);
-    if (Object.hasOwn(e, 'prediction')) {
-      const prompt = obj(e.prediction)['prompt'];
-      if (
-        typeof prompt !== 'string' ||
-        prompt.trim().length < 10 ||
-        !prompt.trimEnd().endsWith('?')
-      ) {
-        err(
-          where,
-          "prediction must be {prompt: <a question of at least 10 characters ending with '?'>}",
-        );
-      }
-    }
     if (e.execution_type !== 'NETWORK' && Object.hasOwn(e, 'http'))
       err(where, 'HTTP envelope on non-network event');
     if (e.execution_type === 'IN_PROCESS' && e.transport !== 'in_process') {
