@@ -769,8 +769,6 @@ scenarios:
       stop_reason: tool_use
     explanation: 'Simulated model output: the model does not call anything itself; it answers with a request
       that the agent run get_customer_balance.'
-    prediction:
-      prompt: 'The model has the question and a list of tools. What will it return: an answer or a request?'
     technical_notes:
     - The model may ask for several tools in turn; each result returns through the agent, which resends
       the whole conversation, before the model sees it.
@@ -882,8 +880,6 @@ scenarios:
         Authorization: Bearer <REDACTED_MCP_ACCESS_TOKEN>
       body_ref: payload
     explanation: Call the balance tool over Streamable HTTP.
-    prediction:
-      prompt: 'Who sends the tool call to the MCP server: the model or the MCP client?'
     technical_notes:
     - Mcp-Method and Mcp-Name mirror the body so gateways can route without parsing JSON; the server rejects
       mismatches with HTTP 400 and error -32020.
@@ -1314,8 +1310,6 @@ scenarios:
           additionalProperties: false
     explanation: Model APIs are stateless, so the agent resends the whole conversation (system prompt,
       question, assistant tool call and tool result) together with the tool definitions.
-    prediction:
-      prompt: The model already saw the question. Why does the agent send it again?
     security_boundaries:
     - agent-to-llm
     - tool-to-llm

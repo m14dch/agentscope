@@ -178,8 +178,6 @@ interface ScenarioView {
   player: Player;
   view: DiagramView;
   row: ControlRow;
-  /** Index of the event whose prediction prompt is showing, if any. */
-  prompt: number | undefined;
   render: () => void;
   dispose: () => void;
 }
@@ -296,7 +294,6 @@ export class Shell {
       this.setLevel(c, route.level);
       // The Overview rests at the end of the stage (02 zoom_levels.cursor_mapping).
       c.player.jump(zoomCursor(this.spans(c), c.player.cursor, 'protocol', route.level));
-      this.current.prompt = undefined;
       this.route = {
         ...route,
         step: toDefaultStep(c.defaults, c.player.playback.events, c.player.cursor),
@@ -433,7 +430,6 @@ export class Shell {
     const c = this.current;
     if (!c || level === c.view.level) return;
     const from = c.view.level;
-    c.prompt = undefined;
     const target = zoomCursor(this.spans(c), c.player.cursor, from, level);
     this.setLevel(c, level);
     c.player.jump(target);
@@ -624,7 +620,7 @@ export class Shell {
       reset: () => this.go(() => player.reset()),
       previous: () => this.go(() => player.previous()),
       toggle: () => player.toggle(),
-      next: () => this.next(),
+      next: () => this.go(() => player.next()),
       speed: (speed) => player.setSpeed(speed),
       // At the Overview the slider runs over the stages (02 zoom_levels.stepping).
       jump: (step) =>
@@ -650,8 +646,6 @@ export class Shell {
       'aria-orientation': 'vertical',
       'aria-label': 'Resize the inspector',
     });
-    // The prompt slot announces a prediction once; the message slot is quiet.
-    const promptSlot = el('div', { 'aria-live': 'polite' });
     const messageSlot = el('div');
     const details = el('div');
     const inspectorView = new Inspector(details, {
@@ -667,11 +661,9 @@ export class Shell {
     const inspector = el(
       'aside',
       { class: 'inspector', 'aria-label': 'Current step' },
-      promptSlot,
       messageSlot,
       details,
     );
-    let shownPrompt: number | undefined;
     const workspace = el('div', { class: 'workspace' }, diagram, splitter, inspector);
     this.attachSplitter(workspace, splitter, inspector);
 
@@ -723,7 +715,6 @@ export class Shell {
       player,
       view,
       row,
-      prompt: undefined,
       render: () => undefined,
       dispose: () => undefined,
     };
@@ -765,12 +756,6 @@ export class Shell {
       retrieval?.panel.update(retrievalModel(player.playback.events, shown, retrieval.index()));
       combined?.update(shown);
       row.setLevel(view.level);
-      const promptAt =
-        state.prompt === k && player.playback.event(k + 1)?.prediction ? k : undefined;
-      if (promptAt !== shownPrompt) {
-        shownPrompt = promptAt;
-        promptSlot.replaceChildren(...this.promptContent(state));
-      }
       messageSlot.replaceChildren(...this.introContent(state));
       inspectorView.update({ events: player.playback.events, cursor: k });
       if (!contextBody.hidden) {
@@ -782,21 +767,7 @@ export class Shell {
       this.syncUrl();
     };
 
-    const unsubscribe = player.subscribe(() => {
-      // Play pauses before a step that asks for a prediction (02 learning.prediction_rules), not
-      // at the Overview, which steps by stage and shows no prompts (zoom_levels.overview).
-      const next = player.playback.event(player.cursor + 1);
-      if (
-        player.status === 'playing' &&
-        view.level !== 'overview' &&
-        next?.prediction &&
-        state.prompt !== player.cursor
-      ) {
-        player.pause();
-        state.prompt = player.cursor;
-      }
-      state.render();
-    });
+    const unsubscribe = player.subscribe(() => state.render());
     state.dispose = (): void => {
       unsubscribe();
       retrieval?.panel.destroy();
@@ -920,20 +891,6 @@ export class Shell {
     return stageStops(this.spans(c));
   }
 
-  private promptContent(state: ScenarioView): Node[] {
-    const next = state.player.playback.event(state.player.cursor + 1);
-    if (state.prompt !== state.player.cursor || !next?.prediction) return [];
-    return [
-      el(
-        'div',
-        { class: 'prediction' },
-        el('p', { class: 'small muted' }, 'Before the next step'),
-        el('p', { class: 'prompt' }, next.prediction.prompt),
-        button('Continue', () => this.next()),
-      ),
-    ];
-  }
-
   /**
    * Before the first step: the question the scenario answers. At the Overview, then the current
    * stage's sentence (02 zoom_levels.overview).
@@ -955,26 +912,10 @@ export class Shell {
     ];
   }
 
-  /** Runs a navigation that never shows a prediction prompt. */
+  /** Runs a navigation and renders its result. */
   private go(action: () => void): void {
-    if (this.current) this.current.prompt = undefined;
     action();
     this.current?.render();
-  }
-
-  /** Next: show a pending prediction first, then run the step (02 learning.prediction_rules). */
-  private next(): void {
-    const c = this.current;
-    if (!c) return;
-    const upcoming = c.player.playback.event(c.player.cursor + 1);
-    if (c.view.level !== 'overview' && upcoming?.prediction && c.prompt !== c.player.cursor) {
-      c.prompt = c.player.cursor;
-      c.render();
-      return;
-    }
-    c.prompt = undefined;
-    c.player.next();
-    c.render();
   }
 
   private attachSplitter(
@@ -1098,7 +1039,6 @@ export class Shell {
   private setParameter(name: string, value: Json): void {
     const c = this.current;
     if (!c) return;
-    c.prompt = undefined;
     c.player.setParameters({ [name]: value });
     c.render();
   }
@@ -1133,7 +1073,7 @@ export class Shell {
     if (keyBelongsToFocus(e.target, e.key)) return;
     const direction = ZOOM_KEYS.get(e.key);
     const level = direction ? zoomed(c.view.level, direction) : undefined;
-    if (e.key === 'ArrowRight') this.next();
+    if (e.key === 'ArrowRight') this.go(() => c.player.next());
     else if (e.key === 'ArrowLeft') this.go(() => c.player.previous());
     else if (e.key === ' ') c.player.toggle();
     else if (direction) {

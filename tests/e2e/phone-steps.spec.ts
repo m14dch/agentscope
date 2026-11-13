@@ -224,31 +224,6 @@ test.describe('at 390 × 844', () => {
     await expect(rows(page).nth(16)).toHaveAttribute('aria-expanded', 'true');
   });
 
-  test('a prediction prompt comes before its step until "Show the step"', async ({ page }) => {
-    await open(page, 'mcp/mcp-balance/0/protocol');
-    const call = rows(page).nth(13);
-    await call.click();
-    const body = page.locator('#step-14');
-    await expect(body.locator('.prompt')).toContainText('Who sends the tool call');
-    await expect(body.getByRole('tablist')).toHaveCount(0);
-    await body.getByRole('button', { name: 'Show the step' }).click();
-    await expect(body.getByRole('tablist')).toBeVisible();
-    await expect(body.locator('.message')).toBeFocused();
-    await expect(body.locator('.prompt')).toBeVisible();
-    // Open all shows every step in full, each prompt above it.
-    await page.getByRole('button', { name: 'Close all' }).click();
-    await page.getByRole('button', { name: 'Open all' }).click();
-    const last = page.locator('#step-26');
-    await expect(last.locator('.prompt')).toBeVisible();
-    await expect(last.getByRole('tablist')).toBeVisible();
-    await expect(last.getByRole('button', { name: 'Show the step' })).toHaveCount(0);
-    // Open all counted as revealing: a row opened alone later opens in full.
-    await page.getByRole('button', { name: 'Close all' }).click();
-    await call.click();
-    await expect(body.getByRole('button', { name: 'Show the step' })).toHaveCount(0);
-    await expect(body.getByRole('tablist')).toBeVisible();
-  });
-
   test('panels sit in the rows of their steps; the projection takes its compact form', async ({
     page,
   }) => {
@@ -262,8 +237,6 @@ test.describe('at 390 × 844', () => {
     ).toBeVisible();
     await expect(select.locator('.retrieval-prompt, .retrieval-answer')).toHaveCount(0);
     const prompt = row(page, 'Submit grounded prompt');
-    // Its prediction comes first (phone_steps.predictions).
-    await prompt.getByRole('button', { name: 'Show the step' }).click();
     await expect(
       prompt.getByRole('heading', { name: 'Prompt before and after retrieval' }),
     ).toBeVisible();

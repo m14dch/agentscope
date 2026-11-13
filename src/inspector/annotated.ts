@@ -63,9 +63,8 @@ function stateOrigin(
 
 /**
  * The travel of `value` if the event at `index` tracks it (02 inspector.annotations.travel),
- * else undefined. Only whole values match, never a value inside a longer string. A hop to a
- * later step that asks a prediction is left out, except "reaches the model": that says only
- * that the model receives the value, which no prediction asks, so no link answers one early.
+ * else undefined. Only whole values match, never a value inside a longer string. Every hop
+ * links to its step, earlier or later.
  */
 export function travel(
   events: readonly ScenarioEvent[],
@@ -98,7 +97,6 @@ export function travel(
   ];
   const hops = found
     .filter((h): h is [number, HopKind] => h[0] !== undefined)
-    .filter(([i, kind]) => kind === 'model' || !(i > index && events[i]?.prediction))
     .map(([i, kind]) => ({ index: i, kind }))
     .sort((a, b) => a.index - b.index);
   return { origin: label === undefined ? { index: from } : { label }, hops };

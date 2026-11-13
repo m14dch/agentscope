@@ -320,11 +320,6 @@ def check_scenario(scn, ctx):
         for p in (e["sender"], e["receiver"]):
             if p not in scn["participants"]:
                 err(where, f"participant {p} not declared")
-        if "prediction" in e:
-            pred = e["prediction"]
-            prompt = pred.get("prompt", "") if isinstance(pred, dict) else ""
-            if not isinstance(prompt, str) or len(prompt.strip()) < 10 or not prompt.rstrip().endswith("?"):
-                err(where, "prediction must be {prompt: <a question of at least 10 characters ending with '?'>}")
         if e["execution_type"] != "NETWORK" and "http" in e:
             err(where, "HTTP envelope on non-network event")
         if e["execution_type"] == "IN_PROCESS" and e["transport"] != "in_process":

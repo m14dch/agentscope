@@ -239,13 +239,6 @@
     scroll-margin-top: var(--space-6);
   }
 
-  /* A prediction waiting for "Show the step" ends the body without a rule or gap below. */
-  .step-body > .prediction:last-child {
-    margin-bottom: 0;
-    padding-bottom: 0;
-    border-bottom: none;
-  }
-
   .inspect-link,
   .full-participants {
     display: flex;

@@ -1366,8 +1366,6 @@ scenarios:
         version: '1.2'
         score: 0.0438
     explanation: All candidates ranked by cosine similarity. Scores are not probabilities.
-    prediction:
-      prompt: Which document do you expect to rank first for this question?
     technical_notes:
     - The database also returns each chunk's text and metadata; the inspector shows them from the index
       (index-05).
@@ -1792,8 +1790,6 @@ scenarios:
           Savings account The Savings account helps you set money aside. It has no monthly fee and pays 0.50% annual interest, credited at the end of each year. There is no minimum balance. The Savings account has no debit card and cannot be used for card payments. One withdrawal per month
           </document>
     explanation: Retrieved text becomes model-visible only now.
-    prediction:
-      prompt: Has the model seen any of the bank's documents before this request?
     security_boundaries:
     - agent-to-llm
     - rag-to-llm
