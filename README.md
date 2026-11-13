@@ -9,8 +9,8 @@ AgentScope is an interactive learning tool that reveals what happens behind AI-p
 AgentScope is for experienced software engineers who are new to AI integration. Every scenario is a
 deterministic simulation of one question to Example Bank's assistant; nothing calls a real model, server or
 bank, and the page says so. Each scenario states its learning question and its message, then lets you step
-through it: an optional prediction before a step, the step highlighted in a sequence diagram, one sentence
-explaining it, and the exact payloads on demand.
+through it: the step highlighted in a sequence diagram, one sentence explaining it, and the exact payloads
+on demand.
 
 - **MCP** — "What is the current balance of my bank account?" Server discovery, tool listing and
   `tools/call` over MCP revision 2026-07-28 with the headers mirrored from the body; the model only requests
@@ -208,7 +208,7 @@ Each use case has exactly one scenario (`03-simulation-engine.yaml` → `one_sce
    with a `label`, a `takeaway` and a `semantic_phase` (Compare syncs on it), and `events` in the format of
    `03-simulation-engine.yaml` (sender, receiver, operation, protocol, transport, message type, a one-sentence
    `explanation`, `pair_id` and `correlation_id` for request/response pairs, `security_boundaries` from
-   `07-security-protocols.yaml`, optionally a `prediction` whose prompt ends with "?"). MCP payloads must
+   `07-security-protocols.yaml`). MCP payloads must
    validate against the pinned schema. The RAG tab lists `rag-query` and `rag-index` only.
 3. Run `npm run validate:specs`, `npm test` (the golden test compares the Python and TypeScript registries)
    and `npm run build`; an invalid event fails the build with an error naming its scenario and event. Update

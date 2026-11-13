@@ -55,7 +55,7 @@ interface Row {
   button: HTMLButtonElement;
   body: HTMLElement;
   /** Builds the body's content; returns what to dispose of when it closes. */
-  fill: (reveal: boolean) => (() => void)[];
+  fill: () => (() => void)[];
   dispose: (() => void)[];
   /** The step's inspector while open (Protocol), redrawn when the Annotations toggle changes. */
   inspector?: { view: Inspector; step: number } | undefined;
@@ -66,8 +66,6 @@ export class PhoneSteps {
   private viewLevel: Level;
   /** Keys of the open rows, kept across a parameter change. */
   private readonly open = new Set<string>();
-  /** Keys of rows whose prediction prompt was answered with "Show the step". */
-  private readonly revealed = new Set<string>();
   private rows: Row[] = [];
   /** The Annotations toggle, kept as the learner left it for every row (inspector.annotations.phone). */
   private readonly toggles = { annotated: false };
@@ -239,7 +237,7 @@ export class PhoneSteps {
       button,
       body,
       dispose: [],
-      fill: (reveal) => this.eventBody(row, r, reveal),
+      fill: () => this.eventBody(row, r),
     };
     this.rows.push(row);
     return item;
@@ -264,34 +262,10 @@ export class PhoneSteps {
   }
 
   /**
-   * A Protocol row's body (02 phone_steps.body.protocol): a prediction prompt first, then the
-   * inspector without the line the row already shows, then the panels of the step.
+   * A Protocol row's body (02 phone_steps.body.protocol): the inspector without the line the
+   * row already shows, then the panels of the step.
    */
-  private eventBody(row: Row, r: EventRow, reveal: boolean): (() => void)[] {
-    const prompt = r.event.prediction?.prompt;
-    const gated = prompt !== undefined && !reveal && !this.revealed.has(row.key);
-    const before = prompt
-      ? [
-          el(
-            'div',
-            { class: 'prediction' },
-            el('p', { class: 'small muted' }, 'Before this step'),
-            el('p', { class: 'prompt' }, prompt),
-          ),
-        ]
-      : [];
-    if (gated) {
-      const show = el('button', { type: 'button' }, 'Show the step');
-      show.addEventListener('click', () => {
-        this.revealed.add(row.key);
-        this.close(row);
-        this.show(row);
-        row.body.querySelector<HTMLElement>('.message')?.focus({ preventScroll: true });
-      });
-      (before[0] as HTMLElement).append(show);
-      row.body.replaceChildren(...fullLine(r), ...before);
-      return [];
-    }
+  private eventBody(row: Row, r: EventRow): (() => void)[] {
     const holder = el('div');
     const view = new Inspector(holder, {
       labels: this.options.labels,
@@ -307,10 +281,8 @@ export class PhoneSteps {
     });
     view.update({ events: this.events, cursor: r.step });
     row.inspector = { view, step: r.step };
-    // The message can take focus after "Show the step", so the reader continues there.
-    holder.querySelector('.message')?.setAttribute('tabindex', '-1');
     const panels = this.panelsAt(row, r);
-    row.body.replaceChildren(...fullLine(r), ...before, holder, ...panels.map((p) => p.root));
+    row.body.replaceChildren(...fullLine(r), holder, ...panels.map((p) => p.root));
     return panels.flatMap((p) => (p.destroy ? [p.destroy] : []));
   }
 
@@ -350,10 +322,10 @@ export class PhoneSteps {
     this.options.onChange();
   }
 
-  private show(row: Row, reveal = false): void {
+  private show(row: Row): void {
     if (!row.body.hidden) return;
     setOpen(row, true);
-    row.dispose = row.fill(reveal);
+    row.dispose = row.fill();
   }
 
   private close(row: Row): void {
@@ -364,13 +336,11 @@ export class PhoneSteps {
     row.body.replaceChildren();
   }
 
-  /** Open all shows every body in full, prompts above their steps (phone_steps.predictions). */
+  /** Open all opens every row (02 phone_steps.control). */
   private openAll(): void {
     for (const row of this.rows) {
       this.open.add(row.key);
-      this.revealed.add(row.key);
-      if (!row.body.hidden && row.body.querySelector('.prediction button')) this.close(row);
-      this.show(row, true);
+      this.show(row);
     }
   }
 

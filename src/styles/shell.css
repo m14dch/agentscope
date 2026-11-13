@@ -294,20 +294,6 @@
   margin-top: 0;
 }
 
-.prediction {
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: var(--line-hair) solid var(--color-rule);
-}
-
-.prediction p {
-  margin: 0 0 var(--space-1);
-}
-
-.prompt {
-  font-weight: var(--weight-strong);
-}
-
 .context-area {
   display: flex;
   flex-direction: column;

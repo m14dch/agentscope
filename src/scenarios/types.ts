@@ -36,11 +36,6 @@ export interface ContextChange {
   value_ref: string;
 }
 
-/** A question shown before the event runs; the event itself answers it. */
-export interface Prediction {
-  prompt: string;
-}
-
 export interface ScenarioEvent {
   id: string;
   scenario_id: string;
@@ -64,7 +59,6 @@ export interface ScenarioEvent {
   tracked_values?: Record<string, Json>;
   state_changes?: StateChange[];
   context_changes?: ContextChange[];
-  prediction?: Prediction;
   /** Short phrases naming what the message carries (03 event_schema.carries). */
   carries?: string[];
   /** Groups that explain the payload field by field (03 annotation_rules). */
