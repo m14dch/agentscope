@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { parse } from 'yaml';
+import { contrast, NON_TEXT_CONTRAST } from '../../src/design/contrast';
 import { expect, test } from './fixtures';
 
 /**
@@ -177,4 +178,77 @@ for (const route of [
         expect(offenders(await computedColours(page, true)), `focus on ${name}`).toEqual([]);
       }
     });
+}
+
+/**
+ * WCAG 1.4.11 (02 design.colour.use): every visible border of a button, select or tab reaches
+ * 3:1 against the background behind it, at one Protocol step on each tab (and Ingestion for
+ * its select), and on a phone, where Open all, Close all and the rows are. Folds are opened so
+ * the controls inside them (Top K, the RAG toggles, Copy, Model context) are measured too.
+ */
+const BORDER_ROUTES: [string, boolean][] = [
+  ['./#/mcp/mcp-balance/23/protocol', false],
+  ['./#/rag/rag-query/10/protocol', false],
+  ['./#/rag/rag-index/10/protocol', false],
+  ['./#/compare/compare-rag-mcp/16/protocol', false],
+  ['./#/combined/combined-balance-explanation/35/protocol', false],
+  ['./#/mcp/mcp-balance/23/protocol', true],
+];
+
+type Border = { name: string; border: string; background: string };
+
+async function controlBorders(page: Page): Promise<Border[]> {
+  return page.evaluate(() => {
+    const transparent = 'rgba(0, 0, 0, 0)';
+    /** The colour around the control: the nearest ancestor that paints a background. */
+    const behind = (el: Element): string => {
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const bg = getComputedStyle(p).backgroundColor;
+        if (bg !== transparent) return bg;
+      }
+      return 'rgb(255, 255, 255)'; // the canvas
+    };
+    const found: Border[] = [];
+    for (const el of document.querySelectorAll('button, select, [role="tab"]')) {
+      if (!el.checkVisibility({ visibilityProperty: true })) continue;
+      const style = getComputedStyle(el);
+      for (const side of ['top', 'right', 'bottom', 'left']) {
+        const width = parseFloat(style.getPropertyValue(`border-${side}-width`));
+        const kind = style.getPropertyValue(`border-${side}-style`);
+        const border = style.getPropertyValue(`border-${side}-color`);
+        if (width === 0 || kind === 'none' || kind === 'hidden' || border === transparent) continue;
+        const label = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30);
+        found.push({
+          name: `${el.tagName.toLowerCase()} "${label}"`,
+          border,
+          background: behind(el),
+        });
+      }
+    }
+    return found;
+  });
+}
+
+for (const [route, phone] of BORDER_ROUTES) {
+  test(`every control border on ${route}${phone ? ' on a phone' : ''} reaches 3:1`, async ({
+    page,
+  }) => {
+    if (phone) await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(route);
+    await page.locator('#app > *').first().waitFor();
+    const folded = page.locator('[aria-expanded="false"]:visible');
+    for (let i = 0; i < 50 && (await folded.count()) > 0; i += 1) await folded.first().click();
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+    const borders = await controlBorders(page);
+    // Not vacuous: the page's bordered controls are found.
+    expect(borders.length).toBeGreaterThan(4);
+    const failing = borders
+      .map((b) => ({ ...b, ratio: contrast(b.border, b.background) }))
+      .filter((b) => b.ratio < NON_TEXT_CONTRAST)
+      .map((b) => `${b.name}: ${b.border} on ${b.background} = ${b.ratio.toFixed(2)}`);
+    // One line per control: its sides usually share a colour.
+    expect([...new Set(failing)]).toEqual([]);
+  });
 }

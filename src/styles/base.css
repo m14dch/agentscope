@@ -122,13 +122,14 @@ pre {
   color: var(--color-error);
 }
 
-/* Buttons: quiet text controls on paper; the pressed state is bold, not coloured. */
+/* Buttons: quiet text controls on paper; the pressed state is bold, not coloured. The
+   border is ink-muted: it is the only boundary, so it needs 3:1 (02 design.colour.use). */
 button {
   font: inherit;
   font-size: var(--size-small);
   color: var(--color-ink);
   background: var(--color-paper);
-  border: var(--line-hair) solid var(--color-rule);
+  border: var(--line-hair) solid var(--color-ink-muted);
   border-radius: 0;
   padding: 0.25rem var(--space-1);
   cursor: pointer;

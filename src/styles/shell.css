@@ -230,7 +230,7 @@
   font-size: var(--size-small);
   height: calc(5 * var(--space-1));
   padding: 0 var(--space-1);
-  border: var(--line-hair) solid var(--color-rule);
+  border: var(--line-hair) solid var(--color-ink-muted);
   border-radius: 0;
 }
 

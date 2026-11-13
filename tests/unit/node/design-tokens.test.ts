@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
-import { contrast } from '../../../src/design/contrast';
+import { contrast, NON_TEXT_CONTRAST } from '../../../src/design/contrast';
 
 const ROOT = new URL('../../../', import.meta.url).pathname;
 const TOKENS_CSS = 'src/styles/tokens.css';
@@ -127,6 +127,35 @@ describe('design tokens', () => {
     }
     expect(contrast(t('accent'), t('paper')), 'accent on paper').toBeGreaterThanOrEqual(3);
     expect(contrast(t('ink'), t('selection')), 'ink on selection').toBeGreaterThanOrEqual(4.5);
+  });
+
+  // 02 design.colour.use: a control's border is its boundary and reaches 3:1 (WCAG 1.4.11);
+  // rule is structure only. tests/e2e/colours.spec.ts checks the computed borders as rendered.
+  it('draws the borders of buttons, selects and tabs only in tokens that reach 3:1', () => {
+    const t = (name: string) => specTokens[name] ?? '';
+    expect(contrast(t('rule'), t('paper')), 'rule is too light for a control').toBeLessThan(
+      NON_TEXT_CONTRAST,
+    );
+    const CONTROL = /(?:^|[\s,>+~(])(?:button|select)(?![\w-])|\.tab(?![\w-])/;
+    const found = files(join(ROOT, 'src'))
+      .filter((path) => path.endsWith('.css'))
+      .flatMap((path) =>
+        [...withoutComments(path, readFileSync(path, 'utf8')).matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+          .filter((m) => CONTROL.test(m[1] ?? ''))
+          .flatMap((m) =>
+            [...(m[2] ?? '').matchAll(/\bborder[a-z-]*:[^;]*var\(--color-([a-z-]+)\)/g)].map(
+              (d) => ({
+                at: `${path.slice(ROOT.length)} ${(m[1] ?? '').trim()}`,
+                token: d[1] ?? '',
+              }),
+            ),
+          ),
+      );
+    expect(found.map((f) => f.at)).toContain('src/styles/base.css button');
+    const offenders = found
+      .filter((f) => contrast(t(f.token), t('paper')) < NON_TEXT_CONTRAST)
+      .map((f) => `${f.at}: ${f.token}`);
+    expect(offenders).toEqual([]);
   });
 });
 

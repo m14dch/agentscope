@@ -47,7 +47,7 @@
   font-size: var(--size-small);
   color: var(--color-ink);
   background: var(--color-paper);
-  border: var(--line-hair) solid var(--color-rule);
+  border: var(--line-hair) solid var(--color-ink-muted);
   border-radius: 0;
   max-width: 100%;
 }
