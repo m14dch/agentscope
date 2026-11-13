@@ -205,6 +205,8 @@ export class Shell {
   /** Whether a page has been shown; the first one does not take focus. */
   private shown = false;
   private route: Route | undefined;
+  /** True while a link is being followed: its intermediate positions are not written. */
+  private following = false;
   /** Crossing 48rem lays the page out again at the same address (02 layout.phone.breakpoint). */
   private readonly phoneChange = (): void => {
     this.leaveScenario();
@@ -290,10 +292,17 @@ export class Shell {
     if (this.current?.scenario.id === scenario.id) {
       // Same scenario: follow the step and level in the link.
       const c = this.current;
-      c.player.jump(fromDefaultStep(c.defaults, c.player.playback.events, route.step));
-      this.setLevel(c, route.level);
-      // The Overview rests at the end of the stage (02 zoom_levels.cursor_mapping).
-      c.player.jump(zoomCursor(this.spans(c), c.player.cursor, 'protocol', route.level));
+      // Each jump renders; only the final position is written, so the address never holds
+      // the new step at the old level, which a reload in between would restore.
+      this.following = true;
+      try {
+        c.player.jump(fromDefaultStep(c.defaults, c.player.playback.events, route.step));
+        this.setLevel(c, route.level);
+        // The Overview rests at the end of the stage (02 zoom_levels.cursor_mapping).
+        c.player.jump(zoomCursor(this.spans(c), c.player.cursor, 'protocol', route.level));
+      } finally {
+        this.following = false;
+      }
       this.route = {
         ...route,
         step: toDefaultStep(c.defaults, c.player.playback.events, c.player.cursor),
@@ -324,7 +333,7 @@ export class Shell {
   /** Writes the current position into the address without adding a history entry. */
   private syncUrl(): void {
     const c = this.current;
-    if (!c || !this.route) return;
+    if (!c || !this.route || this.following) return;
     // The address numbers steps as played at the defaults (02 navigation.route_steps).
     const step = toDefaultStep(c.defaults, c.player.playback.events, c.player.cursor);
     this.route = { ...this.route, step, level: c.view.level };
