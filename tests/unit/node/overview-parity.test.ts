@@ -1,14 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { jargon, overviewProblems } from '../../../src/scenarios/validate.ts';
+import { jargon, laneOrderProblems, overviewProblems } from '../../../src/scenarios/validate.ts';
 import type { Scenario } from '../../../src/scenarios/types.ts';
 import { readSpecSources } from '../../../scripts/spec-sources.ts';
 
 const SPECS = join(import.meta.dirname, '../../../specifications');
 const TOOLS = join(SPECS, 'tools');
 
-/** check_overview of validate_specs.py for each scenario, in order. */
+/** check_lane_order and check_overview of validate_specs.py for each scenario, in order. */
 function pythonProblems(inputs: unknown[]): string[][] {
   const script = [
     'import json, sys',
@@ -17,6 +17,7 @@ function pythonProblems(inputs: unknown[]): string[][] {
     'out = []',
     'for s in json.load(sys.stdin):',
     '    v.errors.clear()',
+    '    v.check_lane_order(s)',
     '    v.check_overview(s)',
     '    out.append(list(v.errors))',
     'print(json.dumps(out))',
@@ -28,8 +29,8 @@ function pythonProblems(inputs: unknown[]): string[][] {
   return JSON.parse(out) as string[][];
 }
 
-describe('overview checks (03 scenario_format.overview_fields)', () => {
-  it('validate_specs.py reports the same problems as the app for every malformed overview', () => {
+describe('overview and lane-order checks (03 overview_fields, 02 diagram.participants)', () => {
+  it('validate_specs.py reports the same problems as the app for every malformed overview or lane order', () => {
     const mcp = readSpecSources(SPECS).mcp.scenarios[0] as Scenario;
     const variant = (change: (s: Scenario) => void): Scenario => {
       const s = structuredClone(mcp);
@@ -77,11 +78,50 @@ describe('overview checks (03 scenario_format.overview_fields)', () => {
       variant((s) => {
         s.events.push({ ...(s.events[0] as Scenario['events'][number]), id: 'late' });
       }),
+      // A party split by another party's lane (You holds the LLM provider), a party whose
+      // members are out of lane order, the LLM provider between the agent and its MCP client
+      // (the order before issue 71), and the agent before the user, which also splits the Assistant.
+      variant((s) => {
+        s.overview.parties[0]?.members.push('llm');
+        s.overview.parties[1]?.members.pop();
+      }),
+      variant((s) => {
+        (s.overview.parties[1] as { members: string[] }).members = ['agent', 'llm', 'mcp-client'];
+      }),
+      variant((s) => {
+        s.participants = [
+          'user',
+          'agent',
+          'llm',
+          'mcp-client',
+          'mcp-server',
+          'rest-api',
+          'database',
+        ];
+      }),
+      variant((s) => {
+        s.participants = ['agent', 'user', ...s.participants.slice(2)];
+      }),
     ];
-    const app = inputs.map((s) => overviewProblems(s).map((p) => `${p.where}: ${p.message}`));
+    const app = inputs.map((s) => [
+      ...laneOrderProblems(s).map((p) => `${s.id}: ${p}`),
+      ...overviewProblems(s).map((p) => `${p.where}: ${p.message}`),
+    ]);
     expect(app[0]).toEqual([]);
     // Every malformed overview reports at least one problem.
     expect(app.slice(1).every((p) => p.length > 0)).toBe(true);
+    expect(app.slice(-4)).toEqual([
+      ["mcp-balance: overview party you is split by another party's lane"],
+      ['mcp-balance: overview parties must list their members in lane order'],
+      [
+        'mcp-balance: lanes must start with user, agent, mcp-client, llm (02 diagram.participants)',
+        'mcp-balance: overview parties must list their members in lane order',
+      ],
+      [
+        'mcp-balance: lanes must start with user, agent, mcp-client, llm (02 diagram.participants)',
+        "mcp-balance: overview party assistant is split by another party's lane",
+      ],
+    ]);
     expect(pythonProblems(inputs)).toEqual(app);
   });
 
