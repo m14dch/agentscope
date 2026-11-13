@@ -139,10 +139,32 @@ button:hover {
   border-color: var(--color-ink);
 }
 
-/* A pressed toggle is bold with an ink border; colour stays reserved for meaning. */
+/* A pressed toggle is bold with a 2 px ink boundary: its ink border and an ink line just
+   inside it, drawn as an outline so nothing moves (02 design.colour.use). Hover has the
+   1 px border only. While focused, the focus ring takes the outline's place. A projection
+   line has no border and marks its point on the plot instead. */
 [aria-pressed='true'] {
   font-weight: var(--weight-strong);
   border-color: var(--color-ink);
+}
+
+[aria-pressed='true']:not(:focus-visible, .projection-item) {
+  outline: var(--line-hair) solid var(--color-ink);
+  outline-offset: calc(-2 * var(--line-hair));
+}
+
+/* Accent reaches only 2.71:1 on Naples Yellow; on or inside a selection background the
+   focus ring is ink, so it reaches 3:1 wherever it sits (02 design.colour.use). */
+.json-mark :focus-visible,
+.json-mark:focus-visible,
+.context-added :focus-visible,
+.context-added:focus-visible,
+.chunk-mark :focus-visible,
+.chunk-mark:focus-visible,
+.specimen .tracked :focus-visible,
+.specimen .tracked:focus-visible,
+.chunk-select[aria-pressed='true']:focus-visible {
+  outline-color: var(--color-ink);
 }
 
 input,

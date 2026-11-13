@@ -130,8 +130,27 @@
   display: inline-flex;
 }
 
+/* Neighbours overlap their shared border, so the pressed or hovered segment, drawn on top,
+   shows its ink boundary on all four sides (02 design.colour.use). */
 .segmented button + button {
-  border-left: none;
+  margin-left: calc(-1 * var(--line-hair));
+}
+
+.segmented button {
+  position: relative;
+}
+
+.segmented button:hover {
+  z-index: 1;
+}
+
+.segmented button[aria-pressed='true'] {
+  z-index: 2;
+}
+
+/* The focus ring lies outside the segment; nothing covers it. */
+.segmented button:focus-visible {
+  z-index: 3;
 }
 
 .lesson {
