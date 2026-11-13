@@ -470,6 +470,7 @@ export class Shell {
       phases: semantic_phases,
       panes: [pane(compare.left_scenario), pane(compare.right_scenario)],
       labels: this.labels,
+      shortLabels: this.shortLabels,
       step: route.step,
       level: route.level,
       onChange: (step, level) => {
@@ -705,6 +706,7 @@ export class Shell {
 
     const view = new DiagramView(diagram, player, {
       labels: this.labels,
+      shortLabels: this.shortLabels,
       level: route.level,
       name: 'Sequence diagram',
       onNaturalWidth: (px) => workspace.style.setProperty('--diagram-width', `${px}px`),

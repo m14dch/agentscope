@@ -361,7 +361,8 @@ export function layout(input: LayoutInput): DiagramLayout {
     const pad = SIZES.boxPad;
     const x1 = Math.min(xs, xr, labelX) - pad;
     const x2 = Math.max(self ? xs + SIZES.selfWidth : Math.max(xs, xr), labelRight) + pad;
-    const top = self ? y - pad - 1 : y - SIZES.labelGap - SIZES.fontSize - pad + 3;
+    // At least 24 px tall (WCAG 2.5.8): a loop's box starts above its line.
+    const top = self ? y - pad - 4 : y - SIZES.labelGap - SIZES.fontSize - pad + 3;
     const bottom = self ? y + SIZES.selfHeight + pad : y + pad + 4;
     const box = { x: x1, y: top, width: x2 - x1, height: bottom - top };
     const shown = visibility(index, cursor);

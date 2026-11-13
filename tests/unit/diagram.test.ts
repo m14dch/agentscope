@@ -73,11 +73,14 @@ describe('Protocol level', () => {
     ]);
   });
 
-  it("gives each arrow a target around its line and label that no other arrow's overlaps", () => {
+  it("gives each arrow a target of at least 24 px around its line and label that no other arrow's overlaps", () => {
     for (const s of scenarios) {
       const model = build(s, 'protocol', 1);
       model.arrows.forEach((a, i) => {
         const { x, y, width, height } = a.box;
+        // WCAG 2.5.8 target size, self-loops included.
+        expect(height, `${s.id} ${a.event.id}`).toBeGreaterThanOrEqual(24);
+        expect(width, `${s.id} ${a.event.id}`).toBeGreaterThanOrEqual(24);
         expect(x, s.id).toBeLessThanOrEqual(Math.min(a.x1, a.x2, a.labelX));
         expect(x + width, s.id).toBeLessThanOrEqual(model.width);
         expect(x + width, s.id).toBeGreaterThanOrEqual(a.labelX + estimate(a.label));

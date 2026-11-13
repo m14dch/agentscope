@@ -43,6 +43,8 @@ export interface CompareOptions {
   phases: readonly { id: string; label: string }[];
   panes: readonly [PaneSpec, PaneSpec];
   labels: Readonly<Record<string, string>>;
+  /** Short participant labels, for the arrows' names (02 diagram.visibility.accessible_name). */
+  shortLabels?: Readonly<Record<string, string>>;
   step: number;
   level: Level;
   /** Called after every change of position or level, to write the address. */
@@ -408,6 +410,7 @@ export class CompareView {
     const diagram = el('div', { class: 'diagram-pane', role: 'region' });
     const view = new DiagramView(diagram, player, {
       labels: this.options.labels,
+      ...(this.options.shortLabels ? { shortLabels: this.options.shortLabels } : {}),
       level: this.level,
       name: `${label} sequence diagram`,
       id: `compare-${side === 0 ? 'left' : 'right'}`,

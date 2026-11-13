@@ -11,6 +11,8 @@ import { renderSvg } from './render.ts';
 
 export interface DiagramOptions {
   labels: Readonly<Record<string, string>>;
+  /** Short participant labels for the arrows' names (01 participants.registry short_label). */
+  shortLabels?: Readonly<Record<string, string>>;
   level?: Level;
   /** Unique per page, for marker IDs. */
   id?: string;
@@ -187,7 +189,8 @@ export class DiagramView {
       model,
       title,
       this.options.id ?? 'diagram',
-      this.options.labels,
+      // Arrow names use the short labels (02 diagram.visibility.accessible_name).
+      this.options.shortLabels ?? this.options.labels,
     );
     this.root.dataset['presentation'] = 'diagram';
     this.reportWidth(Math.max(model.width, this.widestWidth(scenario)));
@@ -199,9 +202,10 @@ export class DiagramView {
     // The focused arrow keeps focus and the tab stop; one the level no longer shows hands focus
     // to the region, as a group does.
     const arrow = this.rove(focusArrow);
+    let focusedArrow: SVGGElement | undefined;
     if (focusArrow !== undefined) {
-      const kept = arrow && arrowIndex(arrow) === focusArrow ? arrow : this.root;
-      kept.focus({ preventScroll: true });
+      focusedArrow = arrow && arrowIndex(arrow) === focusArrow ? arrow : undefined;
+      (focusedArrow ?? this.root).focus({ preventScroll: true });
     }
     if (focusKey !== undefined) {
       const group = focusKey
@@ -215,7 +219,10 @@ export class DiagramView {
     const position = `${this.viewLevel}:${this.player.cursor}`;
     if (position !== this.scrolledTo) {
       this.scrolledTo = position;
-      this.scrollToCurrent();
+      // While an arrow holds focus, a step keeps that arrow in view rather than the new current
+      // step, so focus never leaves the screen (02 diagram.arrow_activation).
+      if (focusedArrow) this.reveal(focusedArrow);
+      else this.scrollToCurrent();
     }
   }
 
@@ -330,6 +337,11 @@ export class DiagramView {
   private focusArrow(target: SVGGElement): void {
     this.rove(arrowIndex(target));
     target.focus({ preventScroll: true });
+    this.reveal(target);
+  }
+
+  /** Scrolls the region, not the page, only as far as needed to show an arrow. */
+  private reveal(target: SVGGElement): void {
     const region = this.root.getBoundingClientRect();
     const box = target.getBoundingClientRect();
     const margin = 8;

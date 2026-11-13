@@ -143,7 +143,12 @@ test('Protocol shows the whole sequence: future steps muted, each kind keeping i
     'aria-current',
     'step',
   );
-  await expect(page.getByRole('button', { name: /^Step 28, upcoming: / })).toHaveCount(1);
+  await expect(
+    page.getByRole('button', {
+      name: 'Step 28, upcoming: Agent to User: Display final answer',
+      exact: true,
+    }),
+  ).toHaveCount(1);
 });
 
 test('clicking or activating an arrow moves the cursor to its step', async ({ page }) => {
@@ -187,6 +192,8 @@ test('clicking or activating an arrow moves the cursor to its step', async ({ pa
   await page.keyboard.press('ArrowLeft');
   await expect(page.locator('.status')).toContainText('Step 27 of 28');
   await expect(arrow(1)).toBeFocused();
+  // The step keeps the focused arrow in view rather than scrolling to step 27.
+  await expect(arrow(1)).toBeInViewport();
 });
 
 test('groups expand and collapse with the keyboard, and stay open while stepping', async ({

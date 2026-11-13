@@ -120,6 +120,20 @@ test('compare-sync: stepping either pane moves the other to the same semantic ph
   await expect(page).toHaveURL(/#\/compare\/compare-rag-mcp\/14\/architecture$/);
 });
 
+// 08 e2e_tests: protocol-look-ahead (02 diagram.arrow_activation).
+test("compare: clicking an arrow steps its pane as the pane's slider does, and the other follows", async ({
+  page,
+}) => {
+  await open(page, '#/compare/compare-rag-mcp/16/protocol');
+  await expect(rag(page).getByRole('slider', { name: 'RAG step' })).toHaveValue('6');
+  // RAG's step 7, upcoming, is in context assembly: MCP follows to the same phase.
+  await rag(page).locator('.step[data-index="6"].step--future .step-button').click();
+  await expect(status(page)).toHaveText('Step 25 of 28 · Context assembly');
+  await expect(page.getByRole('slider', { name: 'RAG step' })).toHaveValue('7');
+  expect(await paneSemantic(mcp(page), mcpPhases)).toBe('Context assembly');
+  await expect(page).toHaveURL(/#\/compare\/compare-rag-mcp\/25\/protocol$/);
+});
+
 test('compare: shared controls, keys and the zoom control act on both panes', async ({ page }) => {
   await open(page, '#/compare/compare-rag-mcp/9/architecture');
   await page.locator('body').click({ position: { x: 5, y: 5 } });

@@ -36,7 +36,7 @@ function renderArrow(a: Arrow, ids: string, names: Readonly<Record<string, strin
     ? `<path class="${line.join(' ')}" d="M ${x1} ${y} h ${SIZES.selfWidth} v ${SIZES.selfHeight} h ${-SIZES.selfWidth + 2}" marker-end="${marker}" />`
     : `<line class="${line.join(' ')}" x1="${x1}" y1="${y}" x2="${x2 + (x2 > x1 ? -1 : 1)}" y2="${y}" marker-end="${marker}" />`;
   const e = a.event;
-  const name = `Step ${a.index + 1}, ${STATE_WORD[a.visibility]}: ${names[e.sender] ?? e.sender} to ${names[e.receiver] ?? e.receiver}, ${a.label}`;
+  const name = `Step ${a.index + 1}, ${STATE_WORD[a.visibility]}: ${names[e.sender] ?? e.sender} to ${names[e.receiver] ?? e.receiver}: ${a.label}`;
   const current = a.visibility === 'current';
   const b = a.box;
   const target = `<rect class="step-target" x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" />`;
