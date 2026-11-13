@@ -400,7 +400,9 @@ diagram:
     and End to the first and last. ArrowLeft and ArrowRight step the scenario as anywhere
     (controls.keyboard), and focus stays on the same arrow across steps and jumps; while an arrow
     holds focus, a step scrolls the region to keep that arrow in view rather than the new current
-    step (zoom_levels.scrolling), so focus never leaves the screen. The target is at least 24 px
+    step (zoom_levels.scrolling), so focus never leaves the screen. This holds only while the
+    arrow was focused by the keyboard (Tab, ArrowUp, ArrowDown, Home, End): after a click on an
+    arrow, stepping follows the current step as usual. The target is at least 24 px
     tall (WCAG 2.5.8). While focused,
     the arrow shows the focus ring (design.colour.use) as a 2 px accent rectangle 4 px around its
     line and label, which reaches 3:1 on paper (WCAG 1.4.11); the diagram has no selection
