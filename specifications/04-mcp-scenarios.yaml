@@ -110,8 +110,8 @@ scenarios:
   participants:
   - user
   - agent
-  - llm
   - mcp-client
+  - llm
   - mcp-server
   - rest-api
   - database
@@ -161,7 +161,7 @@ scenarios:
       members: [user]
     - id: assistant
       label: Assistant
-      members: [agent, llm, mcp-client]
+      members: [agent, mcp-client, llm]
     - id: bank-systems
       label: Bank systems
       members: [mcp-server, rest-api, database]

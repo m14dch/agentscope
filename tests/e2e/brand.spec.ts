@@ -153,8 +153,8 @@ test('on a wide screen the workspace widens only as far as its diagram needs, ce
   expect(wide.right - wide.left).toBeGreaterThan(COLUMN.right - COLUMN.left);
   expect(Math.abs(wide.left - (1920 - wide.right))).toBeLessThanOrEqual(1);
 
-  // rag-query fits the column, so its workspace keeps the column's width.
-  await page.goto('./#/rag/rag-query/99/protocol');
+  // rag-index fits the column, so its workspace keeps the column's width.
+  await page.goto('./#/rag/rag-index/99/protocol');
   await page.locator('[data-measured]').waitFor();
   const narrow = await edges(page, '.workspace');
   expect(narrow.left).toBeCloseTo(COLUMN.left, 0);

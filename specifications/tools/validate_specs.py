@@ -370,6 +370,7 @@ def check_scenario(scn, ctx):
             check_mcp(e, by_id, ctx, where)
     check_visibility(scn)
     check_derived(scn, by_id)
+    check_lane_order(scn)
     check_overview(scn)
     for k in ("question",):
         if k in scn and not isinstance(scn[k], str):
@@ -395,6 +396,19 @@ def one_sentence(text):
         and not re.search(r"[?!]", body)
 
 
+LANE_HEAD = ("user", "agent", "mcp-client", "llm")
+
+
+def check_lane_order(scn):
+    """The lane order (02 diagram.participants): the lanes start with those of the user, the agent,
+    its MCP client and the LLM provider that the scenario has, in that order; mirrored in
+    validate.ts."""
+    lanes = scn["participants"]
+    head = [p for p in LANE_HEAD if p in lanes]
+    if lanes[: len(head)] != head:
+        err(scn["id"], f"lanes must start with {', '.join(head)} (02 diagram.participants)")
+
+
 def check_overview(scn):
     """The Overview zoom level (03 scenario_format.overview_fields); mirrored in validate.ts."""
     sid = scn["id"]
@@ -410,6 +424,7 @@ def check_overview(scn):
         err(sid, "overview needs 3 to 5 stages")
     ids = set()
     members = []
+    groups = []
     for i, party in enumerate(parties):
         party = party if isinstance(party, dict) else {}
         pid = party.get("id") if isinstance(party.get("id"), str) else ""
@@ -426,8 +441,18 @@ def check_overview(scn):
             err(sid, f"overview party {pid} needs members")
             group = []
         members += [m if isinstance(m, str) else "" for m in group]
-    if sorted(members) != sorted(scn["participants"]):
+        groups.append((pid, [m if isinstance(m, str) else "" for m in group]))
+    lanes = scn["participants"]
+    if sorted(members) != sorted(lanes):
         err(sid, "overview parties must partition the participants")
+    elif members != lanes:
+        # Each party's lanes are contiguous, and the parties list them in lane order (03 parties).
+        split = [pid for pid, group in groups
+                 if group and max(map(lanes.index, group)) - min(map(lanes.index, group)) >= len(group)]
+        for pid in split:
+            err(sid, f"overview party {pid} is split by another party's lane")
+        if not split:
+            err(sid, "overview parties must list their members in lane order")
     covered = []
     stage_ids = set()
     stage_of = {}

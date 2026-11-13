@@ -372,6 +372,39 @@ test('arrow keys scroll the focused diagram region instead of stepping', async (
   await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
 });
 
+test('the lanes read from the user outward on every tab (02 diagram.participants)', async ({
+  page,
+}) => {
+  // Issue 71: User, Agent, its MCP client, the LLM provider, then the bank's infrastructure.
+  const bankSystems = ['MCP server', 'REST API', 'Core ledger'];
+  const orders: [string, string[]][] = [
+    ['mcp-balance', ['User', 'Agent', 'MCP client', 'LLM provider', ...bankSystems]],
+    [
+      'rag-query',
+      ['User', 'Agent', 'LLM provider', 'Embedding model', 'Vector database', 'Document store'],
+    ],
+    [
+      'combined-balance-explanation',
+      [
+        ...['User', 'Agent', 'MCP client', 'LLM provider'],
+        ...['Embedding model', 'Vector database', ...bankSystems],
+      ],
+    ],
+  ];
+  for (const [id, expected] of orders) {
+    await open(page, route(id, 0, 'protocol'));
+    // Left to right, as drawn: each name contains its participant's short label.
+    const names = await page.locator('.participant').evaluateAll((nodes) =>
+      nodes
+        .map((n) => ({ x: n.getBoundingClientRect().x, text: n.textContent ?? '' }))
+        .sort((a, b) => a.x - b.x)
+        .map((n) => n.text),
+    );
+    expect(names, id).toHaveLength(expected.length);
+    names.forEach((name, i) => expect(name, `${id} lane ${i + 1}`).toContain(expected[i]));
+  }
+});
+
 test('the participant names stay at the top of the region while it scrolls, above the current step', async ({
   page,
 }) => {

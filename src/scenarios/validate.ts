@@ -241,7 +241,23 @@ function checkScenario(
   }
   if (complete.length === list(scn.events).length) checkVisibility(scn, err);
   checkDerived(scn, byId, err);
+  for (const problem of laneOrderProblems(scn)) err(sid, problem);
   for (const problem of overviewProblems(scn)) err(problem.where, problem.message);
+}
+
+const LANE_HEAD = ['user', 'agent', 'mcp-client', 'llm'];
+
+/**
+ * The lane order (02 diagram.participants): the lanes start with those of the user, the agent,
+ * its MCP client and the LLM provider that the scenario has, in that order; mirrors
+ * check_lane_order of validate_specs.py, which a unit test compares.
+ */
+export function laneOrderProblems(scn: Scenario): string[] {
+  const lanes = list(scn.participants).map(text);
+  const head = LANE_HEAD.filter((p) => lanes.includes(p));
+  return sameList(lanes.slice(0, head.length), head)
+    ? []
+    : [`lanes must start with ${head.join(', ')} (02 diagram.participants)`];
 }
 
 /** Words a first-time visitor would have to look up (03 overview_fields.plain_words). */
@@ -284,6 +300,7 @@ export function overviewProblems(scn: Scenario): { where: string; message: strin
   if (stages.length < 3 || stages.length > 5) err('overview needs 3 to 5 stages');
   const ids = new Set<string>();
   const members: string[] = [];
+  const groups: [string, string[]][] = [];
   parties.forEach((value, i) => {
     const party = obj(value);
     const pid = text(party['id']);
@@ -294,11 +311,24 @@ export function overviewProblems(scn: Scenario): { where: string; message: strin
     else if (jargon(label)) err(`overview party ${pid} uses the technical word ${jargon(label)}`);
     const group = party['members'];
     if (!Array.isArray(group) || !group.length) err(`overview party ${pid} needs members`);
-    else members.push(...group.map(text));
+    else {
+      members.push(...group.map(text));
+      groups.push([pid, group.map(text)]);
+    }
   });
   const sorted = (values: string[]): string[] => [...values].sort();
-  if (!sameList(sorted(members), sorted(list(scn.participants).map(text))))
+  const lanes = list(scn.participants).map(text);
+  if (!sameList(sorted(members), sorted(lanes)))
     err('overview parties must partition the participants');
+  else if (!sameList(members, lanes)) {
+    // Each party's lanes are contiguous, and the parties list them in lane order (03 parties).
+    const split = groups.filter(([, group]) => {
+      const at = group.map((m) => lanes.indexOf(m));
+      return Math.max(...at) - Math.min(...at) >= group.length;
+    });
+    for (const [pid] of split) err(`overview party ${pid} is split by another party's lane`);
+    if (!split.length) err('overview parties must list their members in lane order');
+  }
   const covered: string[] = [];
   const stageIds = new Set<string>();
   const stageOf = new Map<string, number>();

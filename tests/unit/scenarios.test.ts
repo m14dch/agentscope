@@ -186,6 +186,20 @@ describe('validation', () => {
     ]);
   });
 
+  it('rejects an MCP client not directly after the agent, and a split party (02 diagram.participants)', () => {
+    const scn = base();
+    scn.participants = ['agent', 'llm', 'mcp-client', 'mcp-server'];
+    scn.overview.parties = [
+      { id: 'a', label: 'Assistant', members: ['agent', 'mcp-client'] },
+      { id: 'm', label: 'Helper', members: ['llm'] },
+      { id: 's', label: 'Systems', members: ['mcp-server'] },
+    ];
+    expect(validateRegistry({ base: scn }, ctx)).toEqual([
+      'base: lanes must start with agent, mcp-client, llm (02 diagram.participants)',
+      "base: overview party a is split by another party's lane",
+    ]);
+  });
+
   it('reports missing required fields and learning fields', () => {
     const scn = base();
     scn.headline = ' ';
@@ -200,8 +214,11 @@ describe('validation', () => {
 
   it('checks that MCP headers mirror the body', () => {
     const scn = base();
-    scn.participants.push('mcp-client', 'mcp-server');
-    scn.overview.parties[0]?.members.push('mcp-client', 'mcp-server');
+    scn.participants = ['agent', 'mcp-client', 'llm', 'mcp-server'];
+    scn.overview.parties = [
+      { id: 'a', label: 'Assistant', members: ['agent', 'mcp-client', 'llm'] },
+      { id: 's', label: 'Systems', members: ['mcp-server'] },
+    ];
     const payload = {
       jsonrpc: '2.0',
       id: 1,
@@ -433,6 +450,20 @@ describe('bundled registry', () => {
     expect(registry['mcp-balance']?.question).toBe(
       'What is the current balance of my bank account?',
     );
+  });
+
+  it('orders the lanes from the user outward on every tab (02 diagram.participants, issue 71)', () => {
+    const lanes = (id: string): string[] | undefined => loadRegistry()[id]?.participants;
+    const mcpChain = ['mcp-server', 'rest-api', 'database'];
+    expect(lanes('mcp-balance')).toEqual(['user', 'agent', 'mcp-client', 'llm', ...mcpChain]);
+    expect(lanes('rag-query')).toEqual([
+      ...['user', 'agent', 'llm'],
+      ...['embedding-model', 'vector-db', 'document-store'],
+    ]);
+    expect(lanes('combined-balance-explanation')).toEqual([
+      ...['user', 'agent', 'mcp-client', 'llm'],
+      ...['embedding-model', 'vector-db', ...mcpChain],
+    ]);
   });
 
   it('labels every response the model sends as simulated (02 learning.simulated_behaviour)', () => {
