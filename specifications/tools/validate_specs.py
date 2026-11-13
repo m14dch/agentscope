@@ -767,7 +767,9 @@ def check_derived_defaults(R, rag, registry, ranked, sel):
            [{"chunkId": c["id"], "documentId": c["documentId"], "version": c["version"],
              "startWord": c["startWord"], "text": c["text"]} for c in all_chunks])
     expect("rag-index/index-05", idx["index-05"]["explanation"],
-           f"{len(all_chunks)} chunks, each pointing back to its source document.")
+           f"{len(all_chunks)} chunks, each pointing back to its source document. Chunk IDs read "
+           f"document@version-c<size>o<overlap>-<number>, so c{size}o{ov} means {size}-word chunks "
+           + (f"overlapping by {ov} words." if ov else "without overlap."))
     expect("rag-index/index-05", idx["index-05"]["tracked_values"]["chunkId"], ids)
     expect("rag-index/index-06", idx["index-06"]["payload"]["inputs"], ids)
     expect("rag-index/index-07", idx["index-07"]["payload"]["embeddings"],
@@ -938,6 +940,95 @@ def participant_label_problems(registry):
         elif short in shorts:
             problems.append(f"short_label {short} is not unique")
         shorts.add(short)
+    return problems
+
+
+# 03 scenario_format.learner_copy (issue 76).
+SNAKE_CASE = re.compile(r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b", re.A)
+SIMULATED = re.compile(r"simulat", re.I)
+SIMULATED_PREFIX = "Simulated model output"
+STOP_REASONS = ("tool_use", "end_turn")
+
+
+def learner_texts(scenarios, compare, participants, boundaries):
+    """(where, field, text, prefix allowed) for every learner-facing text (03
+    scenario_format.learner_copy), in a fixed order. Mirrors learnerTexts of src/scenarios/validate.ts."""
+    out = []
+
+    def obj(v):
+        return v if isinstance(v, dict) else {}
+
+    def seq(v):
+        return v if isinstance(v, list) else []
+
+    def add(where, field, v, prefix=False):
+        if isinstance(v, str):
+            out.append((where, field, v, prefix))
+
+    for scn in seq(scenarios):
+        scn = obj(scn)
+        sid = str(scn.get("id"))
+        for f in ("title", "question", "learning_question", "headline"):
+            add(sid, f, scn.get(f))
+        for p in seq(scn.get("phases")):
+            p = obj(p)
+            add(f"{sid}/{p.get('id')}", "label", p.get("label"))
+            add(f"{sid}/{p.get('id')}", "takeaway", p.get("takeaway"))
+        ov = obj(scn.get("overview"))
+        for p in seq(ov.get("parties")):
+            add(f"{sid}/{obj(p).get('id')}", "label", obj(p).get("label"))
+        for s in seq(ov.get("stages")):
+            add(f"{sid}/{obj(s).get('id')}", "sentence", obj(s).get("sentence"))
+        for e in seq(scn.get("events")):
+            e = obj(e)
+            where = f"{sid}/{e.get('id')}"
+            add(where, "explanation", e.get("explanation"), e.get("sender") == "llm")
+            for n in seq(e.get("technical_notes")):
+                add(where, "technical_notes", n)
+            for c in seq(e.get("carries")):
+                add(where, "carries", c)
+            for g in seq(e.get("annotations")):
+                g = obj(g)
+                add(where, "annotations", g.get("heading"))
+                add(where, "annotations", g.get("sentence"))
+                for v in obj(g.get("values")).values():
+                    add(where, "annotations", v)
+    compare = obj(compare)
+    add("compare", "headline", compare.get("headline"))
+    for a in seq(compare.get("aspects")):
+        add("compare", "aspects", obj(a).get("label"))
+        add("compare", "aspects", obj(a).get("sentence"))
+    for sid, phases in obj(compare.get("placeholders")).items():
+        for v in obj(phases).values():
+            add(f"compare/{sid}", "placeholders", v)
+    for p in seq(participants):
+        add(f"01 {obj(p).get('id')}", "label", obj(p).get("label"))
+        add(f"01 {obj(p).get('id')}", "short_label", obj(p).get("short_label"))
+    for b in seq(boundaries):
+        add(f"07 {obj(b).get('id')}", "label", obj(b).get("label"))
+    return out
+
+
+def learner_copy_problems(scenarios, compare, participants, boundaries, allowed):
+    """Learner-facing text names no internal identifier and does not repeat that the app is
+    simulated; each trust boundary has a label (03 scenario_format.learner_copy). allowed lists the
+    snake_case names learners may read (the MCP tool names and STOP_REASONS). Mirrors
+    learnerCopyProblems of src/scenarios/validate.ts."""
+    problems = []
+    ids = [str(b.get("id")) for b in boundaries if isinstance(b, dict)]
+    for b in boundaries:
+        if not isinstance(b, dict) or not isinstance(b.get("label"), str) or not b["label"].strip():
+            problems.append(f"07 {b.get('id') if isinstance(b, dict) else ''}: trust boundary needs a label")
+    for where, field, text, prefix in learner_texts(scenarios, compare, participants, boundaries):
+        for w in SNAKE_CASE.findall(text):
+            if w not in allowed:
+                problems.append(f"{where}: {field} names the identifier {w}")
+        for i in ids:
+            if re.search(rf"(?<![\w-]){re.escape(i)}(?![\w-])", text, re.A):
+                problems.append(f"{where}: {field} names the trust boundary ID {i}")
+        rest = text[len(SIMULATED_PREFIX):] if prefix and text.startswith(SIMULATED_PREFIX) else text
+        if SIMULATED.search(rest):
+            problems.append(f"{where}: {field} says simulated, which the header already says")
     return problems
 
 
@@ -1141,6 +1232,10 @@ def main():
     if not str(cmp_["compare"].get("headline", "")).strip():
         err("compare", "missing headline")
     check_rag(rag, comb, registry, load("02-ui-ux.yaml"))
+    allowed = [t["name"] for t in ctx["tools"]] + list(STOP_REASONS)
+    for problem in learner_copy_problems(list(registry.values()), cmp_["compare"],
+                                         arch["participants"]["registry"], sec["trust_boundaries"], allowed):
+        err("learner copy", problem)
 
     total = sum(len(s["events"]) for s in registry.values())
     if args.dump_registry:

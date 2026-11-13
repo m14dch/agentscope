@@ -153,7 +153,7 @@ scenarios:
   - id: answer
     label: Answer
     semantic_phase: answer
-    takeaway: The simulated answer reports exactly the balance the tool returned.
+    takeaway: The answer reports exactly the balance the tool returned.
   overview:
     parties:
     - id: you
@@ -706,7 +706,8 @@ scenarios:
           required:
           - customerId
           additionalProperties: false
-    explanation: The agent sends the conversation and the mapped tool definitions to the model provider.
+    explanation: The agent sends the conversation and the mapped tool definitions to the LLM provider.
+      The model runs there; the agent reaches it only through the provider's API.
     security_boundaries:
     - agent-to-llm
     tracked_values:
@@ -1144,7 +1145,7 @@ scenarios:
       body_ref: payload
     explanation: The tool succeeded. isError is false.
     technical_notes:
-    - 'Had the call failed, it would fail in one of three kinds (07 error_taxonomy). A backend 404 or a
+    - 'Had the call failed, it would fail in one of three kinds. A backend 404 or a
       rejected backend credential happens behind the MCP server, which reports it here as a tool execution
       error: a successful JSON-RPC response with isError true that the model can explain. A failure of the
       HTTP connection between MCP client and MCP server is a transport error: no MCP response arrives at
@@ -1400,7 +1401,7 @@ scenarios:
       - message
       values:
         message.role: 'assistant: the model''s turn'
-        message.content: states the balance from the tool result; simulated output
+        message.content: states the balance from the tool result
     - heading: Stop reason
       sentence: The stop reason tells the agent why the model stopped and what it expects next.
       paths:

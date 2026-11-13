@@ -36,10 +36,12 @@ participants:
     short_label: User
     kind: person
   - id: agent
-    label: Agent (host application / RAG orchestrator)
+    label: Agent (host application)
     short_label: Agent
     kind: application
-    note: The same participant runs MCP tool calls and RAG retrieval.
+    note: The same participant runs MCP tool calls and RAG retrieval. Its label names no
+      protocol, since the MCP tab has no retrieval (issue 76); the RAG scenarios say in their
+      first agent step that the agent orchestrates retrieval.
   - id: llm
     label: LLM provider
     short_label: LLM provider

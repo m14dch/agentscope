@@ -400,7 +400,11 @@ derived_event_rules:
     and its source object has no chunkId.'
   index-04: payload chunk_size_words and overlap_words.
   index-05: payload chunks (chunkId, documentId, version, startWord, text) in document order; explanation
-    '<n> chunks, each pointing back to its source document.'; tracked chunkId.
+    '<n> chunks, each pointing back to its source document. Chunk IDs read
+    document@version-c<size>o<overlap>-<number>, so c<s>o<o> means <s>-word chunks overlapping by <o>
+    words.' ('without overlap' in place of 'overlapping by <o> words' when <o> is 0; <s> and <o> the
+    chunk size and overlap; the format is explained where chunk IDs first
+    appear, 02 rag_ingestion.chunk_ids); tracked chunkId.
   index-06: payload inputs, the chunk IDs.
   index-07: payload embeddings, one vector per chunk.
   index-08: payload records, the number of chunks.
@@ -444,7 +448,9 @@ derived_event_rules:
     own line; ''(none)'' replaces the blocks without evidence. Tracked values as retrieve-09. Explanation
     with parent documents: ''The fetched documents become model-visible only now, in place of the retained
     chunks.''; without evidence: ''The model receives the question and the grounding instructions without
-    any retrieved text.'''
+    any retrieved text.''. Each explanation, the default one included, ends with '' The model runs at
+    the LLM provider; the agent reaches it only through the provider''s API.'': this is the first LLM
+    arrow, where "the model" is explained once (issue 76).'
   retrieve-11: 'payload message.content, the answer followed by a blank line, ''Sources:'' and the source
     lines; an answer without citations has no Sources part. Tracked sourceDocumentId and chunkId as retrieve-09.
     Explanation with parent documents: ''Simulated model output built from the facts supported by the
@@ -809,7 +815,9 @@ scenarios:
         version: '1.2'
         startWord: 40
         text: 'currency field. Version 1.0: initial release of the account terms and the balance API.'
-    explanation: 12 chunks, each pointing back to its source document.
+    explanation: 12 chunks, each pointing back to its source document. Chunk IDs read
+      document@version-c<size>o<overlap>-<number>, so c50o10 means 50-word chunks overlapping by 10
+      words.
     tracked_values:
       chunkId:
       - everyday-account@1.2-c50o10-001
@@ -1097,8 +1105,8 @@ scenarios:
   - id: generation
     label: Model request
     semantic_phase: model-generation
-    takeaway: The model sees the evidence for the first time; its simulated answer is built only from
-      that evidence.
+    takeaway: The model sees the evidence for the first time; its answer is built only from that
+      evidence.
   - id: answer
     label: Answer
     semantic_phase: answer
@@ -1204,7 +1212,8 @@ scenarios:
     payload:
       model: demo-embedding-4d
       input: What are the conditions for opening and maintaining a bank account?
-    explanation: Embed the question with the same model used for the chunks.
+    explanation: The agent orchestrates retrieval. It first embeds the question with the same model
+      used for the chunks.
     carries:
     - the question's text
     - the embedding model, the same as for the chunks
@@ -1365,7 +1374,8 @@ scenarios:
         documentId: authentication.md
         version: '1.2'
         score: 0.0438
-    explanation: All candidates ranked by cosine similarity. Scores are not probabilities.
+    explanation: All candidates ranked by cosine similarity. Scores are not probabilities. Chunk IDs
+      read document@version-c<size>o<overlap>-<number>.
     technical_notes:
     - The database also returns each chunk's text and metadata; the inspector shows them from the index
       (index-05).
@@ -1610,9 +1620,9 @@ scenarios:
         version: '1.2'
       - documentId: savings-account.md
         version: '1.2'
-    explanation: 'Only when fetch_full_documents is on: fetch the whole document version of each retained
-      chunk (the parent-document pattern). The prompt then carries these documents instead of the chunks.
-      Off by default.'
+    explanation: Some systems fetch the whole document instead of the chunk (the parent-document pattern).
+      Here the agent fetches the document version of each retained chunk, and the prompt carries these
+      documents instead of the chunks.
     carries:
     - the document and version behind each retained chunk
     annotations:
@@ -1663,7 +1673,7 @@ scenarios:
           and Savings accounts cost nothing. The account suits customers who want to earn interest and rarely
           need access to their savings.'
     explanation: Full documents with their versions and normalized text, in the order of their first retained
-      chunk. With fetch_full_documents on they replace the chunks in the prompt.
+      chunk. They replace the chunks in the prompt.
     carries:
     - each whole document's text
     - its version, the same as its chunks'
@@ -1789,7 +1799,8 @@ scenarios:
           <document id="savings-account.md" version="1.2" chunk="savings-account@1.2-c50o10-001" trust="official">
           Savings account The Savings account helps you set money aside. It has no monthly fee and pays 0.50% annual interest, credited at the end of each year. There is no minimum balance. The Savings account has no debit card and cannot be used for card payments. One withdrawal per month
           </document>
-    explanation: Retrieved text becomes model-visible only now.
+    explanation: Retrieved text becomes model-visible only now. The model runs at the LLM provider; the
+      agent reaches it only through the provider's API.
     security_boundaries:
     - agent-to-llm
     - rag-to-llm
@@ -1890,7 +1901,7 @@ scenarios:
     - citations by number with a source list, or a statement that nothing relevant was found
     annotations:
     - heading: Answer
-      sentence: The simulated model answers in text and cites the evidence by number, or says it found
+      sentence: The model answers in text and cites the evidence by number, or says it found
         none.
       paths:
       - message

@@ -123,8 +123,7 @@ combined:
   - id: planning
     label: Model requests balance tool
     semantic_phase: information-acquisition
-    takeaway: The evidence cannot contain a live balance, so the simulated model requests the balance
-      tool.
+    takeaway: The evidence cannot contain a live balance, so the model requests the balance tool.
   - id: tool
     label: MCP tool call
     semantic_phase: information-acquisition
@@ -229,8 +228,8 @@ combined:
       patch:
         retrieve-02:
           operation: Embed account-conditions query
-          explanation: Embed the retrieval query derived from the question. The balance part of the question
-            is not sent to retrieval.
+          explanation: The agent also orchestrates retrieval. It embeds the retrieval query derived from the
+            question; the balance part of the question is not sent to retrieval.
   - copy:
       scenario: rag-query
       from: retrieve-06
@@ -329,7 +328,8 @@ combined:
             required:
             - customerId
             additionalProperties: false
-      explanation: Retrieved documents become model-visible now; the balance is still unknown.
+      explanation: Retrieved documents become model-visible now; the balance is still unknown. The model
+        runs at the LLM provider; the agent reaches it only through the provider's API.
       security_boundaries:
       - agent-to-llm
       - rag-to-llm
@@ -609,7 +609,7 @@ combined:
         - message
         values:
           message.role: 'assistant: the model''s turn'
-          message.content: the balance, the account comparison with citations, and a source list; simulated
+          message.content: the balance, the account comparison with citations, and a source list
       - heading: Stop reason
         sentence: The stop reason tells the agent why the model stopped and what it expects next.
         paths:

@@ -189,6 +189,22 @@ scenario_format:
   learning_fields:
     learning_question: The question the scenario teaches, ending with "?"
     headline: One sentence stating the scenario's main message
+  learner_copy:
+    fields: 'Learner-facing text is what the app shows as prose: of each scenario of the expanded
+      registry its title, question, learning_question and headline, each phase''s label and
+      takeaway, each overview party''s label and stage''s sentence, and each event''s explanation,
+      technical_notes, carries and annotations (heading, sentence and values); the compare
+      headline, aspects (label and sentence) and placeholders (06); each participant''s label
+      and short_label (01); and each trust boundary''s label (07). Payloads, HTTP envelopes,
+      IDs, state and parameters are data, not learner-facing text.'
+    rules: 'Learner-facing text (issue 76) names no internal identifier: no snake_case word
+      (a configuration flag such as fetch_full_documents) except the names the payloads
+      themselves carry and the text explains, namely the MCP tool names of the tools/list result
+      and the stop reasons tool_use and end_turn; and no trust boundary ID (07; the Security tab
+      shows its label). It does not repeat that the app is simulated, since the header says so
+      once (02 diagram.rendering): the word simulated (any form, any case) appears only as the
+      prefix "Simulated model output" of a model response''s explanation (02
+      learning.simulated_behaviour). Both validators check this (validation).'
   overview_fields:
     overview: '{parties, stages}: the scenario at the Overview zoom level (02 zoom_levels.overview),
       written for a first-time visitor before any protocol name (issue 51).'
@@ -232,7 +248,8 @@ scenario_format:
     correlation_id only on MCP requests and responses, equal to the JSON-RPC id; MCP
     headers mirroring the body; model-visible context rules; security boundary IDs;
     lineage keys; value_ref paths; carries and annotations (annotation_rules); learning
-    fields; derived_events
+    fields; learner copy (scenario_format.learner_copy) and a label on each trust boundary;
+    derived_events
     and optional_steps naming the scenario''s events, each optional step enabled by a
     boolean parameter and holding both events of a pair; the lane order (02 diagram.participants:
     the participants start with those of user, agent, mcp-client and llm the scenario has, in that

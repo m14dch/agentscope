@@ -23,30 +23,40 @@ mcp:
   - MCP server inherits user identity or forwards the user's token to its backend
   - Tool result automatically becomes model-visible
   - Tool annotations or serverInfo are trustworthy
+# Each boundary has a human label, the heading of its entry on the Security tab (02
+# inspector.security_tab); the id stays in the data only (issue 76). Both validators require
+# a non-empty label.
 trust_boundaries:
 - id: user-to-agent
+  label: User → Agent
   risk: Untrusted user input
   mitigation: Validate requests and permissions
 - id: agent-to-llm
+  label: Agent → LLM provider
   risk: Sensitive context disclosure
   mitigation: Send only authorized data and only the fields the task needs
 - id: agent-to-mcp
+  label: Agent → MCP server
   risk: Unauthorized tool invocation
   mitigation: Tool allowlists, input validation, authorization of arguments against
     the authenticated identity, user approval for sensitive actions
 - id: mcp-to-rest
+  label: MCP server → REST API
   risk: Credential and authorization misuse
   mitigation: Distinct backend credentials, least privilege, no token passthrough,
     redacted demo tokens
 - id: tool-to-llm
+  label: Tool result → LLM provider
   risk: Prompt injection or sensitive data in tool output
   mitigation: Treat tool results as data, keep them in tool messages, preserve instruction
     hierarchy
 - id: rag-to-llm
+  label: Retrieved text → LLM provider
   risk: Prompt injection from retrieved text
   mitigation: Treat retrieved text as untrusted data, wrap it with provenance and trust
     labels, preserve instruction hierarchy
 - id: vector-search
+  label: Vector search
   risk: Cross-user document leakage
   mitigation: Document-level access filters applied inside the search
 error_taxonomy:
