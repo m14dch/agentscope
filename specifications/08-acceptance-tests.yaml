@@ -133,6 +133,8 @@ e2e_tests:
     inspector shows it; Tab to the arrows, move with ArrowUp and ArrowDown, press Enter and verify
     the cursor moves to the focused arrow, focus stays on it and its focus ring reaches 3:1.
   - At Architecture expand a group ahead of the cursor and verify its arrows are future.
+  - In Compare click an arrow of one pane and verify that pane moves to its step and the other
+    pane follows to the same semantic phase.
 - id: offline
   steps:
   - Load the production build under the Pages base path and wait for offline readiness.

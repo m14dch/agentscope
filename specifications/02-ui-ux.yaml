@@ -376,10 +376,11 @@ diagram:
       label arrow-label--past, --current or --future. The pair of the current step carries the
       current classes once it has been played, as its emphasis; a pair still to come is future.'
     accessible_name: 'Each arrow''s name states its step and state before what it shows, so the
-      state is not carried by colour alone: "Step 17, upcoming: Agent to MCP server, MCP ·
+      state is not carried by colour alone: "Step 17, upcoming: Agent to MCP server: MCP ·
       tools/call", with "done" for a past step and "current" for the current step, which also
-      has aria-current="step". A waiting Compare pane (compare_view.timeline) has no current
-      step.'
+      has aria-current="step". The participants are named by their short registry label (01
+      participants.registry short_label), as the column of steps names them; the full labels head
+      the lifelines. A waiting Compare pane (compare_view.timeline) has no current step.'
   arrow_activation: 'Every arrow is a button inside its list item. A click, Enter or Space on it
     moves the cursor to its step by the same path as the step slider, so the address, the
     inspector and the announcements follow; in a Compare pane it steps that pane as the pane''s
@@ -388,13 +389,17 @@ diagram:
     the arrow of the current step, or at step 0 and while the current step is in a collapsed group
     the first arrow shown; ArrowUp and ArrowDown move focus to the previous and next arrow, Home
     and End to the first and last. ArrowLeft and ArrowRight step the scenario as anywhere
-    (controls.keyboard), and focus stays on the same arrow across steps and jumps. While focused,
+    (controls.keyboard), and focus stays on the same arrow across steps and jumps; while an arrow
+    holds focus, a step scrolls the region to keep that arrow in view rather than the new current
+    step (zoom_levels.scrolling), so focus never leaves the screen. The target is at least 24 px
+    tall (WCAG 2.5.8). While focused,
     the arrow shows the focus ring (design.colour.use) as a 2 px accent rectangle 4 px around its
     line and label, which reaches 3:1 on paper (WCAG 1.4.11); the diagram has no selection
     background, so the ring is never ink there.'
   pair_highlighting: true
-  auto_scroll_to_current: Keep the current step (or current group) in view; scroll
-    smoothly, or instantly with reduced motion
+  auto_scroll_to_current: Keep the current step (or current group) in view, or the focused
+    arrow while one holds focus (arrow_activation); scroll smoothly, or instantly with reduced
+    motion
   accessible_without_color: true
   rendering: SVG lifelines, arrows and labels generated from ordered event data. The
     header states once that everything is simulated; arrows carry no per-arrow simulation
@@ -477,7 +482,8 @@ zoom_levels:
     group when it is collapsed (in an expanded current group, the step inside it, together with the
     group's start when both fit in the region), or the current stage, horizontally never past its
     left edge, so an arrow that fits keeps both its sender and its receiver in view. Keyboard focus
-    stays on the same group, arrow or region across steps. Arrow keys scroll the diagram region while it
+    stays on the same group, arrow or region across steps; while an arrow holds focus, a cursor
+    change scrolls only as far as needed to keep that arrow in view (diagram.arrow_activation). Arrow keys scroll the diagram region while it
     has focus.
   switch_preserves_position: true
 phone_steps:
