@@ -143,7 +143,7 @@ test.describe('at 390 × 844', () => {
     await rows(page).nth(12).click();
     await expect(rows(page).nth(12)).toContainText('Agent → MCP client');
     await expect(page.locator('#step-13 .full-participants')).toHaveText(
-      'Agent (host application / RAG orchestrator) → MCP client',
+      'Agent (host application) → MCP client',
     );
     // The glyph is hidden from assistive technology; the participants line states the direction.
     await expect(call.locator('.step-glyph')).toHaveAttribute('aria-hidden', 'true');

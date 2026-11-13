@@ -438,6 +438,126 @@ export function participantLabelProblems(registry: readonly unknown[]): string[]
   return problems;
 }
 
+// 03 scenario_format.learner_copy (issue 76).
+const SNAKE_CASE = /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g;
+const SIMULATED = /simulat/i;
+const SIMULATED_PREFIX = 'Simulated model output';
+/** LLM stop reasons the payloads carry and the annotations explain. */
+export const STOP_REASONS = ['tool_use', 'end_turn'];
+
+interface LearnerText {
+  where: string;
+  field: string;
+  text: string;
+  /** The text may start with SIMULATED_PREFIX (a model response's explanation). */
+  prefix: boolean;
+}
+
+/**
+ * Every learner-facing text (03 scenario_format.learner_copy), in a fixed order. Mirrors
+ * learner_texts of validate_specs.py.
+ */
+export function learnerTexts(
+  scenarios: readonly unknown[],
+  compare: unknown,
+  participants: readonly unknown[],
+  boundaries: readonly unknown[],
+): LearnerText[] {
+  const out: LearnerText[] = [];
+  const add = (where: string, field: string, v: unknown, prefix = false): void => {
+    if (typeof v === 'string') out.push({ where, field, text: v, prefix });
+  };
+  for (const s of scenarios) {
+    const scn = obj(s);
+    const sid = String(scn['id']);
+    for (const f of ['title', 'question', 'learning_question', 'headline']) add(sid, f, scn[f]);
+    for (const p of list(scn['phases']).map(obj)) {
+      add(`${sid}/${String(p['id'])}`, 'label', p['label']);
+      add(`${sid}/${String(p['id'])}`, 'takeaway', p['takeaway']);
+    }
+    const ov = obj(scn['overview']);
+    for (const p of list(ov['parties']).map(obj))
+      add(`${sid}/${String(p['id'])}`, 'label', p['label']);
+    for (const st of list(ov['stages']).map(obj))
+      add(`${sid}/${String(st['id'])}`, 'sentence', st['sentence']);
+    for (const e of list(scn['events']).map(obj)) {
+      const where = `${sid}/${String(e['id'])}`;
+      add(where, 'explanation', e['explanation'], e['sender'] === 'llm');
+      for (const n of list(e['technical_notes'])) add(where, 'technical_notes', n);
+      for (const c of list(e['carries'])) add(where, 'carries', c);
+      for (const g of list(e['annotations']).map(obj)) {
+        add(where, 'annotations', g['heading']);
+        add(where, 'annotations', g['sentence']);
+        for (const v of Object.values(obj(g['values']))) add(where, 'annotations', v);
+      }
+    }
+  }
+  const cmp = obj(compare);
+  add('compare', 'headline', cmp['headline']);
+  for (const a of list(cmp['aspects']).map(obj)) {
+    add('compare', 'aspects', a['label']);
+    add('compare', 'aspects', a['sentence']);
+  }
+  for (const [sid, phases] of Object.entries(obj(cmp['placeholders'])))
+    for (const v of Object.values(obj(phases))) add(`compare/${sid}`, 'placeholders', v);
+  for (const p of participants.map(obj)) {
+    add(`01 ${String(p['id'])}`, 'label', p['label']);
+    add(`01 ${String(p['id'])}`, 'short_label', p['short_label']);
+  }
+  for (const b of boundaries.map(obj)) add(`07 ${String(b['id'])}`, 'label', b['label']);
+  return out;
+}
+
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Learner-facing text names no internal identifier and does not repeat that the app is
+ * simulated; each trust boundary has a label (03 scenario_format.learner_copy). allowed lists the
+ * snake_case names learners may read (the MCP tool names and STOP_REASONS). Mirrors
+ * learner_copy_problems of validate_specs.py.
+ */
+export function learnerCopyProblems(
+  scenarios: readonly unknown[],
+  compare: unknown,
+  participants: readonly unknown[],
+  boundaries: readonly unknown[],
+  allowed: readonly string[],
+): string[] {
+  const problems: string[] = [];
+  const ids = boundaries.filter(isObj).map((b) => String(b['id']));
+  for (const b of boundaries) {
+    if (!isObj(b) || !text(b['label']).trim())
+      problems.push(`07 ${isObj(b) ? String(b['id']) : ''}: trust boundary needs a label`);
+  }
+  const idPatterns = ids.map(
+    (id) => [id, new RegExp(`(?<![\\w-])${escapeRegExp(id)}(?![\\w-])`)] as const,
+  );
+  for (const { where, field, text: t, prefix } of learnerTexts(
+    scenarios,
+    compare,
+    participants,
+    boundaries,
+  )) {
+    for (const [w] of t.matchAll(SNAKE_CASE))
+      if (!allowed.includes(w)) problems.push(`${where}: ${field} names the identifier ${w}`);
+    for (const [id, re] of idPatterns)
+      if (re.test(t)) problems.push(`${where}: ${field} names the trust boundary ID ${id}`);
+    const rest = prefix && t.startsWith(SIMULATED_PREFIX) ? t.slice(SIMULATED_PREFIX.length) : t;
+    if (SIMULATED.test(rest))
+      problems.push(`${where}: ${field} says simulated, which the header already says`);
+  }
+  return problems;
+}
+
+/** The snake_case names learner-facing text may carry: the MCP tool names and STOP_REASONS. */
+export function learnerIdentifiers(sources: SpecSources): string[] {
+  const tools = sources.mcp.scenarios[0]?.events.find(
+    (e) => e.operation === 'tools/list result',
+  )?.payload;
+  const names = list(obj(obj(tools)['result'])['tools']).map((t) => text(obj(t)['name']));
+  return [...names, ...STOP_REASONS];
+}
+
 /** Expands and validates the bundled specifications. An empty problem list means valid. */
 export function loadScenarios(sources: SpecSources): { registry: Registry; problems: string[] } {
   const { registry, problems } = buildRegistry(sources);
@@ -487,6 +607,14 @@ export function loadScenarios(sources: SpecSources): { registry: Registry; probl
     }
   }
   problems.push(...compareProblems(sources, registry));
+  for (const p of learnerCopyProblems(
+    Object.values(registry),
+    sources.comparison.compare,
+    sources.architecture.participants.registry,
+    sources.security.trust_boundaries,
+    learnerIdentifiers(sources),
+  ))
+    err('learner copy', p);
   if (!problems.length) problems.push(...replayProblems(registry));
   return { registry, problems };
 }

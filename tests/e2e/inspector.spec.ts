@@ -82,10 +82,14 @@ test('transport shows the mirrored MCP headers, folds unchanged ones and labels 
   await expect(panel).toContainText('Authorization: Bearer <REDACTED_MCP_ACCESS_TOKEN> redacted');
 });
 
-test('security lists each boundary with its risk and mitigation', async ({ page }) => {
+test('security lists each boundary by its label with its risk and mitigation', async ({ page }) => {
   await open(page, '#/mcp/mcp-balance/14/protocol');
   await tab(page, 'Security').click();
-  await expect(page.getByRole('tabpanel')).toContainText('agent-to-mcp');
+  // The heading is the boundary's label; its ID is data only (02 inspector.security_tab).
+  await expect(page.getByRole('tabpanel').locator('.boundary-label')).toHaveText([
+    'Agent → MCP server',
+  ]);
+  await expect(page.getByRole('tabpanel')).not.toContainText('agent-to-mcp');
   await expect(page.getByRole('tabpanel')).toContainText('Risk: Unauthorized tool invocation');
 });
 

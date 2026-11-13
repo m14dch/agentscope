@@ -45,7 +45,7 @@ describe('labels', () => {
   });
 
   it('wrap at spaces within the width', () => {
-    const text = 'Agent (host application / RAG orchestrator)';
+    const text = 'Example Bank MCP server (Streamable HTTP)';
     const lines = wrap(text, 102);
     expect(lines.length).toBeGreaterThan(1);
     expect(lines.join(' ')).toBe(text);

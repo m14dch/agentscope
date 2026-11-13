@@ -33,6 +33,8 @@ const REDACTED = /<REDACTED[^>]*>/;
 
 export interface Boundary {
   id: string;
+  /** Shown as the heading; the ID is data only (07 trust_boundaries). */
+  label: string;
   risk: string;
   mitigation: string;
 }
@@ -588,11 +590,13 @@ export class Inspector {
 
   private security(event: ScenarioEvent): Node[] {
     return (event.security_boundaries ?? []).map((id) => {
+      // Headed by the boundary's label; the ID is data only (02 inspector.security_tab). Both
+      // validators require the label, so the ID never shows.
       const b = this.context.boundaries.find((x) => x.id === id);
       return el(
         'div',
         'boundary',
-        el('p', 'boundary-id', id),
+        el('p', 'boundary-label', b?.label ?? ''),
         el('p', undefined, el('span', 'muted', 'Risk: '), b?.risk ?? ''),
         el('p', undefined, el('span', 'muted', 'Mitigation: '), b?.mitigation ?? ''),
       );

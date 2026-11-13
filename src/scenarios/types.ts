@@ -211,7 +211,7 @@ export interface SpecSources {
     compare: Compare;
     combined: Composition;
   } & JsonObject;
-  security: { trust_boundaries: { id: string }[] } & JsonObject;
+  security: { trust_boundaries: { id: string; label?: string }[] } & JsonObject;
 }
 
 /** The Compare view's data (06-comparison-scenarios.yaml compare). */

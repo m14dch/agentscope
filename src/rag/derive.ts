@@ -152,6 +152,20 @@ function systemFor(system: Json | undefined, ctx: Context): string {
     : text.replace(DOCUMENT_CITATION, () => CHUNK_CITATION);
 }
 
+/** Ends retrieve-10's explanation: the first LLM arrow says once what "the model" is (05). */
+const MODEL_AT_PROVIDER =
+  " The model runs at the LLM provider; the agent reaches it only through the provider's API.";
+
+/** index-05's explanation, which explains the chunk ID format (02 rag_ingestion.chunk_ids). */
+export function chunkingExplanation(count: number, size: number, overlap: number): string {
+  const shared = overlap ? `overlapping by ${overlap} words` : 'without overlap';
+  return (
+    `${count} chunks, each pointing back to its source document. Chunk IDs read ` +
+    `document@version-c<size>o<overlap>-<number>, so c${size}o${overlap} means ` +
+    `${size}-word chunks ${shared}.`
+  );
+}
+
 function makeHandlers(engine: RagEngine): Record<string, Handler> {
   const chunks = (ctx: Context) =>
     engine.chunks(ctx.docs, ctx.params.chunkSize, ctx.params.overlap);
@@ -172,7 +186,7 @@ function makeHandlers(engine: RagEngine): Record<string, Handler> {
         startWord: c.startWord,
         text: c.text,
       }));
-      e.explanation = `${cs.length} chunks, each pointing back to its source document.`;
+      e.explanation = chunkingExplanation(cs.length, ctx.params.chunkSize, ctx.params.overlap);
       track(
         e,
         'chunkId',
@@ -321,11 +335,12 @@ function makeHandlers(engine: RagEngine): Record<string, Handler> {
         e,
         groundedUserMessage(engine, ctx.scenario.question ?? engine.fixtures.query, ctx.evidence),
       );
-      e.explanation = !ctx.evidence.length
-        ? 'The model receives the question and the grounding instructions without any retrieved text.'
-        : ctx.params.fetchFullDocuments
-          ? 'The fetched documents become model-visible only now, in place of the retained chunks.'
-          : 'Retrieved text becomes model-visible only now.';
+      e.explanation =
+        (!ctx.evidence.length
+          ? 'The model receives the question and the grounding instructions without any retrieved text.'
+          : ctx.params.fetchFullDocuments
+            ? 'The fetched documents become model-visible only now, in place of the retained chunks.'
+            : 'Retrieved text becomes model-visible only now.') + MODEL_AT_PROVIDER;
       trackRetained(e, ctx, true);
     },
     'retrieve-11': (e, ctx) => {

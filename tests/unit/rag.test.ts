@@ -375,7 +375,8 @@ describe('derived events', () => {
     const withdrawals = 'further withdrawals cost CHF 2 each';
     expect(prompt).toContain(withdrawals);
     expect(request.explanation).toBe(
-      'The fetched documents become model-visible only now, in place of the retained chunks.',
+      'The fetched documents become model-visible only now, in place of the retained chunks. ' +
+        "The model runs at the LLM provider; the agent reaches it only through the provider's API.",
     );
     expect(request.tracked_values?.['retrievedText']).toEqual(fetched.map((d) => d['text']));
     expect(request.tracked_values?.['chunkId']).toEqual(
@@ -456,7 +457,8 @@ describe('derived events', () => {
     expect(chunks[0]?.['chunkId']).toBe('everyday-account@1.2-c25o0-001');
     expect(played(p, 'index-04').payload).toMatchObject({ chunk_size_words: 25, overlap_words: 0 });
     expect(played(p, 'index-05').explanation).toBe(
-      `${chunks.length} chunks, each pointing back to its source document.`,
+      `${chunks.length} chunks, each pointing back to its source document. Chunk IDs read ` +
+        'document@version-c<size>o<overlap>-<number>, so c25o0 means 25-word chunks without overlap.',
     );
     expect(field(played(p, 'index-09').payload, 'upserted')).toBe(chunks.length);
     expect(p.snapshot(p.length).state['rag_index']).toMatchObject({
