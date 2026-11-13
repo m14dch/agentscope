@@ -120,7 +120,8 @@ design:
     use:
     - Paper (white) is the page and the reading surface, and every band that hides what
       passes beneath it (the participant header, the group text in the diagram).
-    - Ink carries text and data. Ink-muted carries secondary text, past-step labels and the
+    - Ink carries text and data. Ink-muted carries secondary text, the labels of past and future
+      steps and the
       boundary of every interactive control drawn with a border (buttons, the segmented zoom
       control, toggles, selects). A hovered button takes a 1 px ink border. A pressed toggle
       has a 2 px ink boundary (its ink border and an ink line just inside it) and weight 600,
@@ -129,8 +130,9 @@ design:
       segmented control share their borders by overlapping them, so a pressed or hovered
       segment shows its boundary on all four sides. Rule (Neutral Gray) carries structure
       only (lifelines, axes, separators, section and row rules, table borders, the inspector
-      divider, the open picker list), never text, meaning or the boundary of a control
-      (WCAG 1.4.11).
+      divider, the open picker list) and the lines of future steps (diagram.visibility), whose
+      ink-muted label and accessible name carry their meaning; never text, meaning on its own or
+      the boundary of a control (WCAG 1.4.11).
     - 'Controls drawn without a border (tabs, links, folds, the rows of phone_steps) are
       identified by their text and its underline or weight, not by a boundary. The sliders
       (the step slider, the RAG parameters) keep the browser''s own appearance with only
@@ -189,7 +191,7 @@ design:
   - Each step's explanation is the message, one sentence, shown first; details on demand.
   - Titles are messages or plain nouns, never filler such as "Overview" or "Details".
   - 'Structure stays shallow and narrow: at most 3 levels and 5 items per level.'
-  specimen: 'The route #/design shows type, colours, each arrow kind, a payload block
+  specimen: 'The route #/design shows type, colours, each arrow kind and state, a payload block
     and a score plot, so the system can be reviewed on the live site. It is not linked
     from the app.'
 navigation:
@@ -358,10 +360,38 @@ diagram:
       with their lifelines, and the current step is scrolled clear of them. They come before
       the diagram in reading order, so assistive technology meets them before the steps.
   visibility:
-    past: line keeps its kind's style; label in ink-muted
-    current: emphasized
-    future: hidden at the Protocol level; rows keep their space so the layout does not move
-      as the cursor advances
+    principle: 'The whole sequence is always shown, as the Overview shows every stage and the
+      column of steps every row (issue 60): at Protocol every event has its arrow from step 0,
+      and an expanded group at Architecture shows all its events. Each arrow is past, current or
+      future. The states differ by the line, never by colour alone, and stay apart in greyscale
+      (past in its kind''s ink or ink-muted, current in accent at 2 px, future in light rule at
+      1 px); the labels of past and future arrows look alike. Rows never move as the cursor
+      advances.'
+    past: line in its kind's style (diagram.encoding); label in ink-muted, weight 400
+    current: the current step and its pair, emphasized (diagram.encoding.current_and_pair)
+    future: 'line in rule at hairline width (1 px), arrowhead in rule, keeping its kind''s dash
+      pattern: dashes encode the line kind (diagram.encoding) in every state, never the state.
+      Label in ink-muted, weight 400, because text in rule would reach only 1.87:1 (WCAG 1.4.3).'
+    classes: 'Each arrow''s line carries arrow--past, arrow--current or arrow--future and its
+      label arrow-label--past, --current or --future. The pair of the current step carries the
+      current classes once it has been played, as its emphasis; a pair still to come is future.'
+    accessible_name: 'Each arrow''s name states its step and state before what it shows, so the
+      state is not carried by colour alone: "Step 17, upcoming: Agent to MCP server, MCP ·
+      tools/call", with "done" for a past step and "current" for the current step, which also
+      has aria-current="step". A waiting Compare pane (compare_view.timeline) has no current
+      step.'
+  arrow_activation: 'Every arrow is a button inside its list item. A click, Enter or Space on it
+    moves the cursor to its step by the same path as the step slider, so the address, the
+    inspector and the announcements follow; in a Compare pane it steps that pane as the pane''s
+    own slider does. Its target is the rectangle around its line and label, so a hairline is not
+    the only thing to hit. The arrows of a diagram are one tab stop (roving tabindex): Tab reaches
+    the arrow of the current step, or at step 0 and while the current step is in a collapsed group
+    the first arrow shown; ArrowUp and ArrowDown move focus to the previous and next arrow, Home
+    and End to the first and last. ArrowLeft and ArrowRight step the scenario as anywhere
+    (controls.keyboard), and focus stays on the same arrow across steps and jumps. While focused,
+    the arrow shows the focus ring (design.colour.use) as a 2 px accent rectangle 4 px around its
+    line and label, which reaches 3:1 on paper (WCAG 1.4.11); the diagram has no selection
+    background, so the ring is never ink there.'
   pair_highlighting: true
   auto_scroll_to_current: Keep the current step (or current group) in view; scroll
     smoothly, or instantly with reduced motion
@@ -407,13 +437,14 @@ zoom_levels:
     takeaway. A phase without events has no group. A group spans at least the lifelines
     its events touch and widens only to fit its takeaway. The group holding the current
     step is the current group: an accent bar and its takeaway in weight 600. A group expands or collapses on click, Enter or Space; expanded, it shows its
-    events up to the cursor with the Protocol styling. The current step is visible without
+    events with the Protocol styling. The current step is visible without
     a click: when the cursor enters a group (stepping forward or back, a jump, a link to a
     step), that group expands, so the current group is always expanded unless the learner
     collapsed it while it was current. A group the cursor expanded collapses again when the
     cursor leaves it, so the level stays one takeaway per phase; a group the learner
     collapsed reopens only when the cursor enters it again; a group the learner expanded keeps
-    its state while the learner steps. At step 0 (and after Reset) no group is current and only
+    its state while the learner steps. Expanded, a group shows every event of its run in its
+    state (diagram.visibility), not only those up to the cursor. At step 0 (and after Reset) no group is current and only
     the groups the learner expanded are open. The same holds in each Compare pane, where a waiting pane (compare_view.timeline)
     has no current group. Lifelines pass under a group''s takeaway and caption, not
     through them.'
@@ -446,7 +477,7 @@ zoom_levels:
     group when it is collapsed (in an expanded current group, the step inside it, together with the
     group's start when both fit in the region), or the current stage, horizontally never past its
     left edge, so an arrow that fits keeps both its sender and its receiver in view. Keyboard focus
-    stays on the same group or region across steps. Arrow keys scroll the diagram region while it
+    stays on the same group, arrow or region across steps. Arrow keys scroll the diagram region while it
     has focus.
   switch_preserves_position: true
 phone_steps:
@@ -605,7 +636,8 @@ controls:
     '-': zoom out
   keyboard_scope: The keys act anywhere on the page except where focus needs them itself
     (Space on buttons, links and menus; the arrow keys on text fields, the play speed, the step slider,
-    the splitter, the inspector tabs and the diagram's scroll region; + and - on text fields and
+    the splitter, the inspector tabs and the diagram's scroll region; ArrowUp, ArrowDown, Home and
+    End on a diagram arrow (diagram.arrow_activation); + and - on text fields and
     menus). With Ctrl or Cmd, + and - stay the browser's page zoom.
   reduced_motion: true
 inspector:

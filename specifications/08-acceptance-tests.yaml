@@ -80,6 +80,9 @@ unit_tests:
 - At the Overview Compare steps stage by stage with both panes on the same semantic phase
 - At Architecture the group the cursor enters expands (forward, back, jump, reset), and a
   group the learner collapsed stays collapsed until the cursor enters it again
+- 'Every arrow is past, current or future (02 diagram.visibility): the layout holds an arrow for
+  every event at Protocol and in an expanded group at every step, and the SVG gives each the
+  classes of its state and a name stating it'
 e2e_tests:
 - id: mcp-walkthrough
   steps:
@@ -121,6 +124,15 @@ e2e_tests:
   - Verify the RAG, Compare and Combined tabs offer all three levels, and Compare at the Overview
     shows both stories side by side stage by stage.
   - Scan the Overview of MCP, RAG and Compare with axe-core at desktop and phone width.
+- id: protocol-look-ahead
+  steps:
+  - Open mcp-balance at step 1 at Protocol and verify that all 28 arrows are drawn, step 1 current
+    and the others future, each future line in rule at 1 px with its kind's dash pattern, and that
+    every arrow's name states its state.
+  - Click the arrow of step 20 and verify the address moves to step 20 at Protocol and the
+    inspector shows it; Tab to the arrows, move with ArrowUp and ArrowDown, press Enter and verify
+    the cursor moves to the focused arrow, focus stays on it and its focus ring reaches 3:1.
+  - At Architecture expand a group ahead of the cursor and verify its arrows are future.
 - id: offline
   steps:
   - Load the production build under the Pages base path and wait for offline readiness.
