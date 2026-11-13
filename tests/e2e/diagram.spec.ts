@@ -196,6 +196,27 @@ test('clicking or activating an arrow moves the cursor to its step', async ({ pa
   await expect(arrow(1)).toBeInViewport();
 });
 
+test('after a click on an arrow, stepping follows the current step, not the clicked arrow', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await open(page, route('mcp-balance', 1, 'protocol'));
+  await page.locator('.step[data-index="2"] .step-button').click();
+  await expect(page.locator('.status')).toContainText('Step 3 of 28');
+  for (let i = 0; i < 20; i += 1) await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.status')).toContainText('Step 23 of 28');
+  const inside = await page.locator('.step[data-current]').evaluate((el) => {
+    const region = el.closest('.diagram-scroller');
+    if (!region) return false;
+    const r = region.getBoundingClientRect();
+    const head = region.querySelector('.diagram-head')?.getBoundingClientRect().height ?? 0;
+    const b = el.getBoundingClientRect();
+    return b.top >= r.top + head && b.bottom <= r.bottom;
+  });
+  expect(inside).toBe(true);
+});
+
 test('groups expand and collapse with the keyboard, and stay open while stepping', async ({
   page,
 }) => {

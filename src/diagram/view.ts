@@ -84,6 +84,10 @@ export class DiagramView {
   private widest: { events: readonly unknown[]; measure: Measure; width: number } | undefined;
   /** Level and cursor the region last scrolled to. */
   private scrolledTo = '';
+  /** Whether focus inside the region came from the keyboard rather than a pointer. */
+  private keyboardFocus = false;
+  private pointerDown = false;
+  private restoring = false;
 
   constructor(root: HTMLElement, player: Player, options: DiagramOptions) {
     this.root = root;
@@ -94,6 +98,8 @@ export class DiagramView {
     root.tabIndex = 0;
     root.addEventListener('click', this.onClick);
     root.addEventListener('keydown', this.onKey);
+    root.addEventListener('pointerdown', this.onPointerDown);
+    root.addEventListener('focusin', this.onFocusIn);
     this.unsubscribe = player.subscribe(() => this.render());
     // The Overview spreads its parties across the region, so it follows the region's width.
     if (typeof ResizeObserver === 'function') {
@@ -150,6 +156,8 @@ export class DiagramView {
     this.unsubscribe();
     this.root.removeEventListener('click', this.onClick);
     this.root.removeEventListener('keydown', this.onKey);
+    this.root.removeEventListener('pointerdown', this.onPointerDown);
+    this.root.removeEventListener('focusin', this.onFocusIn);
     this.resize?.disconnect();
     this.root.replaceChildren();
   }
@@ -205,7 +213,10 @@ export class DiagramView {
     let focusedArrow: SVGGElement | undefined;
     if (focusArrow !== undefined) {
       focusedArrow = arrow && arrowIndex(arrow) === focusArrow ? arrow : undefined;
+      // Restoring focus is not a new focus by the learner: keep how it was given.
+      this.restoring = true;
       (focusedArrow ?? this.root).focus({ preventScroll: true });
+      this.restoring = false;
     }
     if (focusKey !== undefined) {
       const group = focusKey
@@ -219,9 +230,10 @@ export class DiagramView {
     const position = `${this.viewLevel}:${this.player.cursor}`;
     if (position !== this.scrolledTo) {
       this.scrolledTo = position;
-      // While an arrow holds focus, a step keeps that arrow in view rather than the new current
-      // step, so focus never leaves the screen (02 diagram.arrow_activation).
-      if (focusedArrow) this.reveal(focusedArrow);
+      // While an arrow holds focus the keyboard gave it, a step keeps that arrow in view rather
+      // than the new current step, so focus never leaves the screen; after a click the region
+      // follows the current step (02 diagram.arrow_activation).
+      if (focusedArrow && this.keyboardFocus) this.reveal(focusedArrow);
       else this.scrollToCurrent();
     }
   }
@@ -361,6 +373,23 @@ export class DiagramView {
     const header = this.root.querySelector<HTMLElement>('.diagram-head');
     return header ? Number(header.dataset['header'] ?? 0) : 0;
   }
+
+  private readonly onPointerDown = (): void => {
+    this.pointerDown = true;
+    // Focus follows within the same task; a later Tab must not count as a pointer.
+    setTimeout(() => {
+      this.pointerDown = false;
+    });
+    // A click on what is already focused gives no focusin; it is a pointer focus all the same.
+    this.keyboardFocus = false;
+  };
+
+  /** Notes how focus came into the region: by a pointer, or else by the keyboard. */
+  private readonly onFocusIn = (): void => {
+    if (this.restoring) return;
+    this.keyboardFocus = !this.pointerDown;
+    this.pointerDown = false;
+  };
 
   private readonly onClick = (event: Event): void => {
     const index = arrowIndex(event.target);
