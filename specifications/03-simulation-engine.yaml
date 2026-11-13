@@ -195,7 +195,10 @@ scenario_format:
     parties: 'List of 2 to 4 {id, label, members}: each party merges participants into one lifeline,
       for example You, Assistant and Bank systems. members lists participant IDs of the scenario;
       the parties partition the participants (each participant in exactly one party). IDs are unique
-      within the scenario; the order is the order of the merged lifelines.'
+      within the scenario; the order is the order of the merged lifelines. The parties follow the
+      lane order (02 diagram.participants): listed one after the other, their members give the
+      scenario''s participants in order, so each party''s lanes are contiguous and no party is split
+      by another party''s lane.'
     stages: 'List of 3 to 5 {id, phases, sentence}: the story in big steps. phases lists phase IDs;
       the stages partition the phases in their order (each stage a consecutive run of the phase list,
       every phase in exactly one stage), and the scenario''s events visit the stages in order, so each
@@ -231,8 +234,11 @@ scenario_format:
     lineage keys; value_ref paths; carries and annotations (annotation_rules); learning
     fields; derived_events
     and optional_steps naming the scenario''s events, each optional step enabled by a
-    boolean parameter and holding both events of a pair; the overview (overview_fields: 2 to 4
-    parties that partition the participants, 3 to 5 stages that partition the phases in
+    boolean parameter and holding both events of a pair; the lane order (02 diagram.participants:
+    the participants start with those of user, agent, mcp-client and llm the scenario has, in that
+    order, so the user is first, the agent second and the MCP client directly after the agent);
+    the overview (overview_fields: 2 to 4
+    parties that partition the participants in lane order, 3 to 5 stages that partition the phases in
     order and that the events visit in order, one-sentence stage sentences, plain words). A
     failure stops the build.
     Errors identify scenario and event. validate_specs.py additionally validates MCP

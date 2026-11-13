@@ -77,6 +77,9 @@ unit_tests:
   played events
 - Both validators report the same overview problems (03 overview_fields), and every scenario's
   overview passes
+- Both validators report the same lane-order problems (02 diagram.participants), every scenario
+  passes, and they reject a split Overview party and an MCP client that is not directly after the
+  agent
 - At the Overview Compare steps stage by stage with both panes on the same semantic phase
 - At Architecture the group the cursor enters expands (forward, back, jump, reset), and a
   group the learner collapsed stays collapsed until the cursor enters it again
