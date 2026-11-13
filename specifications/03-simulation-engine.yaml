@@ -44,8 +44,6 @@ event_schema:
     context_changes: 'List of {target, action, description, value_ref}. target agent_state
       takes action append only; target model_visible_messages takes action set only, and
       only on LLM requests. Both need a value_ref.'
-    prediction: 'Optional {prompt}: a question shown before this event runs, ending with
-      "?"; the event itself answers it'
     carries: 'Optional list of short phrases (each at most 100 characters, no final full
       stop) naming what the message carries, shown under its explanation (02 inspector.carries).
       Example for tools/call: the tool name the model chose; the customer ID the agent checked
@@ -231,7 +229,7 @@ scenario_format:
     correlation_id only on MCP requests and responses, equal to the JSON-RPC id; MCP
     headers mirroring the body; model-visible context rules; security boundary IDs;
     lineage keys; value_ref paths; carries and annotations (annotation_rules); learning
-    fields and prediction prompts; derived_events
+    fields; derived_events
     and optional_steps naming the scenario''s events, each optional step enabled by a
     boolean parameter and holding both events of a pair; the overview (overview_fields: 2 to 4
     parties that partition the participants, 3 to 5 stages that partition the phases in
