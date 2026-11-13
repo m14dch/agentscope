@@ -1073,10 +1073,10 @@ scenarios:
   participants:
   - user
   - agent
+  - llm
   - embedding-model
   - vector-db
   - document-store
-  - llm
   phases:
   - id: question
     label: User question

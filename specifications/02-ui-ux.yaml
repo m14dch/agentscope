@@ -327,8 +327,17 @@ layout:
     row after the playback buttons (controls.row), never at the bottom of the page
   minimum_lifeline_width_px: 110
 diagram:
-  participants: Scenario-defined and ordered; labels from the participant registry
-    (01-architecture.yaml)
+  participants: 'Scenario-defined; labels from the participant registry (01-architecture.yaml).
+    The lanes follow one logical order, from the user outward, the same relative order on every
+    tab (issue 71): the user first; then the agent; then the agent''s in-process clients (the MCP
+    client); then the LLM provider; then the bank''s infrastructure, each party''s lanes in the
+    order the scenario first reaches them (Bank documents: embedding model, vector database,
+    document store; Bank systems: MCP server, REST API, core ledger). Where a scenario has both,
+    Bank documents come before Bank systems, so the two model services (LLM provider, embedding
+    model) sit together and the MCP chain reads outward as on the MCP tab. Every Overview party
+    (03 overview_fields.parties) keeps its lanes together. The order is chosen for its logic, not
+    for the shortest arrows: an MCP client to MCP server arrow crosses the LLM provider''s lane.
+    A scenario without a user or an agent (rag-index) orders its lanes by the pipeline''s flow.'
   arrows: One per actual logical message or explicitly labeled internal operation
   encoding:
     principle: Protocol is shown by the arrow's text label and line style, not by hue.

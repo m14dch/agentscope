@@ -91,10 +91,10 @@ combined:
   participants:
   - user
   - agent
+  - mcp-client
+  - llm
   - embedding-model
   - vector-db
-  - llm
-  - mcp-client
   - mcp-server
   - rest-api
   - database
@@ -153,7 +153,7 @@ combined:
       members: [user]
     - id: assistant
       label: Assistant
-      members: [agent, llm, mcp-client]
+      members: [agent, mcp-client, llm]
     - id: bank-documents
       label: Bank documents
       members: [embedding-model, vector-db]
